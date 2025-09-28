@@ -1,0 +1,60 @@
+/* viewAssignees.css */
+
+.view-assignees-container {
+  font-family: 'Times New Roman', serif;
+  padding: 20px;
+  background-color: #f8f9fc;
+  min-height: 100vh;
+}
+
+.view-assignees-title {
+  text-align: center;
+  font-size: 28px;
+  font-weight: bold;
+  color: #2c3e50;
+  margin-bottom: 25px;
+}
+
+.assignees-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+  gap: 20px;
+}
+
+.assignee-card {
+  background-color: white;
+  border-radius: 12px;
+  padding: 20px;
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.08);
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+  cursor: pointer;
+}
+
+.assignee-card:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 8px 15px rgba(0, 0, 0, 0.12);
+}
+
+.subject-code {
+  font-size: 20px;
+  font-weight: bold;
+  color: #34495e;
+  margin-bottom: 10px;
+}
+
+.assignee-details {
+  font-size: 15px;
+  color: #555;
+  line-height: 1.5;
+}
+
+.assignee-details strong {
+  color: #2c3e50;
+}
+
+.no-assignees {
+  text-align: center;
+  color: #888;
+  font-size: 16px;
+  margin-top: 40px;
+}

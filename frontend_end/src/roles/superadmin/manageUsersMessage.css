@@ -1,0 +1,54 @@
+.manage-users-msg {
+  background-color: #f0f0f0; /* light grey background */
+  color: #222; /* dark text */
+  padding: 25px 35px;
+  border-radius: 10px;
+  box-shadow: 0 0 15px rgba(79, 158, 249, 0.3); /* lighter blue glow */
+  font-family: "Times New Roman", serif;
+  font-size: 17px;
+  max-width: 600px;
+  width: 90%;
+  max-height: 320px;
+  overflow-y: auto;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.5s ease;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  position: fixed;
+  bottom: 20px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 105;
+}
+
+.manage-users-msg.show {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.manage-users-msg .ok-btn {
+  align-self: flex-end;
+  background-color: #2978f0;
+  color: white;
+  border: none;
+  padding: 10px 25px;
+  font-weight: 700;
+  font-size: 15px;
+  border-radius: 8px;
+  cursor: pointer;
+  box-shadow: 0 0 10px #2978f0;
+  transition: background-color 0.3s ease, box-shadow 0.3s ease;
+}
+
+.manage-users-msg .ok-btn:hover {
+  background-color: #1860c8;
+  box-shadow: 0 0 15px #1860c8;
+}
+
+.email-note {
+  margin-top: 1em;
+  font-style: italic;
+  color: #666;
+}

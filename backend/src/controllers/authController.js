@@ -1,0 +1,201 @@
+const crypto = require('crypto');
+const User = require('../models/User');
+const Verification = require('../models/Verification');
+const sendEmail = require('../utils/mailer');
+
+async function generateUniqueUsername(baseName) {
+  while (true) {
+    const rand = Math.floor(100 + Math.random() * 900);
+    const username = `${baseName}${rand}`;
+    const exists = await User.findOne({ username }).lean();
+    if (!exists) return username;
+  }
+}
+
+exports.register = async (req, res) => {
+  try {
+    const { username: baseName, clgName, deptName, email, phoneNo } = req.body;
+    const username = await generateUniqueUsername(baseName.toLowerCase());
+    const name = baseName;
+    const password = crypto.randomBytes(4).toString('hex');
+
+    const user = await User.create({
+      name,
+      username,
+      clgName,
+      deptName,
+      email,
+      phoneNo,
+      password,
+      usertype: 'internal',
+    });
+
+    try {
+      await sendEmail(
+        email,
+        'Welcome to GAT Portal',
+        '',
+        `<p>Hi ${baseName},<br><br>Your username: ${username}<br>Password: ${password}<br>Please change your password after logging in.</p>`
+      );
+    } catch (err) {
+      console.error('Email error:', err.message);
+    }
+
+    res.status(201).json({ message: 'Registration successful', credentials: { username, password } });
+  } catch (error) {
+    console.error('Registration error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+};
+
+exports.login = async (req, res) => {
+  const { username, password } = req.body;
+  try {
+    const user = await User.findOne({ username, password }).lean();
+    if (!user) return res.status(401).json({ success: false, message: 'Invalid credentials' });
+
+    const code = Math.floor(100000 + Math.random() * 900000).toString();
+    const expiresAt = new Date(Date.now() + 10 * 60 * 1000);
+    await Verification.findOneAndUpdate(
+      { email: username },
+      { code, expiresAt },
+      { upsert: true, new: true }
+    );
+
+    try {
+      await sendEmail(
+        username,
+        'Faculty Login - Verification Code',
+        '',
+        `<p>Verification code:</p><h2>${code}</h2><p>Valid for 10 minutes.</p>`
+      );
+    } catch (err) {
+      console.error('Email error:', err.message);
+    }
+
+    res.json({ success: true, message: 'Verification code sent to email' });
+  } catch (err) {
+    console.error('Error during login:', err);
+    res.status(500).json({ success: false, message: 'Server error' });
+  }
+};
+
+exports.verify = async (req, res) => {
+  const { email, code } = req.body;
+  try {
+    const rec = await Verification.findOne({ email, code }).lean();
+    if (!rec || rec.expiresAt < new Date()) {
+      return res.status(400).json({ success: false, message: 'Invalid or expired code' });
+    }
+    await Verification.deleteOne({ email });
+    res.json({ success: true, message: 'Verification successful' });
+  } catch (err) {
+    console.error('Error during verification:', err);
+    res.status(500).json({ success: false, message: 'Server error' });
+  }
+};
+
+exports.forgotPassword = async (req, res) => {
+  const { email } = req.body;
+  try {
+    const user = await User.findOne({ username: email }).lean();
+    if (!user) return res.status(401).json({ success: false, message: 'Invalid credentials' });
+
+    try {
+      await sendEmail(
+        email,
+        'GAT Portal - Password Recovery',
+        '',
+        `<p>Your temporary password is:</p><h2>${user.password}</h2>`
+      );
+    } catch (err) {
+      console.error('Email error:', err.message);
+    }
+    res.json({ success: true, message: 'Verification code sent to email' });
+  } catch (err) {
+    console.error('Error during forgot-password:', err);
+    res.status(500).json({ success: false, message: 'Server error' });
+  }
+};
+
+exports.resetPassword = async (req, res) => {
+  const { username, oldPassword, newPassword } = req.body;
+  try {
+    const user = await User.findOne({ username, password: oldPassword });
+    if (!user) return res.status(401).json({ error: 'Old password is incorrect' });
+    user.password = newPassword;
+    await user.save();
+    res.status(200).json({ message: 'Password updated successfully' });
+  } catch (err) {
+    console.error('Password update error:', err);
+    res.status(500).json({ error: 'Failed to update password' });
+  }
+};
+
+exports.getInternalUsers = async (_req, res) => {
+  try {
+    const rows = await User.find({ usertype: 'internal' }).lean();
+    res.json(rows);
+  } catch (err) {
+    console.error('Error fetching users:', err);
+    res.status(500).json({ error: 'Failed to fetch users' });
+  }
+};
+
+exports.getExternalUsers = async (_req, res) => {
+  try {
+    const rows = await User.find({ usertype: 'external' }).sort({ _id: -1 }).lean();
+    res.json(rows);
+  } catch (err) {
+    console.error('Error fetching users:', err);
+    res.status(500).json({ error: 'Failed to fetch users' });
+  }
+};
+
+exports.getColleges = async (_req, res) => {
+  // If colleges are static, consider a collection; placeholder response for compatibility
+  res.json([]);
+};
+
+exports.getDepartments = async (_req, res) => {
+  // If departments are a separate collection, expose via Subject distinct
+  try {
+    const rows = await User.aggregate([
+      { $match: { deptName: { $exists: true, $ne: '' } } },
+      { $group: { _id: '$deptName' } },
+      { $project: { id: '$_id', department: '$_id', _id: 0 } },
+      { $sort: { department: 1 } },
+    ]);
+    res.json(rows);
+  } catch (err) {
+    console.error('Error fetching departments:', err);
+    res.status(500).json({ error: 'Failed to fetch departments' });
+  }
+};
+
+exports.registerFaculty = async (req, res) => {
+  const { name, clgName, departmentId, email, phone, usertype } = req.body;
+  const password = crypto.randomBytes(4).toString('hex');
+  if (!name || !clgName || !departmentId || !email || !phone || !usertype) {
+    return res.status(400).json({ error: 'All fields are required' });
+  }
+  try {
+    await User.create({
+      name,
+      username: email,
+      clgName,
+      department: departmentId,
+      email,
+      phoneNo: phone,
+      usertype,
+      role: 'Faculty',
+      password,
+    });
+    res.json({ success: true });
+  } catch (err) {
+    console.error('Error registering faculty:', err);
+    res.status(500).json({ error: 'Failed to register faculty' });
+  }
+};
+
+

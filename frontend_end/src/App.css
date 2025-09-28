@@ -1,0 +1,151 @@
+.dashboard-container {
+  display: flex;
+  min-height: 100vh;
+  font-family: sans-serif;
+  background-color: #f0f2f5;
+}
+
+.sidebar {
+  width: 250px;
+  background-color: #003366;
+  color: white;
+  padding: 20px;
+}
+
+.main-content {
+  flex: 1;
+  padding: 20px;
+}
+
+.module-box {
+  border: 1px solid #ccc;
+  border-radius: 12px;
+  padding: 15px;
+  margin-bottom: 20px;
+  background: #fff;
+}
+
+.question-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.small {
+  width: 80px;
+}
+
+.or-text {
+  text-align: center;
+  font-style: italic;
+  margin: 10px 0;
+}
+
+.preview {
+  background: #fff;
+  padding: 20px;
+  border-radius: 12px;
+}
+.dashboard-container {
+  display: flex;
+  min-height: 100vh;
+  font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+  background-color: #f4f4f4;
+}
+
+.sidebar {
+  width: 240px;
+  background-color: #001f3f;
+  color: white;
+  padding: 20px;
+}
+
+.main-content {
+  flex: 1;
+  padding: 20px;
+}
+
+.module-box {
+  border: 1px solid #ccc;
+  padding: 15px;
+  margin-bottom: 20px;
+  background: #fff;
+  border-radius: 10px;
+}
+
+.question-row {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+
+.question-row input {
+  flex: 1;
+}
+
+.question-row .small {
+  width: 80px;
+}
+
+.or-text {
+  text-align: center;
+  margin: 10px 0;
+  color: #555;
+}
+
+.preview {
+  background: #fff;
+  padding: 15px;
+  border-radius: 10px;
+  border: 1px dashed #aaa;
+}
+.student-info {
+  display: grid;
+  grid-template-columns: 1fr 2fr;
+  gap: 10px 20px;
+  margin-bottom: 20px;
+  background: #f9f9f9;
+  padding: 15px;
+  border-radius: 8px;
+  box-shadow: 0 0 5px rgba(0,0,0,0.1);
+}
+
+.student-info label {
+  font-weight: bold;
+  align-self: center;
+}
+
+.student-info input {
+  padding: 6px;
+  font-size: 14px;
+  width: 100%;
+}
+.dashboard-container {
+  display: flex;
+  min-height: 100vh;
+  font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+  background-color: #f4f4f4;
+  overflow: hidden; /* prevent scrollbars caused by overlapping */
+}
+
+.sidebar {
+  width: 240px;
+  background-color: #001f3f;
+  color: white;
+  padding: 20px;
+  flex-shrink: 0;
+  height: 100vh;
+  position: fixed; /* fix it to the left */
+  left: 0;
+  top: 0;
+  bottom: 0;
+  z-index: 1000;
+}
+
+.main-content {
+  margin-left: 240px; /* give left space equal to sidebar width */
+  flex: 1;
+  padding: 20px;
+  box-sizing: border-box;
+}

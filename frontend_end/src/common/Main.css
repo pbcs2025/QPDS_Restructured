@@ -1,0 +1,119 @@
+* {
+    box-sizing: border-box;
+}
+
+body {
+    background: url(/public/images/GAT.jpg);
+    background-repeat: no-repeat;
+    background-position: center;
+    background-size: cover;
+    height: 100vh;
+    margin: 0;
+    font-family: "Times New Roman", serif;
+}
+
+/* Fully visible container */
+.container {
+    display: flex !important;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    height: 100vh;
+    max-width: 500px;
+    width: 100%;
+    margin: auto;
+    position: relative;
+    z-index: 1;
+}
+
+.container > form {
+    width: 70%;
+    border: 1px solid #dfdfdf;
+    padding: 20px;
+    border-radius: 5px;
+    background: #fff;
+    box-shadow: 0 0 15px rgba(0, 0, 0, 0.2);
+}
+
+input {
+    padding: 10px;
+    margin-left: 25px;
+    border-radius: 9%;
+    border: 1px solid #ccc;
+    width: 80%;
+}
+
+pre {
+    width: 70%;
+    color: #fff;
+    font-size: larger;
+}
+
+button {
+    background: #05b462 !important;
+    padding: 8px;
+    border-radius: 10px;
+    width: 100%;
+    color: white;
+    font-weight: bold;
+    border: none;
+    cursor: pointer;
+}
+
+p {
+    color: rgb(255, 0, 0);
+    margin-left: 25px;
+    margin-top: 5px;
+}
+
+.text {
+    margin: 2px;
+    padding: 5px;
+}
+
+span {
+    color: rgb(0, 95, 236);
+    cursor: pointer;
+}
+
+.success-toast {
+  position: absolute;
+  top: 60px; /* moved down slightly */
+  left: 50%;
+  transform: translateX(-50%);
+  background-color: #4CAF50;
+  color: white;
+  padding: 16px 24px;
+  border-radius: 8px;
+  font-size: 18px;
+  z-index: 9999;
+  width: 40%; /* wider */
+  text-align: center;
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+}
+
+
+.success-toast::after {
+    content: "";
+    margin-top: 8px;
+    display: block;
+    width: 100%;
+    height: 6px;
+    border-radius: 6px;
+    background: linear-gradient(90deg, red, orange, yellow, green, cyan, blue, violet);
+    animation: progressBar 3.5s linear forwards;
+}
+
+
+/* Animation keyframes */
+@keyframes fadeInOut {
+    0% { opacity: 0; transform: translateY(-10px); }
+    10% { opacity: 1; transform: translateY(0); }
+    90% { opacity: 1; }
+    100% { opacity: 0; transform: translateY(-10px); }
+}
+
+@keyframes progressBar {
+    from { width: 100%; }
+    to { width: 0%; }
+}
