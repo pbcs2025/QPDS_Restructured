@@ -3,7 +3,7 @@ const Department = require('../models/Department');
 const College = require('../models/College');
 
 async function connectToDatabase() {
-  const mongoUri = process.env.MONGO_URI || 'mongodb+srv://globalcoe2k25_db_user:jF1ogbQ5TfO13qz4@clusterqpds.6ybfzvb.mongodb.net/GAT_QPDS';
+  const mongoUri = process.env.MONGO_URI || 'mongodb+srv://prathibhabcs:globalacademyoftechnology@clusterqpds.6ybfzvb.mongodb.net/GAT_QPDS';
 
   try {
     await mongoose.connect(mongoUri, {

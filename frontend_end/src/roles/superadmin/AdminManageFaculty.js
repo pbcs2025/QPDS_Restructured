@@ -12,7 +12,8 @@ function AdminManageFaculty() {
     usertype: "",
   });
   const [colleges, setColleges] = useState([]);
-  const [departments, setDepartments] = useState([]); // ✅ new
+  const [departments, setDepartments] = useState([]);
+  const [departmentsLoading, setDepartmentsLoading] = useState(true);
   const [message, setMessage] = useState("");
 
   useEffect(() => {
@@ -30,11 +31,17 @@ function AdminManageFaculty() {
     // Fetch departments
     const fetchDepartments = async () => {
       try {
-        const res = await fetch(`${API_BASE}/departments`);
+        setDepartmentsLoading(true);
+        const res = await fetch(`${API_BASE}/departments/active`);
         const data = await res.json();
+        console.log("Departments fetched:", data); // Debug log
+        console.log("Departments count:", data.length); // Debug log
         setDepartments(data);
       } catch (err) {
         console.error("Failed to fetch departments:", err);
+        setDepartments([]); // Set empty array on error
+      } finally {
+        setDepartmentsLoading(false);
       }
     };
 
@@ -186,11 +193,17 @@ function AdminManageFaculty() {
             required
           >
             <option value="">-- Select Department --</option>
-            {departments.map((dept) => (
-              <option key={dept.id} value={dept.id}>
-                {dept.name}
-              </option>
-            ))}
+            {departmentsLoading ? (
+              <option disabled>Loading departments...</option>
+            ) : departments.length > 0 ? (
+              departments.map((dept) => (
+                <option key={dept.id} value={dept.id}>
+                  {dept.name}
+                </option>
+              ))
+            ) : (
+              <option disabled>No departments available</option>
+            )}
           </select>
         </div>
 
