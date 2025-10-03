@@ -15,13 +15,8 @@ function DepartmentsPage() {
     try {
       const res = await axios.get(`${API_BASE}/departments`);
       const rows = Array.isArray(res.data) ? res.data : [];
-      // Normalize possible shapes: {id, name} or {_id, name} or {id, department}
-      const normalized = rows.map((r) => ({
-        id: String(r.id || r._id || ''),
-        name: r.name || r.department || '',
-        createdAt: r.createdAt || null,
-      })).filter(d => d.name);
-      setDepartments(normalized);
+      // Use backend departments shape directly: { id, name, isActive, createdAt }
+      setDepartments(rows);
     } catch (err) {
       console.error("Error fetching departments:", err);
       setDepartments([]);

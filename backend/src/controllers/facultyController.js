@@ -1,7 +1,6 @@
 const crypto = require('crypto');
 const User = require('../models/User');
 const Faculty = require('../models/Faculty');
-const Verification = require('../models/Verification');
 const sendEmail = require('../utils/mailer');
 
 // Generate 6-character alphanumeric password
@@ -93,15 +92,16 @@ exports.loginFaculty = async (req, res) => {
     }
 
     const code = Math.floor(100000 + Math.random() * 900000).toString();
-    const expiresAt = new Date(Date.now() + 10 * 60 * 1000);
-    await Verification.findOneAndUpdate(
-      { email: username },
-      { code, expiresAt },
-      { upsert: true, new: true }
+    // Store verification code on faculty document until used
+    await Faculty.findOneAndUpdate(
+      { facultyId: user._id },
+      { verificationCode: code },
+      { new: true }
     );
 
+    let emailInfo = null;
     try {
-      await sendEmail(
+      emailInfo = await sendEmail(
         username,
         'Faculty Login - Verification Code',
         '',
@@ -111,7 +111,13 @@ exports.loginFaculty = async (req, res) => {
       console.error('Email error:', err.message);
     }
 
-    res.json({ success: true, message: 'Verification code sent to email' });
+    // If email is not configured, also return the code in response for testing
+    const emailConfigured = Boolean(process.env.EMAIL_USER && process.env.EMAIL_PASSWORD);
+    res.json({ 
+      success: true, 
+      message: emailConfigured ? 'Verification code sent to email' : 'Email not configured; code returned in response',
+      code: emailConfigured ? undefined : code
+    });
   } catch (err) {
     console.error('Error during faculty login:', err);
     res.status(500).json({ success: false, message: 'Server error' });
@@ -121,16 +127,16 @@ exports.loginFaculty = async (req, res) => {
 exports.verifyFaculty = async (req, res) => {
   const { email, code } = req.body;
   try {
-    const rec = await Verification.findOne({ email, code }).lean();
-    if (!rec || rec.expiresAt < new Date()) {
-      return res.status(400).json({ success: false, message: 'Invalid or expired code' });
-    }
-    
-    // Get faculty details for response
     const user = await User.findOne({ username: email }).lean();
+    if (!user) {
+      return res.status(400).json({ success: false, message: 'Invalid user' });
+    }
     const faculty = await Faculty.findOne({ facultyId: user._id }).lean();
-    
-    await Verification.deleteOne({ email });
+    if (!faculty || faculty.verificationCode !== code) {
+      return res.status(400).json({ success: false, message: 'Invalid verification code' });
+    }
+    // Clear code after successful verification
+    await Faculty.updateOne({ facultyId: user._id }, { $unset: { verificationCode: 1 } });
     res.json({ 
       success: true, 
       message: 'Verification successful',

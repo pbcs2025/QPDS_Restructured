@@ -12,7 +12,7 @@ const UserSchema = new mongoose.Schema(
     phoneNo: { type: String },
     password: { type: String, required: true },
     usertype: { type: String, enum: ['internal', 'external', 'admin', 'superadmin'], required: true },
-    role: { type: String, enum: ['Faculty', 'Admin', 'SuperAdmin'], default: 'Faculty' },
+    role: { type: String, enum: ['Faculty', 'Admin', 'SuperAdmin', 'Verifier'], default: 'Faculty' },
     verificationCode: { type: String },
   },
   { timestamps: true }
