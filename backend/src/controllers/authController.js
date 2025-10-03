@@ -14,7 +14,7 @@ async function generateUniqueUsername(baseName) {
 
 exports.register = async (req, res) => {
   try {
-    const { username: baseName, clgName, deptName, email, phoneNo } = req.body;
+    const { username: baseName, clgName, deptName, email, phoneNo, role } = req.body;
     const username = await generateUniqueUsername(baseName.toLowerCase());
     const name = baseName;
     const password = crypto.randomBytes(4).toString('hex');
@@ -27,8 +27,25 @@ exports.register = async (req, res) => {
       email,
       phoneNo,
       password,
-      usertype: 'internal',
+      usertype: role === 'Faculty' ? 'internal' : 'external',
+      role: role || 'Faculty',
     });
+
+    // If registering a faculty member, also create faculty record
+    if (role === 'Faculty' || !role) {
+      const Faculty = require('../models/Faculty');
+      await Faculty.create({
+        facultyId: user._id,
+        name,
+        email,
+        passwordHash: password,
+        department: deptName,
+        clgName,
+        contactNumber: phoneNo,
+        type: user.usertype, // internal or external
+        role: 'faculty'
+      });
+    }
 
     try {
       await sendEmail(

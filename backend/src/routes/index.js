@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 
 router.use('/api', require('./auth'));
+router.use('/api/faculty', require('./faculty'));
 router.use('/api/question-bank', require('./questionBank'));
 router.use('/api/subjects', require('./subjects'));
 router.use('/api/departments', require('./departments'));

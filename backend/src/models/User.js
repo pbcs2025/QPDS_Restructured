@@ -5,6 +5,8 @@ const UserSchema = new mongoose.Schema(
     name: { type: String, required: true, trim: true },
     username: { type: String, required: true, unique: true, index: true },
     clgName: { type: String, required: true },
+    // String department name for easy reads/grouping
+    deptName: { type: String },
     department: { type: mongoose.Schema.Types.ObjectId, ref: 'Department' },
     email: { type: String, required: true, unique: true, lowercase: true },
     phoneNo: { type: String },

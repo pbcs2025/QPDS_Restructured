@@ -40,11 +40,77 @@
   color: #ffd700; /* Optional: golden hover text */
 }
 
+/* Sidebar button styles */
+.sidebar-btn {
+  display: block;
+  color: white;
+  background: none;
+  border: none;
+  padding: 12px 20px;
+  text-decoration: none;
+  font-size: 16px;
+  transition: background-color 0.3s ease, transform 0.2s ease;
+  border-radius: 5px;
+  margin-bottom: 10px;
+  cursor: pointer;
+  width: 100%;
+  text-align: left;
+  font-family: inherit;
+}
+
+.sidebar-btn:hover {
+  background-color: #2e2e48;
+  transform: scale(1.05);
+  color: #ffd700;
+}
+
+.sidebar-btn.logout-btn {
+  color: #ff6b6b;
+}
+
+.sidebar-btn.logout-btn:hover {
+  color: #ff4757;
+  background-color: #2e2e48;
+}
+
 
 .dashboard-content {
   flex: 1;
   padding: 30px;
   background-color: #f4f4f4;
+}
+
+/* Faculty Info Styles */
+.faculty-info {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  padding: 25px;
+  border-radius: 15px;
+  margin-bottom: 30px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+}
+
+.faculty-info h2 {
+  margin: 0 0 15px 0;
+  font-size: 28px;
+  font-weight: 600;
+}
+
+.faculty-details {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.faculty-details p {
+  margin: 0;
+  font-size: 16px;
+  opacity: 0.9;
+}
+
+.faculty-details strong {
+  font-weight: 600;
+  margin-right: 8px;
 }
 
 .dashboard-content h1 {

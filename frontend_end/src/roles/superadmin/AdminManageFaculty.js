@@ -93,12 +93,12 @@ function AdminManageFaculty() {
     }
 
     try {
-      const res = await fetch(`${API_BASE}/registerFaculty`, {
+      const res = await fetch(`${API_BASE}/faculty/register`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           ...formData,
-          departmentId: formData.deptName,
+          deptName: formData.deptName,
         }),
       });
 
@@ -197,7 +197,7 @@ function AdminManageFaculty() {
               <option disabled>Loading departments...</option>
             ) : departments.length > 0 ? (
               departments.map((dept) => (
-                <option key={dept.id} value={dept.id}>
+                <option key={dept.id} value={dept.name}>
                   {dept.name}
                 </option>
               ))
