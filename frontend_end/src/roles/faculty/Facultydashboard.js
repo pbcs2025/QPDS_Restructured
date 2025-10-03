@@ -105,36 +105,11 @@ function FacultyDashboard() {
     <div className="dashboard-container">
       <div className="sidebar">
         <h2>Faculty</h2>
-        <button 
-          type="button" 
-          className="sidebar-btn" 
-          onClick={() => handleResetPassword("")}
-        >
-          Dashboard
-        </button>
+        <button type="button" className="sidebar-btn active-tab" onClick={() => {}}>{"\uD83C\uDFE0"} Dashboard</button>
         <Link to="/question-paper-builder">View paper</Link>
-
-        <button 
-          type="button" 
-          className="sidebar-btn" 
-          onClick={() => handleResetPassword("")}
-        >
-          Submit Questions
-        </button>
-        <button 
-          type="button" 
-          className="sidebar-btn" 
-          onClick={() => handleResetPassword("faculty")}
-        >
-          Reset Password
-        </button>
-        <button 
-          type="button" 
-          className="sidebar-btn logout-btn" 
-          onClick={handleLogoutClick}
-        >
-          Logout
-        </button>
+        <button type="button" className="sidebar-btn" onClick={() => {}}>{"\u270D\uFE0F"} Submit Questions</button>
+        <button type="button" className="sidebar-btn" onClick={() => { handleResetPassword("faculty"); }}>{"\u2699\uFE0F"} Reset Password</button>
+        <button type="button" className="sidebar-btn logout-btn" onClick={() => { handleLogoutClick(); }} style={{ color: "#ffcccc" }}>{"\uD83D\uDEAA"} Logout</button>
       </div>
 
       <div className="dashboard-content">

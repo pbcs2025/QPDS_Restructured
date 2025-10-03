@@ -532,6 +532,27 @@ button[type="button"]:hover {
   transform: scale(1.05);
 }
 
+/* Ensure sidebar buttons do not inherit global button styles */
+.sidebar .sidebar-btn {
+  background: transparent !important;
+  color: #ffffff !important;
+  padding: 12px 20px !important;
+  border-radius: 5px !important;
+  font-weight: normal !important;
+}
+
+.sidebar .sidebar-btn:hover {
+  background-color: #2e2e48 !important;
+  transform: scale(1.05);
+  color: #ffd700 !important;
+}
+
+.sidebar .sidebar-btn.active-tab {
+  background-color: #2e2e48 !important;
+  color: #ffd700 !important;
+  font-weight: bold !important;
+}
+
 /* Responsive improvement */
 @media (max-width: 600px) {
   .reset-form {
