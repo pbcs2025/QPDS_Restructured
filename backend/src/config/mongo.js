@@ -3,17 +3,19 @@ const Department = require('../models/Department');
 const College = require('../models/College');
 
 async function connectToDatabase() {
-  const mongoUri = process.env.MONGO_URI || 'mongodb+srv://globalcoe2k25_db_user:jF1ogbQ5TfO13qz4@clusterqpds.6ybfzvb.mongodb.net/GAT_QPDS';
+  const mongoUri =
+    process.env.MONGO_URI ||
+    "mongodb+srv://globalcoe2k25_db_user:globalacademyoftechnology@clusterqpds.6ybfzvb.mongodb.net/GAT_QPDS";
 
-  try {
-    await mongoose.connect(mongoUri, {
-      dbName: 'GAT_QPDS', // ensure correct database
-      useNewUrlParser: true,
-      useUnifiedTopology: true,
-    });
+    try {
+      await mongoose.connect(mongoUri, {
+        dbName: 'GAT_QPDS', // ensure correct database
+        useNewUrlParser: true,
+        useUnifiedTopology: true,
+      });
+  
+      console.log('✅ MongoDB connected successfully');
 
-    console.log('✅ MongoDB connected successfully');
-    
     // Seed departments if empty
     const deptCount = await Department.countDocuments();
     if (deptCount === 0) {
@@ -52,12 +54,10 @@ async function connectToDatabase() {
       await College.insertMany(colleges);
       console.log('✅ Seeded default colleges');
     }
-   } catch (error) {
+  } catch (error) {
     console.error('❌ MongoDB connection error:', error.message);
     process.exit(1);
   }
 }
 
 module.exports = { connectToDatabase };
-
-
