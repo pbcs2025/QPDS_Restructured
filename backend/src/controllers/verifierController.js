@@ -1,6 +1,7 @@
 const crypto = require('crypto');
 const User = require('../models/User');
 const Verifier = require('../models/Verifier');
+const QuestionPaper = require('../models/QuestionPaper');
 
 function generateRandomAlphanumeric(length) {
   const chars = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
@@ -86,6 +87,87 @@ exports.listAll = async (_req, res) => {
     return res.json(rows);
   } catch (err) {
     console.error('Verifier listAll error:', err);
+    return res.status(500).json({ error: 'Server error' });
+  }
+};
+
+exports.getPapers = async (req, res) => {
+  try {
+    // Get all question papers grouped by subject and semester
+    const papers = await QuestionPaper.find({}).sort({ subject_code: 1, semester: 1, question_number: 1 }).lean();
+    
+    // Group papers by subject_code and semester
+    const groupedPapers = {};
+    papers.forEach(paper => {
+      const key = `${paper.subject_code}_${paper.semester}`;
+      if (!groupedPapers[key]) {
+        groupedPapers[key] = {
+          _id: paper._id,
+          subject_code: paper.subject_code,
+          subject_name: paper.subject_name,
+          semester: paper.semester,
+          questions: [],
+          status: 'pending'
+        };
+      }
+      groupedPapers[key].questions.push({
+        question_number: paper.question_number,
+        question_text: paper.question_text,
+        approved: paper.approved,
+        remarks: paper.remarks,
+        file_name: paper.file_name,
+        file_type: paper.file_type
+      });
+      
+      // Update overall status based on individual question status
+      if (paper.status === 'approved') {
+        groupedPapers[key].status = 'approved';
+      } else if (paper.status === 'rejected') {
+        groupedPapers[key].status = 'rejected';
+      }
+    });
+    
+    const result = Object.values(groupedPapers);
+    return res.json(result);
+  } catch (err) {
+    console.error('Verifier getPapers error:', err);
+    return res.status(500).json({ error: 'Server error' });
+  }
+};
+
+exports.updatePaper = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { questions } = req.body;
+    
+    if (!questions || !Array.isArray(questions)) {
+      return res.status(400).json({ error: 'Questions array is required' });
+    }
+    
+    // Update each question in the paper
+    const updatePromises = questions.map(async (question) => {
+      const updateData = {
+        approved: question.approved || false,
+        remarks: question.remarks || '',
+        verified_at: new Date(),
+        status: question.approved ? 'approved' : 'rejected'
+      };
+      
+      return QuestionPaper.findOneAndUpdate(
+        { 
+          subject_code: { $exists: true }, // This will be updated to match the actual paper
+          question_number: question.question_number 
+        },
+        updateData,
+        { new: true }
+      );
+    });
+    
+    await Promise.all(updatePromises);
+    
+    return res.json({ message: 'Paper updated successfully' });
+  } catch (err) {
+    console.error('Verifier updatePaper error:', err);
     return res.status(500).json({ error: 'Server error' });
   }
 };

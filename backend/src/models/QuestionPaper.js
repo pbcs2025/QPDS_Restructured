@@ -11,6 +11,12 @@ const QuestionPaperSchema = new mongoose.Schema(
     file_name: { type: String },
     file_type: { type: String },
     question_file: { type: Buffer },
+    // Verification fields
+    approved: { type: Boolean, default: false },
+    remarks: { type: String, default: '' },
+    verified_by: { type: String, default: '' },
+    verified_at: { type: Date },
+    status: { type: String, enum: ['pending', 'approved', 'rejected'], default: 'pending' },
   },
   { timestamps: true }
 );
