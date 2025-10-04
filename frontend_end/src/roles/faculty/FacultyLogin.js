@@ -29,7 +29,7 @@ function FacultyLogin() {
 
     if (Object.keys(errors).length === 0) {
       try {
-        const response = await fetch(`${API_BASE}/login`, {
+        const response = await fetch(`${API_BASE}/faculty/login`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(formValues),
@@ -54,7 +54,7 @@ function FacultyLogin() {
   const handleVerify = async (e) => {
     e.preventDefault();
     try {
-      const response = await fetch(`${API_BASE}/verify`, {
+      const response = await fetch(`${API_BASE}/faculty/verify`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email: formValues.username, code }),
@@ -64,6 +64,10 @@ function FacultyLogin() {
 
       if (response.ok && data.success) {
         localStorage.setItem("faculty_username", formValues.username);
+        // Store faculty data for dashboard use
+        if (data.facultyData) {
+          localStorage.setItem("faculty_data", JSON.stringify(data.facultyData));
+        }
         navigate("/faculty-dashboard");
       } else {
         setLoginMessage("❌ " + (data.message || "Invalid verification code."));
@@ -78,7 +82,7 @@ function FacultyLogin() {
   const handleForgotPassword = async (e) => {
     e.preventDefault();
     try {
-      const response = await fetch(`${API_BASE}/forgot-password`, {
+      const response = await fetch(`${API_BASE}/faculty/forgot-password`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email: formValues.username }),
@@ -102,7 +106,7 @@ function FacultyLogin() {
   const handleResetPassword = async (e) => {
     e.preventDefault();
     try {
-      const response = await fetch(`${API_BASE}/reset-password`, {
+      const response = await fetch(`${API_BASE}/faculty/reset-password`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({

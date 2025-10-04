@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import "../../common/dashboard.css";
 import { Link } from 'react-router-dom';
@@ -13,6 +13,7 @@ function FacultyDashboard() {
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [message, setMessage] = useState("");
+  const [facultyData, setFacultyData] = useState(null);
 
   const [showOld, setShowOld] = useState(false);
   const [showNew, setShowNew] = useState(false);
@@ -21,9 +22,22 @@ function FacultyDashboard() {
   const handleLogoutClick = () => setShowConfirm(true);
   const confirmLogout = () => {
     setShowConfirm(false);
+    localStorage.removeItem("faculty_username");
+    localStorage.removeItem("faculty_data");
     navigate("/");
   };
   const cancelLogout = () => setShowConfirm(false);
+
+  // Load faculty data on component mount
+  useEffect(() => {
+    const storedFacultyData = localStorage.getItem("faculty_data");
+    if (storedFacultyData) {
+      setFacultyData(JSON.parse(storedFacultyData));
+    } else {
+      // If no stored data, redirect to login
+      navigate("/login/faculty");
+    }
+  }, [navigate]);
 
   // const handleResetPassword = () => {
   //   setShowResetPopup(true);
@@ -57,7 +71,7 @@ function FacultyDashboard() {
     }
 
     try {
-      const res = await fetch("http://localhost:5000/api/reset-password", {
+      const res = await fetch("http://localhost:5000/api/faculty/reset-password", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -91,20 +105,27 @@ function FacultyDashboard() {
     <div className="dashboard-container">
       <div className="sidebar">
         <h2>Faculty</h2>
-        <a href="#" onClick={() => handleResetPassword("")} >Dashboard</a>
+        <button type="button" className="sidebar-btn active-tab" onClick={() => {}}>{"\uD83C\uDFE0"} Dashboard</button>
         <Link to="/question-paper-builder">View paper</Link>
-
-        <a href="#" onClick={() => handleResetPassword("")}>Submit Questions</a>
-        {/* <a href="#" onClick={handleResetPassword}>Reset Password</a> */}
-        <a href="#" onClick={() => handleResetPassword("faculty")}>Reset Password</a>
-        <a href="#" onClick={handleLogoutClick} style={{ color: "red" }}>
-          Logout
-        </a>
+        <button type="button" className="sidebar-btn" onClick={() => {}}>{"\u270D\uFE0F"} Submit Questions</button>
+        <button type="button" className="sidebar-btn" onClick={() => { handleResetPassword("faculty"); }}>{"\u2699\uFE0F"} Reset Password</button>
+        <button type="button" className="sidebar-btn logout-btn" onClick={() => { handleLogoutClick(); }} style={{ color: "#ffcccc" }}>{"\uD83D\uDEAA"} Logout</button>
       </div>
 
       <div className="dashboard-content">
         <h1>Welcome to Faculty Dashboard</h1>
-        <p>This is the Faculty's control panel.</p>
+        {facultyData ? (
+          <div className="faculty-info">
+            <h2>Hello, {facultyData.name}! 👋</h2>
+            <div className="faculty-details">
+              <p><strong>Department:</strong> {facultyData.department}</p>
+              <p><strong>College:</strong> {facultyData.clgName}</p>
+              <p><strong>Email:</strong> {facultyData.email}</p>
+            </div>
+          </div>
+        ) : (
+          <p>Loading faculty information...</p>
+        )}
 
         {showResetPopup && (
           <div className="popup-overlay">

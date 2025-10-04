@@ -2,10 +2,12 @@ const express = require('express');
 const router = express.Router();
 
 router.use('/api', require('./auth'));
+router.use('/api/faculty', require('./faculty'));
 router.use('/api/question-bank', require('./questionBank'));
 router.use('/api/subjects', require('./subjects'));
 router.use('/api/departments', require('./departments'));
 router.use('/api/colleges', require('./colleges'));
+router.use('/api/verifier', require('./verifier'));
 router.post('/api/assignQPSetter', require('../controllers/assignmentController').assignQPSetter);
 router.get('/api/assignedSubjects', require('../controllers/assignmentController').assignedSubjects);
 router.get('/api/assignments/:subjectCode', require('../controllers/assignmentController').assignmentsBySubject);

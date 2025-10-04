@@ -5,7 +5,7 @@ exports.list = async (_req, res) => {
   try {
     const rows = await Department.find({}).sort({ name: 1 }).lean();
     const result = rows.map(r => ({
-      id: r._id,
+      id: r._id.toString(),
       name: r.name,
       isActive: r.isActive,
       createdAt: r.createdAt,

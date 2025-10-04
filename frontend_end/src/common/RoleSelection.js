@@ -50,10 +50,10 @@ function RoleSelection() {
             Faculty
           </button>
           <button
-            onClick={() => handleRoleClick("paper-setter")}
+            onClick={() => handleRoleClick("verifier")}
             style={buttonStyle}
           >
-            Paper Setter
+            Verifier
           </button>
         </div>
       </div>

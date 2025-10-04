@@ -8,6 +8,7 @@ const initialValues = {
   deptName: "",
   email: "",
   phoneNo: "",
+  usertype: "internal", // default for faculty registration
 };
 
 const departmentOptions = [
@@ -66,10 +67,14 @@ function App() {
     setIsSubmit(true);
 
     if (Object.keys(errors).length === 0) {
-      fetch("http://localhost:5000/api/register", {
+      fetch("http://localhost:5000/api/faculty/register", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(formValues),
+        body: JSON.stringify({
+          ...formValues,
+          name: formValues.username, // Send name as well
+          phone: formValues.phoneNo, // Map phoneNo to phone
+        }),
       })
         .then((res) => res.text())
         .then((data) => {
