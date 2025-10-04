@@ -92,6 +92,49 @@ exports.assignmentsBySubject = async (req, res) => {
   }
 };
 
+// Get assignments by faculty email for dashboard
+exports.getFacultyAssignments = async (req, res) => {
+  try {
+    const { email } = req.params;
+    
+    if (!email) {
+      return res.status(400).json({ error: 'Email is required' });
+    }
+
+    const assignments = await Assignment.aggregate([
+      { $match: { email: email } },
+      { $lookup: { from: 'subjects', localField: 'subject_code', foreignField: 'subject_code', as: 'subject' } },
+      { $unwind: { path: '$subject', preserveNullAndEmptyArrays: true } },
+      { $sort: { assigned_at: -1 } },
+      { $project: {
+        _id: 1,
+        subject_code: 1,
+        subject_name: '$subject.subject_name',
+        assigned_at: 1,
+        submit_date: 1,
+        status: {
+          $cond: {
+            if: { $lt: ['$submit_date', new Date()] },
+            then: 'Overdue',
+            else: 'Pending'
+          }
+        }
+      } }
+    ]);
+
+    res.json({
+      faculty_email: email,
+      assignments: assignments,
+      total_assignments: assignments.length,
+      pending: assignments.filter(a => a.status === 'Pending').length,
+      overdue: assignments.filter(a => a.status === 'Overdue').length
+    });
+  } catch (err) {
+    console.error('Error fetching faculty assignments:', err);
+    res.status(500).json({ error: 'Failed to fetch faculty assignments' });
+  }
+};
+
 
 
 
