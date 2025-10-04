@@ -116,9 +116,9 @@ function ViewAssignees() {
                       <tr>
                         <th>Name</th>
                         <th>Email</th>
-                        <th>Status</th>
+                        <th>Assigned Date</th>
                         <th>Received Date</th>
-                        <th>Action</th>
+                        <th>Status</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -131,7 +131,7 @@ function ViewAssignees() {
                           <td>
                             <button
                               className="message-btn"
-                              onClick={() => alert(`Messaging ${fac.name}`)}
+                              onClick={() => alert(`Messaging ${fac.facultyName}`)}
                             >
                               Message
                             </button>

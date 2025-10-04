@@ -14,6 +14,7 @@ function DepartmentsPage() {
   const fetchDepartments = async () => {
     try {
       const res = await axios.get(`${API_BASE}/departments`);
+      console.log(res.data);
       const rows = Array.isArray(res.data) ? res.data : [];
       // Use backend departments shape directly: { id, name, isActive, createdAt }
       setDepartments(rows);
@@ -98,11 +99,11 @@ function DepartmentsPage() {
         {editDeptId === dept.id ? (
           <input
             type="text"
-            value={updatedDept || dept.name}  // fallback to dept.name
+            value={updatedDept || dept.department}  // fallback to dept.name
             onChange={(e) => setUpdatedDept(e.target.value)}
           />
         ) : (
-          dept.name
+          dept.department
         )}
       </td>
       <td>
