@@ -55,6 +55,12 @@ function RoleSelection() {
           >
             Paper Setter
           </button>
+          <button
+            onClick={() => handleRoleClick("verifier")}
+            style={buttonStyle}
+          >
+            Verifier
+          </button>
         </div>
       </div>
     </div>
