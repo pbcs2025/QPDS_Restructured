@@ -2,6 +2,7 @@ import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import "../../common/dashboard.css";
 import { Link } from 'react-router-dom';
+import axios from 'axios';
 
 
 function FacultyDashboard() {
@@ -14,6 +15,9 @@ function FacultyDashboard() {
   const [confirmPassword, setConfirmPassword] = useState("");
   const [message, setMessage] = useState("");
   const [facultyData, setFacultyData] = useState(null);
+  const [assignments, setAssignments] = useState([]);
+  const [assignmentsLoading, setAssignmentsLoading] = useState(true);
+  const [activeTab, setActiveTab] = useState('dashboard');
 
   const [showOld, setShowOld] = useState(false);
   const [showNew, setShowNew] = useState(false);
@@ -28,11 +32,30 @@ function FacultyDashboard() {
   };
   const cancelLogout = () => setShowConfirm(false);
 
+  // Fetch faculty assignments
+  const fetchAssignments = async (email) => {
+    try {
+      setAssignmentsLoading(true);
+      const response = await axios.get(`http://localhost:5000/api/faculty/assignments/${email}`);
+      setAssignments(response.data.assignments || []);
+    } catch (error) {
+      console.error('Error fetching assignments:', error);
+      setAssignments([]);
+    } finally {
+      setAssignmentsLoading(false);
+    }
+  };
+
   // Load faculty data on component mount
   useEffect(() => {
     const storedFacultyData = localStorage.getItem("faculty_data");
     if (storedFacultyData) {
-      setFacultyData(JSON.parse(storedFacultyData));
+      const data = JSON.parse(storedFacultyData);
+      setFacultyData(data);
+      // Fetch assignments for this faculty member
+      if (data.email) {
+        fetchAssignments(data.email);
+      }
     } else {
       // If no stored data, redirect to login
       navigate("/login/faculty");
@@ -61,6 +84,23 @@ function FacultyDashboard() {
 
   const cancelReset = () => {
     setShowResetPopup(false);
+  };
+
+  // Helper functions for assignments
+  const formatDate = (dateString) => {
+    return new Date(dateString).toLocaleDateString('en-GB', {
+      day: '2-digit',
+      month: 'short',
+      year: 'numeric'
+    });
+  };
+
+  const getStatusColor = (status) => {
+    switch (status) {
+      case 'Pending': return '#f39c12';
+      case 'Overdue': return '#e74c3c';
+      default: return '#95a5a6';
+    }
   };
 
   const handlePasswordUpdate = async (e) => {
@@ -105,26 +145,118 @@ function FacultyDashboard() {
     <div className="dashboard-container">
       <div className="sidebar">
         <h2>Faculty</h2>
-        <button type="button" className="sidebar-btn active-tab" onClick={() => {}}>{"\uD83C\uDFE0"} Dashboard</button>
-        <Link to="/question-paper-builder">View paper</Link>
-        <button type="button" className="sidebar-btn" onClick={() => {}}>{"\u270D\uFE0F"} Submit Questions</button>
-        <button type="button" className="sidebar-btn" onClick={() => { handleResetPassword("faculty"); }}>{"\u2699\uFE0F"} Reset Password</button>
-        <button type="button" className="sidebar-btn logout-btn" onClick={() => { handleLogoutClick(); }} style={{ color: "#ffcccc" }}>{"\uD83D\uDEAA"} Logout</button>
+        <button 
+          type="button" 
+          className={`sidebar-btn ${activeTab === 'dashboard' ? 'active-tab' : ''}`} 
+          onClick={() => setActiveTab('dashboard')}
+        >
+          🏠 Dashboard
+        </button>
+        <button 
+          type="button" 
+          className={`sidebar-btn ${activeTab === 'assignments' ? 'active-tab' : ''}`} 
+          onClick={() => setActiveTab('assignments')}
+        >
+          📋 Assigned Papers
+        </button>
+        <Link to="/question-paper-builder">📝 Question Paper Builder</Link>
+        <button type="button" className="sidebar-btn" onClick={() => { handleResetPassword("faculty"); }}>⚙️ Reset Password</button>
+        <button type="button" className="sidebar-btn logout-btn" onClick={() => { handleLogoutClick(); }} style={{ color: "#ffcccc" }}>🚪 Logout</button>
       </div>
 
       <div className="dashboard-content">
-        <h1>Welcome to Faculty Dashboard</h1>
-        {facultyData ? (
-          <div className="faculty-info">
-            <h2>Hello, {facultyData.name}! 👋</h2>
-            <div className="faculty-details">
-              <p><strong>Department:</strong> {facultyData.department}</p>
-              <p><strong>College:</strong> {facultyData.clgName}</p>
-              <p><strong>Email:</strong> {facultyData.email}</p>
-            </div>
-          </div>
-        ) : (
-          <p>Loading faculty information...</p>
+        {activeTab === 'dashboard' && (
+          <>
+            <h1>Welcome to Faculty Dashboard</h1>
+            {facultyData ? (
+              <div className="faculty-info">
+                <h2>Hello, {facultyData.name}! 👋</h2>
+                <div className="faculty-details">
+                  <p><strong>Department:</strong> {facultyData.department}</p>
+                  <p><strong>College:</strong> {facultyData.clgName}</p>
+                  <p><strong>Email:</strong> {facultyData.email}</p>
+                </div>
+              </div>
+            ) : (
+              <p>Loading faculty information...</p>
+            )}
+          </>
+        )}
+
+        {activeTab === 'assignments' && (
+          <>
+            <h1>📋 Assigned Papers</h1>
+            {assignmentsLoading ? (
+              <p>Loading assignments...</p>
+            ) : assignments.length === 0 ? (
+              <div className="no-assignments">
+                <p>📭 No papers assigned to you yet.</p>
+                <p>Check back later or contact your department head.</p>
+              </div>
+            ) : (
+              <div className="assignments-container">
+                <div className="assignments-summary">
+                  <div className="summary-card">
+                    <h3>📊 Summary</h3>
+                    <div className="summary-stats">
+                      <div className="stat">
+                        <span className="stat-number">{assignments.length}</span>
+                        <span className="stat-label">Total Assignments</span>
+                      </div>
+                      <div className="stat">
+                        <span className="stat-number">{assignments.filter(a => a.status === 'Pending').length}</span>
+                        <span className="stat-label">Pending</span>
+                      </div>
+                      <div className="stat">
+                        <span className="stat-number">{assignments.filter(a => a.status === 'Overdue').length}</span>
+                        <span className="stat-label">Overdue</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="assignments-table-container">
+                  <table className="assignments-table">
+                    <thead>
+                      <tr>
+                        <th>Subject Code</th>
+                        <th>Subject Name</th>
+                        <th>Assigned Date</th>
+                        <th>Submission Date</th>
+                        <th>Status</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {assignments.map((assignment) => (
+                        <tr key={assignment._id}>
+                          <td>
+                            <strong>{assignment.subject_code}</strong>
+                          </td>
+                          <td>
+                            {assignment.subject_name || 'N/A'}
+                          </td>
+                          <td>{formatDate(assignment.assigned_at)}</td>
+                          <td>
+                            <span className={`deadline ${assignment.status === 'Overdue' ? 'overdue' : ''}`}>
+                              {formatDate(assignment.submit_date)}
+                            </span>
+                          </td>
+                          <td>
+                            <span 
+                              className="status-badge" 
+                              style={{ backgroundColor: getStatusColor(assignment.status) }}
+                            >
+                              {assignment.status}
+                            </span>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+          </>
         )}
 
         {showResetPopup && (

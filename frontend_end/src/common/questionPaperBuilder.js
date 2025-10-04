@@ -1,6 +1,8 @@
 import React, { useState, useEffect, useRef } from "react";
 import axios from "axios";
 import "../App.css";
+import html2canvas from "html2canvas";
+import { jsPDF } from "jspdf";
 
 function QuestionPaperBuilder() {
   const [subject, setSubject] = useState("");
@@ -13,6 +15,7 @@ function QuestionPaperBuilder() {
   const [isSubmitted, setIsSubmitted] = useState(false);
   const [lastSavedAt, setLastSavedAt] = useState(null);
   const inactivityTimer = useRef(null);
+  const previewRef = useRef(null);
 
   const markPresets = {
     "a, b, c, d (5 marks each)": [5, 5, 5, 5],
@@ -205,6 +208,45 @@ function QuestionPaperBuilder() {
       )
     ) {
       saveQuestionPaper(false);
+    }
+  };
+
+  /** ------------------------
+   * ⬇️ Download Preview as PDF
+   * ------------------------- */
+  const downloadPreviewAsPdf = async () => {
+    try {
+      const element = previewRef.current;
+      if (!element) return;
+
+      const canvas = await html2canvas(element, { scale: 2, useCORS: true });
+      const imgData = canvas.toDataURL("image/png");
+
+      const pdf = new jsPDF("p", "mm", "a4");
+      const pageWidth = pdf.internal.pageSize.getWidth();
+      const pageHeight = pdf.internal.pageSize.getHeight();
+
+      const imgWidth = pageWidth;
+      const imgHeight = (canvas.height * imgWidth) / canvas.width;
+
+      let heightLeft = imgHeight;
+      let position = 0;
+
+      pdf.addImage(imgData, "PNG", 0, position, imgWidth, imgHeight);
+      heightLeft -= pageHeight;
+
+      while (heightLeft > 0) {
+        position = heightLeft - imgHeight;
+        pdf.addPage();
+        pdf.addImage(imgData, "PNG", 0, position, imgWidth, imgHeight);
+        heightLeft -= pageHeight;
+      }
+
+      const fileName = `${subjectCode || "question-paper"}.pdf`;
+      pdf.save(fileName);
+    } catch (err) {
+      console.error("Failed to download PDF", err);
+      alert("❌ Failed to generate PDF. Please try again.");
     }
   };
 
@@ -405,7 +447,7 @@ function QuestionPaperBuilder() {
 
         <hr />
         <h2>🖨 Question Paper Preview</h2>
-        <div className="preview">
+        <div className="preview" ref={previewRef}>
           <p>
             <strong>Subject:</strong> {subject} ({subjectCode})
           </p>
@@ -465,16 +507,21 @@ function QuestionPaperBuilder() {
           ))}
         </div>
 
-        {!isSubmitted && (
-          <div className="action-buttons">
+        <div className="action-buttons">
+          {!isSubmitted && (
             <button className="save-btn" onClick={() => saveQuestionPaper(true)}>
               💾 Save Draft
             </button>
+          )}
+          {!isSubmitted && (
             <button className="submit-btn" onClick={confirmAndSubmit}>
               📤 Submit Final
             </button>
-          </div>
-        )}
+          )}
+          <button className="save-btn" onClick={downloadPreviewAsPdf}>
+            ⬇️ Download PDF
+          </button>
+        </div>
         {isSubmitted && (
           <p className="submitted-text">
             ✅ Paper submitted. Editing is locked.
