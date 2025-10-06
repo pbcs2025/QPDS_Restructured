@@ -1,6 +1,7 @@
 const crypto = require('crypto');
 const User = require('../models/User');
 const Verifier = require('../models/Verifier');
+const Department = require('../models/Department');
 
 function generateRandomAlphanumeric(length) {
   const chars = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
@@ -86,6 +87,64 @@ exports.listAll = async (_req, res) => {
     return res.json(rows);
   } catch (err) {
     console.error('Verifier listAll error:', err);
+    return res.status(500).json({ error: 'Server error' });
+  }
+};
+
+
+// Normalize all Verifier.department values to match active Department names exactly
+// - Case-insensitive matching against active department names
+// - Only updates when a canonical match is found and value differs by case/spacing
+// - Returns a summary of updates
+exports.normalizeDepartments = async (_req, res) => {
+  try {
+    const activeDepts = await Department.find({ isActive: true }).select('name').lean();
+    const canonicalByLower = new Map(activeDepts.map(d => [String(d.name).toLowerCase().trim(), d.name]));
+
+    const verifiers = await Verifier.find({}).select('_id department').lean();
+
+    const bulkOps = [];
+    let matched = 0;
+    let alreadyCanonical = 0;
+    let skipped = 0;
+
+    for (const v of verifiers) {
+      const current = (v.department || '').trim();
+      const key = current.toLowerCase();
+      const canonical = canonicalByLower.get(key);
+      if (!canonical) {
+        skipped++;
+        continue;
+      }
+      if (current === canonical) {
+        alreadyCanonical++;
+        continue;
+      }
+      matched++;
+      bulkOps.push({
+        updateOne: {
+          filter: { _id: v._id },
+          update: { $set: { department: canonical } },
+        }
+      });
+    }
+
+    let modifiedCount = 0;
+    if (bulkOps.length > 0) {
+      const result = await Verifier.bulkWrite(bulkOps);
+      modifiedCount = result.modifiedCount || 0;
+    }
+
+    return res.json({
+      totalVerifiers: verifiers.length,
+      activeDepartments: activeDepts.length,
+      updatesPlanned: matched,
+      updated: modifiedCount,
+      alreadyCanonical,
+      skippedNoMatch: skipped,
+    });
+  } catch (err) {
+    console.error('Verifier normalizeDepartments error:', err);
     return res.status(500).json({ error: 'Server error' });
   }
 };

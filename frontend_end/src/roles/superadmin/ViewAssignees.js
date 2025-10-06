@@ -99,11 +99,12 @@ function ViewAssignees() {
 
       {/* Assignees Table View */}
       {selectedSubject && (
-        <div className="assignees-table-section">
+        <>
           <button className="back-btn" onClick={handleBack}>
             ← Back to Subjects
           </button>
-          <h2>Assignees for {selectedSubject}</h2>
+          <div className="assignees-table-section">
+            <h2>Assignees for {selectedSubject}</h2>
 
           {tableLoading && <p>Loading assignees...</p>}
           {error && <p>{error}</p>}
@@ -117,8 +118,9 @@ function ViewAssignees() {
                         <th>Name</th>
                         <th>Email</th>
                         <th>Assigned Date</th>
-                        <th>Received Date</th>
+                        <th>Submission Deadline</th>
                         <th>Status</th>
+                        <th>Action</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -126,8 +128,19 @@ function ViewAssignees() {
                         <tr key={idx}>
                           <td>{fac.facultyName}</td>
                           <td>{fac.email}</td>
-                          <td>{fac.status}</td>
-                          <td>{fac.receivedDate || "-"}</td>
+                          <td>{fac.assignedAt ? new Date(fac.assignedAt).toLocaleDateString() : "-"}</td>
+                          <td>{fac.submitDate ? new Date(fac.submitDate).toLocaleDateString() : "-"}</td>
+                          <td>
+                            <button
+                              className={`status-btn ${
+                                fac.status === 'submitted' || fac.status === 'completed' 
+                                  ? 'status-submitted' 
+                                  : 'status-pending'
+                              }`}
+                            >
+                              {fac.status === 'submitted' || fac.status === 'completed' ? 'Submitted' : 'Pending'}
+                            </button>
+                          </td>
                           <td>
                             <button
                               className="message-btn"
@@ -142,7 +155,8 @@ function ViewAssignees() {
                   </table>
                 </>
           )}
-        </div>
+          </div>
+        </>
       )}
     </div>
   );

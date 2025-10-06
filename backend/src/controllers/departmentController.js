@@ -10,7 +10,10 @@ exports.list = async (_req, res) => {
       isActive: r.isActive,
       createdAt: r.createdAt,
     }));
+    console.log('LIST: Mapped result:', result.length);
     res.json(result);
+    // const rows = await Department.find({ isActive: true }).sort({ name: 1 }).lean();
+    // res.json(rows.map(r => ({ id: r._id, name: r.name })));
   } catch (err) {
     console.error('Error fetching departments:', err);
     res.status(500).json({ error: 'Failed to fetch departments', details: err.message });
@@ -43,7 +46,7 @@ exports.list = async (_req, res) => {
 exports.active = async (_req, res) => {
   try {
     const rows = await Department.find({ isActive: true }).sort({ name: 1 }).lean();
-    res.json(rows.map(r => ({ id: r._id, name: r.name })));
+    res.json(rows.map(r => ({ id: r._id, name: r.name,createdAt: r.createdAt})));
   } catch (err) {
     console.error('Error fetching active departments:', err);
     res.status(500).json({ error: 'Failed to fetch active departments' });
