@@ -58,3 +58,125 @@
   font-size: 16px;
   margin-top: 40px;
 }
+
+/* Status button styles */
+.status-btn {
+  padding: 6px 12px;
+  border: none;
+  border-radius: 20px;
+  font-size: 12px;
+  font-weight: bold;
+  cursor: default;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.status-pending {
+  background-color: #ffebee;
+  color: #c62828;
+  border: 1px solid #ffcdd2;
+}
+
+.status-submitted {
+  background-color: #e8f5e8;
+  color: #2e7d32;
+  border: 1px solid #c8e6c9;
+}
+
+/* Message button styles */
+.message-btn {
+  background-color: #2196f3;
+  color: white;
+  border: none;
+  padding: 8px 16px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 12px;
+  transition: background-color 0.2s ease;
+}
+
+.message-btn:hover {
+  background-color: #1976d2;
+}
+
+/* Table styles */
+.assignees-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 20px;
+  background-color: white;
+  border-radius: 8px;
+  overflow: hidden;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  border: 1px solid #ddd;
+}
+
+.assignees-table th,
+.assignees-table td {
+  padding: 15px 12px;
+  text-align: left;
+  border-bottom: 1px solid #ddd;
+  color: #333;
+}
+
+.assignees-table th {
+  background-color: #2c3e50;
+  color: white;
+  font-weight: bold;
+  font-size: 14px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.assignees-table tr:nth-child(even) {
+  background-color: #f8f9fa;
+}
+
+.assignees-table tr:nth-child(odd) {
+  background-color: white;
+}
+
+.assignees-table tr:hover {
+  background-color: #e3f2fd;
+  transition: background-color 0.2s ease;
+}
+
+.assignees-table td {
+  font-size: 14px;
+  vertical-align: middle;
+}
+
+.back-btn {
+  background-color: #6c757d;
+  color: white;
+  border: none;
+  padding: 10px 20px;
+  border-radius: 4px;
+  cursor: pointer;
+  margin-bottom: 20px;
+  font-size: 14px;
+}
+
+.back-btn:hover {
+  background-color: #5a6268;
+}
+
+/* Assignees table section */
+.assignees-table-section {
+  padding: 20px;
+  margin-top: 20px;
+}
+
+.assignees-table-section h2 {
+  color: #2c3e50;
+  margin-bottom: 20px;
+  font-size: 24px;
+  font-weight: bold;
+}
+
+.assignees-table-section h3 {
+  color: #34495e;
+  margin-bottom: 15px;
+  font-size: 18px;
+  font-weight: 600;
+}

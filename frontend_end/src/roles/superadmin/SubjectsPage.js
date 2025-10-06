@@ -30,9 +30,25 @@ function SubjectsPage() {
 
   // Fetch departments from DB
   useEffect(() => {
-    fetch(`${API_BASE}/departments`)
-      .then((res) => res.json())
-      .then((data) => setDepartments(data || []))
+    fetch(`${API_BASE}/departments/active`)
+      .then((res) => {
+        if (!res.ok) {
+          throw new Error(`HTTP error! status: ${res.status}`);
+        }
+        return res.json();
+      })
+      .then((data) => {
+        const list = Array.isArray(data) ? data : [];
+        // Normalize name field and sort alphabetically (case-insensitive)
+        const sorted = [...list].sort((a, b) => {
+          const an = (a.name || a.department || '').toLowerCase();
+          const bn = (b.name || b.department || '').toLowerCase();
+          if (an < bn) return -1;
+          if (an > bn) return 1;
+          return 0;
+        });
+        setDepartments(sorted);
+      })
       .catch((err) => {
         console.error("Fetch error (departments):", err);
         setDepartments([]);
@@ -164,8 +180,8 @@ function SubjectsPage() {
               >
                 <option value="">-- Select Department --</option>
                 {departments.map((dept) => (
-                  <option key={dept.id} value={dept.department}>
-                    {dept.department}
+                  <option key={dept._id || dept.id} value={dept.name || dept.department}>
+                    {dept.name || dept.department}
                   </option>
                 ))}
               </select>
@@ -198,16 +214,16 @@ function SubjectsPage() {
       {/* Department Cards */}
       {!selectedDept && (
         <>
-          <h1>Subjects</h1>
+          <h1>Departments</h1>
           <div className="departments-grid">
             {departments.length === 0 && <p>No departments found.</p>}
             {departments.map((dept) => (
               <div
-                key={dept.id}
+                key={dept._id || dept.id}
                 className="department-card"
-                onClick={() => setSelectedDept(dept.department)}
+                onClick={() => setSelectedDept(dept.name || dept.department)}
               >
-                {dept.department}
+                {dept.name || dept.department}
               </div>
             ))}
           </div>

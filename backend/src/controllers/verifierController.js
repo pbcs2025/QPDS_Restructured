@@ -2,6 +2,7 @@ const crypto = require('crypto');
 const User = require('../models/User');
 const Verifier = require('../models/Verifier');
 const QuestionPaper = require('../models/QuestionPaper');
+const Department = require('../models/Department');
 
 function generateRandomAlphanumeric(length) {
   const chars = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
@@ -98,26 +99,25 @@ exports.getPapers = async (req, res) => {
     // Build filter object
     let filter = {};
     if (department) {
-      // Map department names to common subject code prefixes
+      // Map department names to common subject code prefixes (keys normalized to UPPERCASE)
       const departmentMappings = {
-        'Computer Science and Engineering': ['CSE', 'CS', 'COMPUTER'],
+        'COMPUTER SCIENCE AND ENGINEERING': ['CSE', 'CS', 'COMPUTER'],
         'CSE': ['CSE', 'CS', 'COMPUTER'],
-        'Electronics and Communication Engineering': ['ECE', 'EC', 'ELECTRONICS'],
+        'ELECTRONICS AND COMMUNICATION ENGINEERING': ['ECE', 'EC', 'ELECTRONICS'],
         'ECE': ['ECE', 'EC', 'ELECTRONICS'],
-        'Mechanical Engineering': ['ME', 'MECH', 'MECHANICAL'],
+        'MECHANICAL ENGINEERING': ['ME', 'MECH', 'MECHANICAL'],
         'ME': ['ME', 'MECH', 'MECHANICAL'],
-        'Civil Engineering': ['CE', 'CIVIL'],
+        'CIVIL ENGINEERING': ['CE', 'CIVIL'],
         'CE': ['CE', 'CIVIL'],
-        'Electrical Engineering': ['EE', 'ELECTRICAL'],
+        'ELECTRICAL ENGINEERING': ['EE', 'ELECTRICAL'],
         'EE': ['EE', 'ELECTRICAL'],
-        'Information Technology': ['IT', 'INFO'],
+        'INFORMATION TECHNOLOGY': ['IT', 'INFO'],
         'IT': ['IT', 'INFO'],
-        'CSE':['Computer Science and Engineering'],
       };
-      
-      const departmentName = department.toUpperCase();
+
+      const departmentName = department.toUpperCase().trim();
       const prefixes = departmentMappings[departmentName] || [departmentName];
-      
+
       // Create regex pattern to match any of the prefixes at the beginning of subject_code
       const regexPattern = `^(${prefixes.join('|')})`;
       filter.subject_code = { $regex: regexPattern, $options: 'i' };
@@ -212,3 +212,62 @@ exports.updatePaper = async (req, res) => {
     return res.status(500).json({ error: 'Server error' });
   }
 };
+
+// Normalize all Verifier.department values to match active Department names exactly
+// - Case-insensitive matching against active department names
+// - Only updates when a canonical match is found and value differs by case/spacing
+// - Returns a summary of updates
+exports.normalizeDepartments = async (_req, res) => {
+  try {
+    const activeDepts = await Department.find({ isActive: true }).select('name').lean();
+    const canonicalByLower = new Map(activeDepts.map(d => [String(d.name).toLowerCase().trim(), d.name]));
+
+    const verifiers = await Verifier.find({}).select('_id department').lean();
+
+    const bulkOps = [];
+    let matched = 0;
+    let alreadyCanonical = 0;
+    let skipped = 0;
+
+    for (const v of verifiers) {
+      const current = (v.department || '').trim();
+      const key = current.toLowerCase();
+      const canonical = canonicalByLower.get(key);
+      if (!canonical) {
+        skipped++;
+        continue;
+      }
+      if (current === canonical) {
+        alreadyCanonical++;
+        continue;
+      }
+      matched++;
+      bulkOps.push({
+        updateOne: {
+          filter: { _id: v._id },
+          update: { $set: { department: canonical } },
+        }
+      });
+    }
+
+    let modifiedCount = 0;
+    if (bulkOps.length > 0) {
+      const result = await Verifier.bulkWrite(bulkOps);
+      modifiedCount = result.modifiedCount || 0;
+    }
+
+    return res.json({
+      totalVerifiers: verifiers.length,
+      activeDepartments: activeDepts.length,
+      updatesPlanned: matched,
+      updated: modifiedCount,
+      alreadyCanonical,
+      skippedNoMatch: skipped,
+    });
+  } catch (err) {
+    console.error('Verifier normalizeDepartments error:', err);
+    return res.status(500).json({ error: 'Server error' });
+  }
+};
+
+

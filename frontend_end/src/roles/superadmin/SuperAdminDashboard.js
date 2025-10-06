@@ -1,9 +1,8 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import "../../common/dashboard.css";
 import ManageUsers from "./ManageUsers";
 import ViewAssignees from "./ViewAssignees";
-import AssigneeDetails from "./AssigneeDetails";
 import SubjectsPage from "./SubjectsPage";
 import DepartmentsPage from "./DepartmentsPage";
 import AdminManageFacultyPage from "./AdminManageFacultyPage";
@@ -13,6 +12,13 @@ function SuperAdminDashboard() {
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState("dashboard");
   const [showConfirm, setShowConfirm] = useState(false);
+  const [manageUsersView, setManageUsersView] = useState("cards"); // cards | faculty | verifiers
+  const [facultyCount, setFacultyCount] = useState(0);
+  const [verifierCount, setVerifierCount] = useState(0);
+  const [verifiers, setVerifiers] = useState([]);
+  const [usersLoading, setUsersLoading] = useState(false);
+  const [usersError, setUsersError] = useState(null);
+  const API_BASE = process.env.REACT_APP_API_BASE_URL;
   const notifications = [
     "📢 New faculty registered.",
     "⚠️ Password update request pending.",
@@ -25,6 +31,57 @@ function SuperAdminDashboard() {
     navigate("/");
   };
   const cancelLogout = () => setShowConfirm(false);
+
+  // Fetch counts when Manage Users cards are visible
+  useEffect(() => {
+    if (activeTab === "manageFaculty" && manageUsersView === "cards") {
+      setUsersLoading(true);
+      setUsersError(null);
+      const fetchCounts = async () => {
+        try {
+          const [usersRes, verListRes] = await Promise.all([
+            fetch(`${API_BASE}/users`), // internal users
+            fetch(`${API_BASE}/verifier/all/list`),
+          ]);
+          const users = usersRes.ok ? await usersRes.json() : [];
+          const verList = verListRes.ok ? await verListRes.json() : [];
+          const faculty = Array.isArray(users) ? users.filter(u => (u.role === 'Faculty' || (!u.role && u.usertype === 'internal'))).length : 0;
+          setFacultyCount(faculty);
+          setVerifierCount(Array.isArray(verList) ? verList.length : 0);
+        } catch (err) {
+          console.error("Count fetch error:", err);
+          setUsersError("Failed to load user counts");
+          setFacultyCount(0);
+          setVerifierCount(0);
+        } finally {
+          setUsersLoading(false);
+        }
+      };
+      fetchCounts();
+    }
+  }, [activeTab, manageUsersView, API_BASE]);
+
+  // Fetch verifiers list when verifiers view active
+  useEffect(() => {
+    if (activeTab === "manageFaculty" && manageUsersView === "verifiers") {
+      setUsersLoading(true);
+      setUsersError(null);
+      fetch(`${API_BASE}/verifier/all/list`)
+        .then((res) => {
+          if (!res.ok) throw new Error(`Status ${res.status}`);
+          return res.json();
+        })
+        .then((data) => {
+          setVerifiers(Array.isArray(data) ? data : []);
+        })
+        .catch((err) => {
+          console.error("Fetch verifiers error:", err);
+          setUsersError("Failed to load verifiers");
+          setVerifiers([]);
+        })
+        .finally(() => setUsersLoading(false));
+    }
+  }, [activeTab, manageUsersView, API_BASE]);
 
   return (
     <div className="dashboard-container">
@@ -44,9 +101,10 @@ function SuperAdminDashboard() {
   onClick={(e) => {
     e.preventDefault();
     setActiveTab("manageFaculty");
+    setManageUsersView("cards");
   }}
 >
-  Manage Faculty
+  Manage Users
 </a>
 
 
@@ -155,7 +213,96 @@ function SuperAdminDashboard() {
 
         {activeTab === "manageUsers" && <ManageUsers userType="superadmin" userpage="qp" />}
 
-        {activeTab === "manageFaculty" && <AdminManageFacultyPage/>}
+        {activeTab === "manageFaculty" && (
+          <>
+            {manageUsersView === "cards" && (
+              <>
+                <h1>Manage Users</h1>
+                {usersError && <p className="error-msg">{usersError}</p>}
+                <div className="departments-grid">
+                  <div
+                    className="department-card"
+                    onClick={() => setManageUsersView("faculty")}
+                    role="button"
+                    tabIndex={0}
+                    onKeyDown={(e) => { if (e.key === "Enter") setManageUsersView("faculty"); }}
+                  >
+                    <div>
+                      Faculty
+                    </div>
+                    <div style={{ color: '#64748b', fontWeight: '600' }}>
+                      {usersLoading ? "…" : `${facultyCount} total`}
+                    </div>
+                  </div>
+
+                  <div
+                    className="department-card"
+                    onClick={() => setManageUsersView("verifiers")}
+                    role="button"
+                    tabIndex={0}
+                    onKeyDown={(e) => { if (e.key === "Enter") setManageUsersView("verifiers"); }}
+                  >
+                    <div>
+                      Verifiers
+                    </div>
+                    <div style={{ color: '#64748b', fontWeight: '600' }}>
+                      {usersLoading ? "…" : `${verifierCount} total`}
+                    </div>
+                  </div>
+                </div>
+              </>
+            )}
+
+            {manageUsersView === "faculty" && (
+              <>
+                <button className="back-btn" onClick={() => setManageUsersView("cards")}>
+                  ← Back to Manage Users
+                </button>
+                <AdminManageFacultyPage />
+              </>
+            )}
+
+            {manageUsersView === "verifiers" && (
+              <>
+                <button className="back-btn" onClick={() => setManageUsersView("cards")}>
+                  ← Back to Manage Users
+                </button>
+                <h1>Verifiers</h1>
+                {usersLoading && <p>Loading verifiers…</p>}
+                {usersError && <p className="error-msg">{usersError}</p>}
+                {!usersLoading && !usersError && (
+                  <div className="table-wrapper">
+                    <table className="user-table">
+                      <thead>
+                        <tr>
+                          <th>Name</th>
+                          <th>Email</th>
+                          <th>Department</th>
+                          <th>College</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {verifiers.length === 0 && (
+                          <tr>
+                            <td colSpan={4}>No verifiers found.</td>
+                          </tr>
+                        )}
+                        {verifiers.map((u) => (
+                          <tr key={u._id || u.id}>
+                            <td>{u.name || '-'}</td>
+                            <td>{u.email || '-'}</td>
+                            <td>{u.deptName || u.department || '-'}</td>
+                            <td>{u.clgName || u.college || '-'}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </>
+            )}
+          </>
+        )}
 
 
         {activeTab === "viewAssignees" && <ViewAssignees />}

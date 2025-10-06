@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import "../../common/Main.css";
 import { Link, useNavigate } from "react-router-dom";
 
@@ -11,25 +11,40 @@ const initialValues = {
   usertype: "internal", // default for faculty registration
 };
 
-const departmentOptions = [
-  { value: "", label: "Select Department" },
-  { value: "CSE", label: "Computer Science and Engineering (CSE)" },
-  { value: "ISE", label: "Information Science and Engineering (ISE)" },
-  { value: "ECE", label: "Electronics and Communication Engineering (ECE)" },
-  { value: "EEE", label: "Electrical and Electronics Engineering (EEE)" },
-  { value: "ME", label: "Mechanical Engineering (ME)" },
-  { value: "CE", label: "Civil Engineering (CE)" },
-  { value: "AIML", label: "Artificial Intelligence and Machine Learning (AIML)" },
-  { value: "EIE", label: "Electronics and Instrumentation Engineering (EIE)" },
-  { value: "AE", label: "Aerospace Engineering (AE)" },
-];
+// Department options will be fetched from API
 
 function App() {
   const [formValues, setFormValues] = useState(initialValues);
   const [formErrors, setFormErrors] = useState({});
   const [isSubmit, setIsSubmit] = useState(false);
+  const [departments, setDepartments] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
 
   const navigate = useNavigate();
+
+  // Fetch departments from API
+  useEffect(() => {
+    const fetchDepartments = async () => {
+      try {
+        setLoading(true);
+        const response = await fetch("http://localhost:5000/api/departments/active");
+        if (!response.ok) {
+          throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        const data = await response.json();
+        setDepartments(data);
+        setError(null);
+      } catch (err) {
+        console.error("Error fetching departments:", err);
+        setError("Failed to load departments. Please try again.");
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchDepartments();
+  }, []);
 
   const handleChange = (e) => {
     const { name, value } = e.target;
@@ -138,13 +153,16 @@ function App() {
                   name="deptName"
                   value={formValues.deptName}
                   onChange={handleChange}
+                  disabled={loading}
                 >
-                  {departmentOptions.map(({ value, label }) => (
-                    <option key={value} value={value}>
-                      {label}
+                  <option value="">{loading ? "Loading departments..." : "Select Department"}</option>
+                  {departments.map((dept) => (
+                    <option key={dept._id || dept.id} value={dept.name || dept.deptName}>
+                      {dept.name || dept.deptName}
                     </option>
                   ))}
                 </select>
+                {error && <p className="error">{error}</p>}
                 <p className="error">{formErrors.deptName}</p>
               </div>
 
