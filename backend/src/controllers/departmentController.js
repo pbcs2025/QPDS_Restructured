@@ -1,7 +1,8 @@
 const Department = require('../models/Department');
 
 //GET all departments
-exports.list = async (_req, res) => {
+exports.list = async (_req, res) => {ean();
+  //console.log('LIST: Found', rows.length, 'departments');
   try {
     const rows = await Department.find({}).sort({ name: 1 }).lean();
     const result = rows.map(r => ({
@@ -18,25 +19,25 @@ exports.list = async (_req, res) => {
 };
 
 // //export.list----temp
-// // controllers/departmentController.js
-// exports.list = async (_req, res) => {
-//   try {
-//     console.log('LIST: Fetching departments...');
-//     const rows = await Department.find({}).sort({ name: 1 }).lean();
-//     console.log('LIST: Found', rows.length, 'departments');
-//     const result = rows.map(r => ({
-//       id: r._id,
-//       name: r.name,
-//       isActive: r.isActive,
-//       createdAt: r.createdAt
-//     }));
-//     console.log('LIST: Mapped result:', result);
-//     res.json(result);
-//   } catch (err) {
-//     console.error('LIST: Error fetching departments:', err);
-//     res.status(500).json({ error: 'Failed to fetch departments' });
-//   }
-// };
+//controllers/departmentController.js
+//exports.list = async (_req, res) => {
+ // try {
+   // console.log('LIST: Fetching departments...');
+   //const rows = await Department.find({}).sort({ name: 1 }).l
+   //const result = rows.map(r => ({
+   //  id: r._id,
+   //  name: r.name,
+    //      isActive: r.isActive,
+  //createdAt: r.createdAt
+//}));
+//console.log('LIST: Mapped result:', result);
+//res.json(result);
+// } catch (err) {
+ //  console.error('LIST: Error fetching departments:', err);
+   //   res.status(500).json({ error: 'Failed to fetch departments' });
+//}
+//};
+
 
 
 // GET active departments

@@ -93,8 +93,41 @@ exports.listAll = async (_req, res) => {
 
 exports.getPapers = async (req, res) => {
   try {
-    // Get all question papers grouped by subject and semester
-    const papers = await QuestionPaper.find({}).sort({ subject_code: 1, semester: 1, question_number: 1 }).lean();
+    const { department, semester } = req.query;
+    
+    // Build filter object
+    let filter = {};
+    if (department) {
+      // Map department names to common subject code prefixes
+      const departmentMappings = {
+        'Computer Science and Engineering': ['CSE', 'CS', 'COMPUTER'],
+        'CSE': ['CSE', 'CS', 'COMPUTER'],
+        'Electronics and Communication Engineering': ['ECE', 'EC', 'ELECTRONICS'],
+        'ECE': ['ECE', 'EC', 'ELECTRONICS'],
+        'Mechanical Engineering': ['ME', 'MECH', 'MECHANICAL'],
+        'ME': ['ME', 'MECH', 'MECHANICAL'],
+        'Civil Engineering': ['CE', 'CIVIL'],
+        'CE': ['CE', 'CIVIL'],
+        'Electrical Engineering': ['EE', 'ELECTRICAL'],
+        'EE': ['EE', 'ELECTRICAL'],
+        'Information Technology': ['IT', 'INFO'],
+        'IT': ['IT', 'INFO'],
+        'CSE':['Computer Science and Engineering'],
+      };
+      
+      const departmentName = department.toUpperCase();
+      const prefixes = departmentMappings[departmentName] || [departmentName];
+      
+      // Create regex pattern to match any of the prefixes at the beginning of subject_code
+      const regexPattern = `^(${prefixes.join('|')})`;
+      filter.subject_code = { $regex: regexPattern, $options: 'i' };
+    }
+    if (semester) {
+      filter.semester = parseInt(semester);
+    }
+    
+    // Get question papers with filters
+    const papers = await QuestionPaper.find(filter).sort({ subject_code: 1, semester: 1, question_number: 1 }).lean();
     
     // Group papers by subject_code and semester
     const groupedPapers = {};
@@ -102,7 +135,7 @@ exports.getPapers = async (req, res) => {
       const key = `${paper.subject_code}_${paper.semester}`;
       if (!groupedPapers[key]) {
         groupedPapers[key] = {
-          _id: paper._id,
+          _id: `${paper.subject_code}_${paper.semester}`, // Use composite key as ID
           subject_code: paper.subject_code,
           subject_name: paper.subject_name,
           semester: paper.semester,
@@ -113,6 +146,7 @@ exports.getPapers = async (req, res) => {
       groupedPapers[key].questions.push({
         question_number: paper.question_number,
         question_text: paper.question_text,
+        marks: paper.marks || 'N/A', // Include marks if available
         approved: paper.approved,
         remarks: paper.remarks,
         file_name: paper.file_name,
@@ -144,6 +178,12 @@ exports.updatePaper = async (req, res) => {
       return res.status(400).json({ error: 'Questions array is required' });
     }
     
+    // Parse the composite ID to get subject_code and semester
+    const [subject_code, semester] = id.split('_');
+    if (!subject_code || !semester) {
+      return res.status(400).json({ error: 'Invalid paper ID format' });
+    }
+    
     // Update each question in the paper
     const updatePromises = questions.map(async (question) => {
       const updateData = {
@@ -155,7 +195,8 @@ exports.updatePaper = async (req, res) => {
       
       return QuestionPaper.findOneAndUpdate(
         { 
-          subject_code: { $exists: true }, // This will be updated to match the actual paper
+          subject_code: subject_code,
+          semester: parseInt(semester),
           question_number: question.question_number 
         },
         updateData,
@@ -171,5 +212,3 @@ exports.updatePaper = async (req, res) => {
     return res.status(500).json({ error: 'Server error' });
   }
 };
-
-

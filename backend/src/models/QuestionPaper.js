@@ -8,6 +8,7 @@ const QuestionPaperSchema = new mongoose.Schema(
     set_name: { type: String, required: true },
     question_number: { type: String, required: true },
     question_text: { type: String, required: true },
+    marks: { type: Number, default: 0 },
     file_name: { type: String },
     file_type: { type: String },
     question_file: { type: Buffer },
