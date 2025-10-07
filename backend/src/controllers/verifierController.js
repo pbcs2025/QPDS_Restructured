@@ -15,21 +15,35 @@ function generateRandomAlphanumeric(length) {
 
 exports.register = async (req, res) => {
   try {
-    const { department, email } = req.body;
+    const { department, email, verifierName } = req.body;
     if (!department) return res.status(400).json({ error: 'department is required' });
 
-    const existing = await Verifier.findOne({ department }).lean();
-    if (existing) return res.status(409).json({ error: 'Verifier already exists for this department' });
+    // Canonicalize department to match active Department names
+    const active = await Department.find({ isActive: true }).select('name').lean();
+    const byLower = new Map(active.map(d => [String(d.name).toLowerCase().trim(), d.name]));
+    const canonicalDept = byLower.get(String(department).toLowerCase().trim());
+    if (!canonicalDept) {
+      return res.status(400).json({ error: 'Invalid department. Choose from active departments.' });
+    }
+
+    // Build department abbreviation from uppercase letters
+    const abbrMatch = String(canonicalDept).match(/[A-Z]/g) || [];
+    const deptAbbr = abbrMatch.join('') || canonicalDept.replace(/[^A-Za-z]/g, '').slice(0, 3).toUpperCase();
+
+    // Count how many verifiers already exist for this department
+    const countForDept = await Verifier.countDocuments({ department: canonicalDept });
+    const nextId = countForDept + 1;
+    const usernameBase = `${deptAbbr}Adminid${nextId}`;
 
     const randomSuffix = generateRandomAlphanumeric(3);
-    const username = `${department}-Admin${randomSuffix}`;
+    const username = usernameBase;
     const password = generateRandomAlphanumeric(8);
 
     const user = await User.create({
-      name: username,
+      name: verifierName && String(verifierName).trim() ? String(verifierName).trim() : username,
       username,
       clgName: '-',
-      deptName: department,
+      deptName: canonicalDept,
       email: email || `${username}@example.com`,
       phoneNo: '',
       password,
@@ -39,17 +53,40 @@ exports.register = async (req, res) => {
 
     await Verifier.create({
       verifierId: user._id,
+      verifierName: verifierName && String(verifierName).trim() ? String(verifierName).trim() : undefined,
       username,
       passwordHash: password,
-      department,
+      department: canonicalDept,
       email: email || '',
       role: 'verifier',
     });
 
     return res.status(201).json({ message: 'Verifier created', credentials: { username, password } });
   } catch (err) {
+    if (err && err.code === 11000) {
+      return res.status(409).json({ error: 'Username already exists, please retry' });
+    }
     console.error('Verifier register error:', err);
     return res.status(500).json({ error: 'Internal server error' });
+  }
+};
+
+// Danger: delete all verifiers and associated verifier users
+exports.deleteAll = async (_req, res) => {
+  try {
+    const verifiers = await Verifier.find({}).select('verifierId').lean();
+    const userIds = verifiers.map(v => v.verifierId).filter(Boolean);
+
+    const delVerifiers = await Verifier.deleteMany({});
+    let delUsers = { deletedCount: 0 };
+    if (userIds.length > 0) {
+      delUsers = await User.deleteMany({ _id: { $in: userIds } });
+    }
+
+    return res.json({ success: true, verifiersDeleted: delVerifiers.deletedCount || 0, usersDeleted: delUsers.deletedCount || 0 });
+  } catch (err) {
+    console.error('Verifier deleteAll error:', err);
+    return res.status(500).json({ error: 'Server error' });
   }
 };
 
@@ -87,6 +124,23 @@ exports.listAll = async (_req, res) => {
     return res.json(rows);
   } catch (err) {
     console.error('Verifier listAll error:', err);
+    return res.status(500).json({ error: 'Server error' });
+  }
+};
+
+// Delete a single verifier and its associated user
+exports.removeOne = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const v = await Verifier.findById(id).lean();
+    if (!v) return res.status(404).json({ error: 'Verifier not found' });
+    await Verifier.deleteOne({ _id: id });
+    if (v.verifierId) {
+      await User.deleteOne({ _id: v.verifierId });
+    }
+    return res.json({ success: true });
+  } catch (err) {
+    console.error('Verifier removeOne error:', err);
     return res.status(500).json({ error: 'Server error' });
   }
 };

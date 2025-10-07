@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from "react";
+import axios from "axios";
 import { useNavigate } from "react-router-dom";
 import "../../common/dashboard.css";
 import ManageUsers from "./ManageUsers";
@@ -18,7 +19,12 @@ function SuperAdminDashboard() {
   const [verifiers, setVerifiers] = useState([]);
   const [usersLoading, setUsersLoading] = useState(false);
   const [usersError, setUsersError] = useState(null);
-  const API_BASE = process.env.REACT_APP_API_BASE_URL;
+  const [departments, setDepartments] = useState([]);
+  const [newVerifierName, setNewVerifierName] = useState("");
+  const [newVerifierDept, setNewVerifierDept] = useState("");
+  const [submitLoading, setSubmitLoading] = useState(false);
+  const [submitMsg, setSubmitMsg] = useState("");
+  const API_BASE = process.env.REACT_APP_API_BASE_URL || 'http://localhost:5000/api';
   const notifications = [
     "📢 New faculty registered.",
     "⚠️ Password update request pending.",
@@ -72,7 +78,9 @@ function SuperAdminDashboard() {
           return res.json();
         })
         .then((data) => {
-          setVerifiers(Array.isArray(data) ? data : []);
+          const rows = Array.isArray(data) ? data : [];
+          setVerifiers(rows);
+          setVerifierCount(rows.length);
         })
         .catch((err) => {
           console.error("Fetch verifiers error:", err);
@@ -82,6 +90,78 @@ function SuperAdminDashboard() {
         .finally(() => setUsersLoading(false));
     }
   }, [activeTab, manageUsersView, API_BASE]);
+
+  // Fetch active departments for dropdown when verifiers view active
+  useEffect(() => {
+    if (activeTab === "manageFaculty" && manageUsersView === "verifiers") {
+      axios
+        .get(`${API_BASE}/departments/active`)
+        .then((res) => {
+          const rows = Array.isArray(res.data) ? res.data : [];
+          setDepartments(rows);
+          // Preselect first active department if none chosen
+          if (!newVerifierDept && rows.length > 0) {
+            setNewVerifierDept(rows[0].name || rows[0].department || "");
+          }
+        })
+        .catch((err) => {
+          console.error("Fetch departments error:", err);
+          setDepartments([]);
+        });
+    }
+  }, [activeTab, manageUsersView, API_BASE]);
+
+  const refreshVerifiers = async () => {
+    try {
+      const res = await fetch(`${API_BASE}/verifier/all/list`);
+      if (!res.ok) throw new Error(`Status ${res.status}`);
+      const rows = await res.json();
+      const list = Array.isArray(rows) ? rows : [];
+      setVerifiers(list);
+      setVerifierCount(list.length);
+    } catch (err) {
+      console.error("Refresh verifiers error:", err);
+      setVerifiers([]);
+    }
+  };
+
+  const handleAddVerifier = async () => {
+    setSubmitMsg("");
+    const name = newVerifierName.trim();
+    const dept = String(newVerifierDept || "").trim();
+    if (!dept) {
+      setSubmitMsg("Please select a department");
+      return;
+    }
+    setSubmitLoading(true);
+    try {
+      await axios.post(`${API_BASE}/verifier/register`, {
+        verifierName: name || undefined,
+        department: dept,
+      });
+      setSubmitMsg("Verifier created successfully");
+      setNewVerifierName("");
+      await refreshVerifiers();
+    } catch (err) {
+      const msg = err?.response?.data?.error || "Failed to create verifier";
+      setSubmitMsg(msg);
+    } finally {
+      setSubmitLoading(false);
+    }
+  };
+
+  const handleDeleteVerifier = async (id) => {
+    if (!id) return;
+    if (!window.confirm("Delete this verifier and its associated user?")) return;
+    setSubmitMsg("");
+    try {
+      await axios.delete(`${API_BASE}/verifier/${id}`);
+      await refreshVerifiers();
+    } catch (err) {
+      const msg = err?.response?.data?.error || "Failed to delete verifier";
+      setSubmitMsg(msg);
+    }
+  };
 
   return (
     <div className="dashboard-container">
@@ -268,6 +348,31 @@ function SuperAdminDashboard() {
                   ← Back to Manage Users
                 </button>
                 <h1>Verifiers</h1>
+                <div className="form-inline" style={{ margin: "10px 0" }}>
+                  <input
+                    type="text"
+                    placeholder="Verifier name (optional)"
+                    value={newVerifierName}
+                    onChange={(e) => setNewVerifierName(e.target.value)}
+                    style={{ marginRight: "10px" }}
+                  />
+                  <select
+                    value={newVerifierDept}
+                    onChange={(e) => setNewVerifierDept(e.target.value)}
+                    style={{ marginRight: "10px" }}
+                  >
+                    <option value="">Select department</option>
+                    {departments.map((d) => (
+                      <option key={d.id || d._id || d.name} value={(d.name || d.department || "").trim()}>
+                        {(d.name || d.department || "").trim()}
+                      </option>
+                    ))}
+                  </select>
+                  <button onClick={handleAddVerifier} disabled={submitLoading}>
+                    {submitLoading ? "Adding…" : "Add Verifier"}
+                  </button>
+                </div>
+                {submitMsg && <p className={submitMsg.includes("success") ? "success-msg" : "error-msg"}>{submitMsg}</p>}
                 {usersLoading && <p>Loading verifiers…</p>}
                 {usersError && <p className="error-msg">{usersError}</p>}
                 {!usersLoading && !usersError && (
@@ -279,6 +384,7 @@ function SuperAdminDashboard() {
                           <th>Email</th>
                           <th>Department</th>
                           <th>College</th>
+                          <th>Actions</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -289,10 +395,20 @@ function SuperAdminDashboard() {
                         )}
                         {verifiers.map((u) => (
                           <tr key={u._id || u.id}>
-                            <td>{u.name || '-'}</td>
+                            <td>{u.verifierName || u.name || u.username || '-'}</td>
                             <td>{u.email || '-'}</td>
                             <td>{u.deptName || u.department || '-'}</td>
                             <td>{u.clgName || u.college || '-'}</td>
+                            <td>
+                              <button
+                                type="button"
+                                className="no-bg-btn"
+                                style={{ color: "red" }}
+                                onClick={() => handleDeleteVerifier(u._id || u.id)}
+                              >
+                                Delete
+                              </button>
+                            </td>
                           </tr>
                         ))}
                       </tbody>
