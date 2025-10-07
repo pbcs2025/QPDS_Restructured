@@ -7,6 +7,7 @@ import ViewAssignees from "./ViewAssignees";
 import SubjectsPage from "./SubjectsPage";
 import DepartmentsPage from "./DepartmentsPage";
 import AdminManageFacultyPage from "./AdminManageFacultyPage";
+import VerifierManagement from "../verifier/VerifierManagement";
 
 
 function SuperAdminDashboard() {
@@ -347,74 +348,7 @@ function SuperAdminDashboard() {
                 <button className="back-btn" onClick={() => setManageUsersView("cards")}>
                   ← Back to Manage Users
                 </button>
-                <h1>Verifiers</h1>
-                <div className="form-inline" style={{ margin: "10px 0" }}>
-                  <input
-                    type="text"
-                    placeholder="Verifier name (optional)"
-                    value={newVerifierName}
-                    onChange={(e) => setNewVerifierName(e.target.value)}
-                    style={{ marginRight: "10px" }}
-                  />
-                  <select
-                    value={newVerifierDept}
-                    onChange={(e) => setNewVerifierDept(e.target.value)}
-                    style={{ marginRight: "10px" }}
-                  >
-                    <option value="">Select department</option>
-                    {departments.map((d) => (
-                      <option key={d.id || d._id || d.name} value={(d.name || d.department || "").trim()}>
-                        {(d.name || d.department || "").trim()}
-                      </option>
-                    ))}
-                  </select>
-                  <button onClick={handleAddVerifier} disabled={submitLoading}>
-                    {submitLoading ? "Adding…" : "Add Verifier"}
-                  </button>
-                </div>
-                {submitMsg && <p className={submitMsg.includes("success") ? "success-msg" : "error-msg"}>{submitMsg}</p>}
-                {usersLoading && <p>Loading verifiers…</p>}
-                {usersError && <p className="error-msg">{usersError}</p>}
-                {!usersLoading && !usersError && (
-                  <div className="table-wrapper">
-                    <table className="user-table">
-                      <thead>
-                        <tr>
-                          <th>Name</th>
-                          <th>Email</th>
-                          <th>Department</th>
-                          <th>College</th>
-                          <th>Actions</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {verifiers.length === 0 && (
-                          <tr>
-                            <td colSpan={5}>No verifiers found.</td>
-                          </tr>
-                        )}
-                        {verifiers.map((u) => (
-                          <tr key={u._id || u.id}>
-                            <td>{u.verifierName || u.name || u.username || '-'}</td>
-                            <td>{u.email || '-'}</td>
-                            <td>{u.deptName || u.department || '-'}</td>
-                            <td>{u.clgName || u.college || '-'}</td>
-                            <td>
-                              <button
-                                type="button"
-                                className="no-bg-btn"
-                                style={{ color: "red" }}
-                                onClick={() => handleDeleteVerifier(u._id || u.id)}
-                              >
-                                Delete
-                              </button>
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                )}
+                <VerifierManagement />
               </>
             )}
           </>
