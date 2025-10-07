@@ -23,7 +23,7 @@ const getSetName = async (subject_code, semester, useLatest = false) => {
 
 // ---------------- Single Question ----------------
 exports.create = async (req, res) => {
-  const { subject_code, subject_name, semester, question_number, question_text, set_name } = req.body;
+  const { subject_code, subject_name, semester, question_number, question_text, set_name, co, level, marks } = req.body;
   const file = req.file;
 
   if (!subject_code || !subject_name || !semester || !question_number || !question_text) {
@@ -49,6 +49,9 @@ exports.create = async (req, res) => {
       set_name: finalSetName,
       question_number,
       question_text,
+      co: co || '',
+      level: level || '',
+      marks: typeof marks === 'number' ? marks : 0,
       file_name: file ? file.originalname : null,
       file_type: file ? file.mimetype : null,
       question_file: file ? file.buffer : null,
@@ -95,6 +98,9 @@ exports.createBatch = async (req, res) => {
       set_name,
       question_number: q.question_number,
       question_text: q.question_text,
+      co: q.co || '',
+      level: q.level || '',
+      marks: typeof q.marks === 'number' ? q.marks : 0,
       file_name: q.file_name || null,
       file_type: q.file_type || null,
       question_file: q.question_file || null,

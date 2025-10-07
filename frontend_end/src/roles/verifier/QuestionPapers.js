@@ -8,6 +8,7 @@ const QuestionPapers = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [updating, setUpdating] = useState(false);
+  const [finalStatus, setFinalStatus] = useState('');
   const [departments, setDepartments] = useState([]);
   const [selectedDepartment, setSelectedDepartment] = useState('');
   const [selectedSemester, setSelectedSemester] = useState('');
@@ -66,6 +67,7 @@ const QuestionPapers = () => {
 
   const handlePaperClick = (paper) => {
     setSelectedPaper(paper);
+    setFinalStatus('');
   };
 
   const handleBackToList = () => {
@@ -100,6 +102,10 @@ const QuestionPapers = () => {
 
   const handleSendToAdmin = async () => {
     if (!selectedPaper) return;
+    if (finalStatus !== 'approved') {
+      alert('Please set FINAL STATUS to Approved to send to Admin.');
+      return;
+    }
 
     try {
       setUpdating(true);
@@ -109,7 +115,8 @@ const QuestionPapers = () => {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          questions: selectedPaper.questions
+          questions: selectedPaper.questions,
+          finalStatus: 'approved'
         }),
       });
 
@@ -119,18 +126,62 @@ const QuestionPapers = () => {
 
       const result = await response.json();
       console.log('Paper updated successfully:', result);
-      
+
+      // Optimistically update UI status to APPROVED
+      setSelectedPaper(prev => prev ? { ...prev, status: 'approved' } : prev);
+
       // Refresh the papers list
       await fetchPapers();
-      
-      // Show success message (you could add a toast notification here)
-      alert('Paper verification status updated successfully!');
-      
-      // Go back to list
+
+      alert('Paper marked APPROVED and sent to Admin.');
+
       setSelectedPaper(null);
+      setFinalStatus('');
     } catch (err) {
       console.error('Error updating paper:', err);
       alert('Failed to update paper. Please try again.');
+    } finally {
+      setUpdating(false);
+    }
+  };
+
+  const handleStoreRejected = async () => {
+    if (!selectedPaper) return;
+    if (finalStatus !== 'rejected') {
+      alert('Please set FINAL STATUS to Rejected to store in Rejected Papers.');
+      return;
+    }
+
+    try {
+      setUpdating(true);
+      const response = await fetch(`${API_BASE}/verifier/papers/${selectedPaper._id}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          questions: selectedPaper.questions,
+          finalStatus: 'rejected'
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      const result = await response.json();
+      console.log('Paper stored as rejected successfully:', result);
+
+      // Optimistically update UI status to REJECTED
+      setSelectedPaper(prev => prev ? { ...prev, status: 'rejected' } : prev);
+
+      await fetchPapers();
+      alert('Paper marked REJECTED and stored in Rejected Papers.');
+      setSelectedPaper(null);
+      setFinalStatus('');
+    } catch (err) {
+      console.error('Error storing rejected paper:', err);
+      alert('Failed to store rejected paper. Please try again.');
     } finally {
       setUpdating(false);
     }
@@ -231,9 +282,27 @@ const QuestionPapers = () => {
               <div style={{ display: 'flex', alignItems: 'flex-start', gap: '12px', padding: '16px 18px', background: 'linear-gradient(90deg, #e7f1ff, #f1f8ff)' }}>
                 <div style={{ color: '#ffffff', minWidth: '44px', fontWeight: 800, backgroundColor: '#0d6efd', borderRadius: '999px', textAlign: 'center', padding: '4px 0' }}>{question.question_number}</div>
                 <div style={{ flex: 1, color: '#1b2a41', fontWeight: 600 }}>
-                  {question.question_text}
+                  <textarea
+                    value={question.question_text || ''}
+                    onChange={(e) => {
+                      const newText = e.target.value;
+                      const updatedQuestions = selectedPaper.questions.map((q, i) => i === index ? { ...q, question_text: newText } : q);
+                      setSelectedPaper({ ...selectedPaper, questions: updatedQuestions });
+                    }}
+                    placeholder="Edit question text"
+                    style={{ width: '100%', minHeight: '70px', padding: '10px 12px', border: '1px solid #b6d4fe', borderRadius: '10px', backgroundColor: '#f4f9ff', fontSize: '14px', resize: 'vertical', color: '#1b2a41' }}
+                  />
                   {question.file_name && (
                     <div style={{ fontSize: '12px', color: '#6c757d', marginTop: '6px' }}>📎 {question.file_name}</div>
+                  )}
+                  {question.file_url && (
+                    <div style={{ marginTop: '10px' }}>
+                      <img
+                        src={`${API_BASE}${question.file_url}`}
+                        alt={question.file_name || 'attachment'}
+                        style={{ maxWidth: '100%', borderRadius: '8px', border: '1px solid #e9edf3' }}
+                      />
+                    </div>
                   )}
                 </div>
               </div>
@@ -241,15 +310,40 @@ const QuestionPapers = () => {
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '12px', padding: '14px 18px', borderTop: '1px solid #e9edf3', backgroundColor: '#ffffff' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                   <span style={{ color: '#fff', fontWeight: 800, minWidth: '44px', textAlign: 'center', backgroundColor: '#6f42c1', borderRadius: '999px', padding: '4px 10px' }}>CO</span>
-                  <div style={{ flex: 1, padding: '10px 12px', border: '1px solid #e1ccff', borderRadius: '8px', background: '#faf5ff', color: '#3b2c52' }}>{question.co || ''}</div>
+                  <input
+                    value={question.co || ''}
+                    onChange={(e) => {
+                      const updatedQuestions = selectedPaper.questions.map((q, i) => i === index ? { ...q, co: e.target.value } : q);
+                      setSelectedPaper({ ...selectedPaper, questions: updatedQuestions });
+                    }}
+                    placeholder="CO"
+                    style={{ flex: 1, padding: '10px 12px', border: '1px solid #e1ccff', borderRadius: '8px', background: '#faf5ff', color: '#3b2c52' }}
+                  />
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                   <span style={{ color: '#fff', fontWeight: 800, minWidth: '44px', textAlign: 'center', backgroundColor: '#fd7e14', borderRadius: '999px', padding: '4px 10px' }}>L</span>
-                  <div style={{ flex: 1, padding: '10px 12px', border: '1px solid #ffd6b0', borderRadius: '8px', background: '#fff7ef', color: '#5a3410' }}>{question.l || ''}</div>
+                  <input
+                    value={question.l || ''}
+                    onChange={(e) => {
+                      const updatedQuestions = selectedPaper.questions.map((q, i) => i === index ? { ...q, l: e.target.value } : q);
+                      setSelectedPaper({ ...selectedPaper, questions: updatedQuestions });
+                    }}
+                    placeholder="L"
+                    style={{ flex: 1, padding: '10px 12px', border: '1px solid #ffd6b0', borderRadius: '8px', background: '#fff7ef', color: '#5a3410' }}
+                  />
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                   <span style={{ color: '#084298', fontWeight: 800 }}>Marks</span>
-                  <div style={{ flex: 1, padding: '10px 12px', border: '1px solid #b6d4fe', borderRadius: '8px', background: '#e7f1ff', textAlign: 'center', fontWeight: 800, color: '#0b5ed7' }}>{question.marks || 'N/A'}</div>
+                  <input
+                    type="number"
+                    value={typeof question.marks === 'number' ? question.marks : 0}
+                    onChange={(e) => {
+                      const val = parseInt(e.target.value, 10);
+                      const updatedQuestions = selectedPaper.questions.map((q, i) => i === index ? { ...q, marks: Number.isNaN(val) ? 0 : val } : q);
+                      setSelectedPaper({ ...selectedPaper, questions: updatedQuestions });
+                    }}
+                    style={{ flex: 1, padding: '10px 12px', border: '1px solid #b6d4fe', borderRadius: '8px', background: '#e7f1ff', textAlign: 'center', fontWeight: 800, color: '#0b5ed7' }}
+                  />
                 </div>
               </div>
               {/* Remarks */}
@@ -289,22 +383,53 @@ const QuestionPapers = () => {
           ))}
         </div>
 
-        <div style={{ textAlign: 'center' }}>
+        {/* FINAL STATUS Section */}
+        <div style={{ background: '#fff', padding: '20px', borderRadius: '12px', border: '1px solid #dee2e6', boxShadow: '0 2px 4px rgba(0,0,0,0.1)', marginBottom: '20px' }}>
+          <h4 style={{ marginBottom: '15px', color: '#0b5ed7', borderBottom: '2px solid #0d6efd', paddingBottom: '5px' }}>FINAL STATUS</h4>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '24px' }}>
+            <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
+              <input type="checkbox" checked={finalStatus === 'approved'} onChange={() => setFinalStatus(finalStatus === 'approved' ? '' : 'approved')} style={{ transform: 'scale(1.2)', accentColor: '#198754' }} />
+              <span style={{ color: '#0f5132', fontWeight: 700 }}>Approved</span>
+            </label>
+            <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
+              <input type="checkbox" checked={finalStatus === 'rejected'} onChange={() => setFinalStatus(finalStatus === 'rejected' ? '' : 'rejected')} style={{ transform: 'scale(1.2)', accentColor: '#dc3545' }} />
+              <span style={{ color: '#842029', fontWeight: 700 }}>Rejected</span>
+            </label>
+          </div>
+        </div>
+
+        <div style={{ textAlign: 'center', display: 'flex', gap: '12px', justifyContent: 'center' }}>
           <button
             onClick={handleSendToAdmin}
-            disabled={updating}
+            disabled={updating || finalStatus !== 'approved'}
             style={{
               padding: '12px 30px',
-              backgroundColor: updating ? '#6c757d' : '#28a745',
+              backgroundColor: (updating || finalStatus !== 'approved') ? '#6c757d' : '#28a745',
               color: 'white',
               border: 'none',
               borderRadius: '4px',
-              cursor: updating ? 'not-allowed' : 'pointer',
+              cursor: (updating || finalStatus !== 'approved') ? 'not-allowed' : 'pointer',
               fontSize: '16px',
               fontWeight: 'bold'
             }}
           >
             {updating ? 'Updating...' : 'Send to Admin'}
+          </button>
+          <button
+            onClick={handleStoreRejected}
+            disabled={updating || finalStatus !== 'rejected'}
+            style={{
+              padding: '12px 30px',
+              backgroundColor: (updating || finalStatus !== 'rejected') ? '#6c757d' : '#dc3545',
+              color: 'white',
+              border: 'none',
+              borderRadius: '4px',
+              cursor: (updating || finalStatus !== 'rejected') ? 'not-allowed' : 'pointer',
+              fontSize: '16px',
+              fontWeight: 'bold'
+            }}
+          >
+            {updating ? 'Updating...' : 'Store in Rejected Papers'}
           </button>
         </div>
       </div>
