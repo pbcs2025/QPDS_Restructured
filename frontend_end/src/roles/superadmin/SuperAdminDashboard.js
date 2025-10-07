@@ -390,7 +390,7 @@ function SuperAdminDashboard() {
                       <tbody>
                         {verifiers.length === 0 && (
                           <tr>
-                            <td colSpan={4}>No verifiers found.</td>
+                            <td colSpan={5}>No verifiers found.</td>
                           </tr>
                         )}
                         {verifiers.map((u) => (
