@@ -1,6 +1,7 @@
 const crypto = require('crypto');
 const User = require('../models/User');
 const Verifier = require('../models/Verifier');
+const QuestionPaper = require('../models/QuestionPaper');
 const Department = require('../models/Department');
 
 function generateRandomAlphanumeric(length) {
@@ -91,6 +92,126 @@ exports.listAll = async (_req, res) => {
   }
 };
 
+exports.getPapers = async (req, res) => {
+  try {
+    const { department, semester } = req.query;
+    
+    // Build filter object
+    let filter = {};
+    if (department) {
+      // Map department names to common subject code prefixes (keys normalized to UPPERCASE)
+      const departmentMappings = {
+        'COMPUTER SCIENCE AND ENGINEERING': ['CSE', 'CS', 'COMPUTER'],
+        'CSE': ['CSE', 'CS', 'COMPUTER'],
+        'ELECTRONICS AND COMMUNICATION ENGINEERING': ['ECE', 'EC', 'ELECTRONICS'],
+        'ECE': ['ECE', 'EC', 'ELECTRONICS'],
+        'MECHANICAL ENGINEERING': ['ME', 'MECH', 'MECHANICAL'],
+        'ME': ['ME', 'MECH', 'MECHANICAL'],
+        'CIVIL ENGINEERING': ['CE', 'CIVIL'],
+        'CE': ['CE', 'CIVIL'],
+        'ELECTRICAL ENGINEERING': ['EE', 'ELECTRICAL'],
+        'EE': ['EE', 'ELECTRICAL'],
+        'INFORMATION TECHNOLOGY': ['IT', 'INFO'],
+        'IT': ['IT', 'INFO'],
+      };
+
+      const departmentName = department.toUpperCase().trim();
+      const prefixes = departmentMappings[departmentName] || [departmentName];
+
+      // Create regex pattern to match any of the prefixes at the beginning of subject_code
+      const regexPattern = `^(${prefixes.join('|')})`;
+      filter.subject_code = { $regex: regexPattern, $options: 'i' };
+    }
+    if (semester) {
+      filter.semester = parseInt(semester);
+    }
+    
+    // Get question papers with filters
+    const papers = await QuestionPaper.find(filter).sort({ subject_code: 1, semester: 1, question_number: 1 }).lean();
+    
+    // Group papers by subject_code and semester
+    const groupedPapers = {};
+    papers.forEach(paper => {
+      const key = `${paper.subject_code}_${paper.semester}`;
+      if (!groupedPapers[key]) {
+        groupedPapers[key] = {
+          _id: `${paper.subject_code}_${paper.semester}`, // Use composite key as ID
+          subject_code: paper.subject_code,
+          subject_name: paper.subject_name,
+          semester: paper.semester,
+          questions: [],
+          status: 'pending'
+        };
+      }
+      groupedPapers[key].questions.push({
+        question_number: paper.question_number,
+        question_text: paper.question_text,
+        marks: paper.marks || 'N/A', // Include marks if available
+        approved: paper.approved,
+        remarks: paper.remarks,
+        file_name: paper.file_name,
+        file_type: paper.file_type
+      });
+      
+      // Update overall status based on individual question status
+      if (paper.status === 'approved') {
+        groupedPapers[key].status = 'approved';
+      } else if (paper.status === 'rejected') {
+        groupedPapers[key].status = 'rejected';
+      }
+    });
+    
+    const result = Object.values(groupedPapers);
+    return res.json(result);
+  } catch (err) {
+    console.error('Verifier getPapers error:', err);
+    return res.status(500).json({ error: 'Server error' });
+  }
+};
+
+exports.updatePaper = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { questions } = req.body;
+    
+    if (!questions || !Array.isArray(questions)) {
+      return res.status(400).json({ error: 'Questions array is required' });
+    }
+    
+    // Parse the composite ID to get subject_code and semester
+    const [subject_code, semester] = id.split('_');
+    if (!subject_code || !semester) {
+      return res.status(400).json({ error: 'Invalid paper ID format' });
+    }
+    
+    // Update each question in the paper
+    const updatePromises = questions.map(async (question) => {
+      const updateData = {
+        approved: question.approved || false,
+        remarks: question.remarks || '',
+        verified_at: new Date(),
+        status: question.approved ? 'approved' : 'rejected'
+      };
+      
+      return QuestionPaper.findOneAndUpdate(
+        { 
+          subject_code: subject_code,
+          semester: parseInt(semester),
+          question_number: question.question_number 
+        },
+        updateData,
+        { new: true }
+      );
+    });
+    
+    await Promise.all(updatePromises);
+    
+    return res.json({ message: 'Paper updated successfully' });
+  } catch (err) {
+    console.error('Verifier updatePaper error:', err);
+    return res.status(500).json({ error: 'Server error' });
+  }
+};
 
 // Normalize all Verifier.department values to match active Department names exactly
 // - Case-insensitive matching against active department names
