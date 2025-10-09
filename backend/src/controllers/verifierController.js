@@ -269,5 +269,3 @@ exports.normalizeDepartments = async (_req, res) => {
     return res.status(500).json({ error: 'Server error' });
   }
 };
-
-
