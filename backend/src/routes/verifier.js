@@ -5,7 +5,20 @@ const ctrl = require('../controllers/verifierController');
 router.post('/register', ctrl.register);
 router.post('/login', ctrl.login);
 router.get('/all/list', ctrl.listAll);
+
+
+// Question paper routes - these must come before /:id route
+router.get('/papers', ctrl.getPapers);
+router.put('/papers/:id', ctrl.updatePaper);
+router.get('/papers/:subject_code/:semester', ctrl.getPaperByCodeSemester);
+router.get('/papers/:subject_code/:semester.docx', ctrl.getPaperDocx);
+
+// Diagnostics
+router.get('/approved', ctrl.listApprovedPapers);
+router.get('/rejected', ctrl.listRejectedPapers);
+
 router.delete('/:verifierId', ctrl.removeOne);
+
 
 // Admin-only: normalize Verifier.department to active Departments canonical names
 router.post('/normalize-departments', ctrl.normalizeDepartments);

@@ -20,6 +20,7 @@ import DepartmentsPage from "../roles/superadmin/DepartmentsPage";
 import QuestionPaperBuilder from './questionPaperBuilder';
 import VerifierLogin from "../roles/verifier/VerifierLogin";
 import VerifierDashboard from "../roles/verifier/VerifierDashboard";
+import SubmittedPaperView from "../roles/superadmin/SubmittedPaperView";
 
 
 
@@ -36,6 +37,7 @@ function App() {
         {/* removed paper-setter login route */}
         <Route path="/login/verifier" element={<VerifierLogin />} />
         <Route path="/super-admin-dashboard" element={<SuperAdminDashboard />} />
+        <Route path="/submitted-paper/:subjectCode/:semester" element={<SubmittedPaperView />} />
         <Route path="/admin-dashboard" element={<AdminDashboard />} />
         <Route path="/faculty-dashboard" element={<FacultyDashboard />} />
         {/* removed paper-setter dashboard route */}
