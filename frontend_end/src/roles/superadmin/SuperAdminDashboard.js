@@ -298,22 +298,75 @@ function SuperAdminDashboard() {
           <>
             {manageUsersView === "cards" && (
               <>
-                <h1>Manage Users</h1>
+                <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: '14px' }}>
+                  <div>
+                    <h1 style={{ margin: 0 }}>Manage Users</h1>
+                    <p style={{ margin: '6px 0 0 0', color: '#64748b' }}>Quickly navigate to manage Faculty and Verifiers</p>
+                  </div>
+                  {!usersLoading && (
+                    <div style={{ display: 'flex', gap: '8px' }}>
+                      <span style={{ background: '#eef2ff', color: '#4f46e5', padding: '6px 10px', borderRadius: '9999px', fontWeight: 600 }}>
+                        Faculty:&nbsp;{facultyCount}
+                      </span>
+                      <span style={{ background: '#ecfeff', color: '#0891b2', padding: '6px 10px', borderRadius: '9999px', fontWeight: 600 }}>
+                        Verifiers: {verifierCount}
+                      </span>
+                    </div>
+                  )}
+                </div>
                 {usersError && <p className="error-msg">{usersError}</p>}
-                <div className="departments-grid">
+
+                <div className="departments-grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(360px, 1fr))', gap: '24px', width: '100%' }}>
                   <div
                     className="department-card"
                     onClick={() => setManageUsersView("faculty")}
                     role="button"
                     tabIndex={0}
                     onKeyDown={(e) => { if (e.key === "Enter") setManageUsersView("faculty"); }}
+                    style={{
+                      background: 'linear-gradient(135deg, #eef2ff 0%, #e0e7ff 100%)',
+                      border: '1px solid #c7d2fe',
+                      boxShadow: '0 8px 18px rgba(79,70,229,0.12)',
+                      transition: 'transform .12s ease, box-shadow .12s ease',
+                      cursor: 'pointer',
+                      padding: '22px',
+                      minHeight: '220px',
+                      borderRadius: '16px',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      justifyContent: 'space-between',
+                      boxSizing: 'border-box',
+                      overflow: 'hidden'
+                    }}
+                    onMouseEnter={(e) => { e.currentTarget.style.transform = 'translateY(-2px)'; e.currentTarget.style.boxShadow = '0 10px 22px rgba(79,70,229,0.16)'; }}
+                    onMouseLeave={(e) => { e.currentTarget.style.transform = 'none'; e.currentTarget.style.boxShadow = '0 8px 18px rgba(79,70,229,0.12)'; }}
                   >
-                    <div>
-                      Faculty
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                      <div style={{ fontSize: '20px', fontWeight: 800, color: '#1f2937' }}>
+                        <i className="fa fa-users" style={{ marginRight: 8, color: '#4f46e5' }}></i>
+                        Faculty
+                      </div>
+                      <span style={{ background: '#4f46e5', color: 'white', padding: '6px 12px', borderRadius: 10, fontSize: 13, fontWeight: 800 }}>
+                        {usersLoading ? '…' : `${facultyCount}`}
+                      </span>
                     </div>
-                    <div style={{ color: '#64748b', fontWeight: '600' }}>
-                      {usersLoading ? "…" : `${facultyCount} total`}
-                    </div>
+                    <p style={{ margin: '12px 0 18px 0', color: '#475569', lineHeight: 1.5, wordBreak: 'break-word' }}>Manage internal and external faculty users</p>
+                    <button
+                      type="button"
+                      className="no-bg-btn"
+                      onClick={() => setManageUsersView('faculty')}
+                      style={{
+                        background: '#4f46e5',
+                        color: 'black',
+                        borderRadius: 10,
+                        padding: '12px 16px',
+                        fontWeight: 800,
+                        fontSize: '15px',
+                        width: 'fit-content'
+                      }}
+                    >
+                      Manage Faculty
+                    </button>
                   </div>
 
                   <div
@@ -322,13 +375,50 @@ function SuperAdminDashboard() {
                     role="button"
                     tabIndex={0}
                     onKeyDown={(e) => { if (e.key === "Enter") setManageUsersView("verifiers"); }}
+                    style={{
+                      background: 'linear-gradient(135deg, #ecfeff 0%, #cffafe 100%)',
+                      border: '1px solid #a5f3fc',
+                      boxShadow: '0 8px 18px rgba(8,145,178,0.12)',
+                      transition: 'transform .12s ease, box-shadow .12s ease',
+                      cursor: 'pointer',
+                      padding: '22px',
+                      minHeight: '220px',
+                      borderRadius: '16px',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      justifyContent: 'space-between',
+                      boxSizing: 'border-box',
+                      overflow: 'hidden'
+                    }}
+                    onMouseEnter={(e) => { e.currentTarget.style.transform = 'translateY(-2px)'; e.currentTarget.style.boxShadow = '0 10px 22px rgba(8,145,178,0.16)'; }}
+                    onMouseLeave={(e) => { e.currentTarget.style.transform = 'none'; e.currentTarget.style.boxShadow = '0 8px 18px rgba(8,145,178,0.12)'; }}
                   >
-                    <div>
-                      Verifiers
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                      <div style={{ fontSize: '20px', fontWeight: 800, color: '#1f2937' }}>
+                        <i className="fa fa-check-circle" style={{ marginRight: 8, color: '#0891b2' }}></i>
+                        Verifiers
+                      </div>
+                      <span style={{ background: '#0891b2', color: 'white', padding: '6px 12px', borderRadius: 10, fontSize: 13, fontWeight: 800 }}>
+                        {usersLoading ? '…' : `${verifierCount}`}
+                      </span>
                     </div>
-                    <div style={{ color: '#64748b', fontWeight: '600' }}>
-                      {usersLoading ? "…" : `${verifierCount} total`}
-                    </div>
+                    <p style={{ margin: '12px 0 18px 0', color: '#475569', lineHeight: 1.5, wordBreak: 'break-word' }}>Register and manage department verifiers</p>
+                    <button
+                      type="button"
+                      className="no-bg-btn"
+                      onClick={() => setManageUsersView('verifiers')}
+                      style={{
+                        background: '#0891b2',
+                        color: 'black',
+                        borderRadius: 10,
+                        padding: '12px 16px',
+                        fontWeight: 800,
+                        fontSize: '15px',
+                        width: 'fit-content'
+                      }}
+                    >
+                      Manage Verifiers
+                    </button>
                   </div>
                 </div>
               </>

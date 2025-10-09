@@ -47,15 +47,16 @@ function VerifierManagement() {
       .finally(() => setUsersLoading(false));
   }, []);
 
-  useEffect(() => {
+  useEffect(
+    () => {
     axios
       .get(`${API_BASE}/departments/active`)
       .then((res) => {
         const rows = Array.isArray(res.data) ? res.data : [];
         setDepartments(rows);
-        if (!newVerifierDept && rows.length > 0) {
-          setNewVerifierDept(rows[0].name || rows[0].department || "");
-        }
+        // if (!newVerifierDept && rows.length > 0) {
+        //   setNewVerifierDept(rows[0].name || rows[0].department || "");
+        // }
       })
       .catch((err) => {
         console.error("Fetch departments error:", err);
@@ -94,7 +95,9 @@ function VerifierManagement() {
     setSubmitMsg("");
     try {
       await axios.delete(`${API_BASE}/verifier/${id}`);
-      await refreshVerifiers();
+      // Optimistically update UI
+      setVerifiers((prev) => prev.filter((v) => (v._id || v.id) !== id));
+      setSubmitMsg("Verifier deleted successfully");
     } catch (err) {
       const msg = err?.response?.data?.error || "Failed to delete verifier";
       setSubmitMsg(msg);
@@ -102,20 +105,48 @@ function VerifierManagement() {
   };
 
   return (
-    <div>
-      <h1>Verifiers</h1>
-      <div className="form-inline" style={{ margin: "10px 0" }}>
+    <div style={{
+      background: 'white',
+      border: '1px solid #e2e8f0',
+      borderRadius: 16,
+      padding: 20,
+      boxShadow: '0 6px 18px rgba(0,0,0,0.04)'
+    }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+        <h1 style={{ margin: 0 }}>Verifiers</h1>
+        <span style={{ background: '#ecfeff', color: '#0891b2', padding: '6px 10px', borderRadius: 999, fontWeight: 700, fontSize: 12 }}>
+          Total: {verifiers.length}
+        </span>
+      </div>
+      <div className="form-inline" style={{ margin: "14px 0", display: 'flex', gap: 10, flexWrap: 'wrap' }}>
         <input
           type="text"
           placeholder="Verifier name (optional)"
           value={newVerifierName}
           onChange={(e) => setNewVerifierName(e.target.value)}
-          style={{ marginRight: "10px" }}
+          style={{
+            marginRight: "10px",
+            minWidth: 260,
+            padding: '10px 12px',
+            borderRadius: 10,
+            border: '1px solid #e2e8f0',
+            outline: 'none',
+            fontSize: 14,
+          }}
         />
         <select
           value={newVerifierDept}
           onChange={(e) => setNewVerifierDept(e.target.value)}
-          style={{ marginRight: "10px" }}
+          style={{
+            marginRight: "10px",
+            minWidth: 260,
+            padding: '10px 12px',
+            borderRadius: 10,
+            border: '1px solid #e2e8f0',
+            outline: 'none',
+            fontSize: 14,
+            background: 'white'
+          }}
         >
           <option value="">Select department</option>
           {departments.map((d) => (
@@ -124,42 +155,54 @@ function VerifierManagement() {
             </option>
           ))}
         </select>
-        <button onClick={handleAddVerifier} disabled={submitLoading}>
-          {submitLoading ? "Adding…" : "Add Verifier"}
+        <button
+          onClick={handleAddVerifier}
+          disabled={submitLoading}
+          style={{
+            background: '#0891b2',
+            color: 'white',
+            borderRadius: 12,
+            padding: '12px 18px',
+            fontWeight: 800,
+            fontSize: 15,
+            boxShadow: '0 6px 14px rgba(8,145,178,0.25)'
+          }}
+        >
+          {submitLoading ? "Adding…" : "+ Add Verifier"}
         </button>
       </div>
-      {submitMsg && <p className={submitMsg.includes("success") ? "success-msg" : "error-msg"}>{submitMsg}</p>}
+      {submitMsg && <p className={submitMsg.includes("success") ? "success-msg" : "error-msg"} style={{ marginTop: 6 }}>{submitMsg}</p>}
       {usersLoading && <p>Loading verifiers…</p>}
       {usersError && <p className="error-msg">{usersError}</p>}
       {!usersLoading && !usersError && (
-        <div className="table-wrapper">
-          <table className="user-table">
+        <div className="table-wrapper" style={{ marginTop: 8 }}>
+          <table className="user-table" style={{ borderRadius: 12, overflow: 'hidden' }}>
             <thead>
               <tr>
-                <th>Name</th>
-                <th>Email</th>
-                <th>Department</th>
+                <th style={{ textAlign: 'left', padding: '10px 12px' }}>Name</th>
+                <th style={{ textAlign: 'left', padding: '10px 12px' }}>Email</th>
+                <th style={{ textAlign: 'left', padding: '10px 12px' }}>Department</th>
                 {/* <th>College</th> */}
-                <th>Actions</th>
+                <th style={{ textAlign: 'left', padding: '10px 12px' }}>Actions</th>
               </tr>
             </thead>
             <tbody>
               {verifiers.length === 0 && (
                 <tr>
-                  <td colSpan={5}>No verifiers found.</td>
+                  <td colSpan={5} style={{ padding: 12 }}>No verifiers found.</td>
                 </tr>
               )}
               {verifiers.map((u) => (
                 <tr key={u._id || u.id}>
-                  <td>{u.verifierName || u.name || u.username || '-'}</td>
-                  <td>{u.email || '-'}</td>
-                  <td>{u.deptName || u.department || '-'}</td>
+                  <td style={{ padding: '10px 12px' }}>{u.verifierName || u.name || u.username || '-'}</td>
+                  <td style={{ padding: '10px 12px' }}>{u.email || '-'}</td>
+                  <td style={{ padding: '10px 12px' }}>{u.deptName || u.department || '-'}</td>
                   {/* <td>{u.clgName || u.college || '-'}</td> */}
-                  <td>
+                  <td style={{ padding: '10px 12px' }}>
                     <button
                       type="button"
                       className="no-bg-btn"
-                      style={{ color: "red" }}
+                      style={{ color: "#ef4444", fontWeight: 700 }}
                       onClick={() => handleDeleteVerifier(u._id || u.id)}
                     >
                       Delete

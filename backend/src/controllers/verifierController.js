@@ -1,4 +1,5 @@
 const crypto = require('crypto');
+const mongoose = require('mongoose');
 const User = require('../models/User');
 const Verifier = require('../models/Verifier');
 const Department = require('../models/Department');
@@ -128,22 +129,44 @@ exports.listAll = async (_req, res) => {
   }
 };
 
-// Delete a single verifier and its associated user
+/// ... existing imports above
 exports.removeOne = async (req, res) => {
   try {
-    const { id } = req.params;
-    const v = await Verifier.findById(id).lean();
-    if (!v) return res.status(404).json({ error: 'Verifier not found' });
-    await Verifier.deleteOne({ _id: id });
-    if (v.verifierId) {
-      await User.deleteOne({ _id: v.verifierId });
+    const { verifierId } = req.params;
+    if (!verifierId) {
+      return res.status(400).json({ error: 'verifierId is required' });
     }
-    return res.json({ success: true });
+
+    // Try both cases — string and ObjectId
+    const verifier =
+      (await Verifier.findOne({ verifierId })) ||
+      (mongoose.Types.ObjectId.isValid(verifierId)
+        ? await Verifier.findOne({ verifierId: new mongoose.Types.ObjectId(verifierId) })
+        : null);
+
+    if (!verifier) {
+      return res.status(404).json({ error: 'Verifier not found' });
+    }
+
+    // Delete the verifier
+    await Verifier.deleteOne({ _id: verifier._id });
+
+    // Delete the linked user (convert if ObjectId)
+    if (mongoose.Types.ObjectId.isValid(verifier.verifierId)) {
+      await User.deleteOne({ _id: new mongoose.Types.ObjectId(verifier.verifierId) });
+    } else {
+      await User.deleteOne({ _id: verifier.verifierId });
+    }
+
+    return res.json({ success: true, message: 'Verifier and linked user deleted successfully.' });
   } catch (err) {
     console.error('Verifier removeOne error:', err);
     return res.status(500).json({ error: 'Server error' });
   }
 };
+
+
+
 
 // Normalize all Verifier.department values to match active Department names exactly
 // - Case-insensitive matching against active department names
