@@ -5,6 +5,7 @@ import html2canvas from "html2canvas";
 import { jsPDF } from "jspdf";
 
 function QuestionPaperBuilder() {
+  const API_BASE = process.env.REACT_APP_API_BASE_URL;
   const [subject, setSubject] = useState("");
   const [subjectCode, setSubjectCode] = useState("");
   const [semester, setSemester] = useState("");
@@ -176,7 +177,7 @@ function QuestionPaperBuilder() {
               if (q.image) formData.append("file", q.image); // ✅ FIXED (was "image")
 
               await axios.post(
-                "http://localhost:5000/api/question-bank",
+                `${API_BASE}/question-bank`,
                 formData,
                 {
                   headers: { "Content-Type": "multipart/form-data" },

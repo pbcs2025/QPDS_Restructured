@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from "react";
 import "../../common/dashboard.css";
 
-const API_BASE = process.env.REACT_APP_API_BASE_URL;
+const API_BASE = process.env.REACT_APP_API_BASE_URL || 'http://localhost:5000/api';
 
 function SubjectsPage() {
   const [subjects, setSubjects] = useState([]);
@@ -255,12 +255,12 @@ function SubjectsPage() {
                   </thead>
                   <tbody>
                     {groupedBySemester[sem].map((sub) => (
-                      <tr key={sub.id}>
+                      <tr key={sub._id || sub.id}>
                         <td>{sub.subject_code}</td>
                         <td>{sub.subject_name}</td>
                         <td>{sub.credits}</td>
                         <td>
-                          <button onClick={() => handleDelete(sub.id)}>
+                          <button onClick={() => handleDelete(sub._id || sub.id)}>
                             Delete
                           </button>
                         </td>
