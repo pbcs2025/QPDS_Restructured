@@ -1,9 +1,12 @@
 const crypto = require('crypto');
+const mongoose = require('mongoose');
 const User = require('../models/User');
 const Verifier = require('../models/Verifier');
+
 const QuestionPaper = require('../models/QuestionPaper');
 const ApprovedPaper = require('../models/ApprovedPaper');
 const RejectedPaper = require('../models/RejectedPaper');
+
 const Department = require('../models/Department');
 const { Document, Packer, Paragraph, TextRun } = (() => {
   try {
@@ -25,21 +28,35 @@ function generateRandomAlphanumeric(length) {
 
 exports.register = async (req, res) => {
   try {
-    const { department, email } = req.body;
+    const { department, email, verifierName } = req.body;
     if (!department) return res.status(400).json({ error: 'department is required' });
 
-    const existing = await Verifier.findOne({ department }).lean();
-    if (existing) return res.status(409).json({ error: 'Verifier already exists for this department' });
+    // Canonicalize department to match active Department names
+    const active = await Department.find({ isActive: true }).select('name').lean();
+    const byLower = new Map(active.map(d => [String(d.name).toLowerCase().trim(), d.name]));
+    const canonicalDept = byLower.get(String(department).toLowerCase().trim());
+    if (!canonicalDept) {
+      return res.status(400).json({ error: 'Invalid department. Choose from active departments.' });
+    }
+
+    // Build department abbreviation from uppercase letters
+    const abbrMatch = String(canonicalDept).match(/[A-Z]/g) || [];
+    const deptAbbr = abbrMatch.join('') || canonicalDept.replace(/[^A-Za-z]/g, '').slice(0, 3).toUpperCase();
+
+    // Count how many verifiers already exist for this department
+    const countForDept = await Verifier.countDocuments({ department: canonicalDept });
+    const nextId = countForDept + 1;
+    const usernameBase = `${deptAbbr}Adminid${nextId}`;
 
     const randomSuffix = generateRandomAlphanumeric(3);
-    const username = `${department}-Admin${randomSuffix}`;
+    const username = usernameBase;
     const password = generateRandomAlphanumeric(8);
 
     const user = await User.create({
-      name: username,
+      name: verifierName && String(verifierName).trim() ? String(verifierName).trim() : username,
       username,
       clgName: '-',
-      deptName: department,
+      deptName: canonicalDept,
       email: email || `${username}@example.com`,
       phoneNo: '',
       password,
@@ -49,17 +66,40 @@ exports.register = async (req, res) => {
 
     await Verifier.create({
       verifierId: user._id,
+      verifierName: verifierName && String(verifierName).trim() ? String(verifierName).trim() : undefined,
       username,
       passwordHash: password,
-      department,
+      department: canonicalDept,
       email: email || '',
       role: 'verifier',
     });
 
     return res.status(201).json({ message: 'Verifier created', credentials: { username, password } });
   } catch (err) {
+    if (err && err.code === 11000) {
+      return res.status(409).json({ error: 'Username already exists, please retry' });
+    }
     console.error('Verifier register error:', err);
     return res.status(500).json({ error: 'Internal server error' });
+  }
+};
+
+// Danger: delete all verifiers and associated verifier users
+exports.deleteAll = async (_req, res) => {
+  try {
+    const verifiers = await Verifier.find({}).select('verifierId').lean();
+    const userIds = verifiers.map(v => v.verifierId).filter(Boolean);
+
+    const delVerifiers = await Verifier.deleteMany({});
+    let delUsers = { deletedCount: 0 };
+    if (userIds.length > 0) {
+      delUsers = await User.deleteMany({ _id: { $in: userIds } });
+    }
+
+    return res.json({ success: true, verifiersDeleted: delVerifiers.deletedCount || 0, usersDeleted: delUsers.deletedCount || 0 });
+  } catch (err) {
+    console.error('Verifier deleteAll error:', err);
+    return res.status(500).json({ error: 'Server error' });
   }
 };
 
@@ -101,39 +141,14 @@ exports.listAll = async (_req, res) => {
   }
 };
 
-exports.getPapers = async (req, res) => {
+/// ... existing imports above
+exports.removeOne = async (req, res) => {
   try {
-    const { department, semester } = req.query;
-    
-    // Build filter object
-    let filter = {};
-    if (department) {
-      // Map department names to common subject code prefixes (keys normalized to UPPERCASE)
-      const departmentMappings = {
-        'COMPUTER SCIENCE AND ENGINEERING': ['CSE', 'CS', 'COMPUTER'],
-        'CSE': ['CSE', 'CS', 'COMPUTER'],
-        'ELECTRONICS AND COMMUNICATION ENGINEERING': ['ECE', 'EC', 'ELECTRONICS'],
-        'ECE': ['ECE', 'EC', 'ELECTRONICS'],
-        'MECHANICAL ENGINEERING': ['ME', 'MECH', 'MECHANICAL'],
-        'ME': ['ME', 'MECH', 'MECHANICAL'],
-        'CIVIL ENGINEERING': ['CE', 'CIVIL'],
-        'CE': ['CE', 'CIVIL'],
-        'ELECTRICAL ENGINEERING': ['EE', 'ELECTRICAL'],
-        'EE': ['EE', 'ELECTRICAL'],
-        'INFORMATION TECHNOLOGY': ['IT', 'INFO'],
-        'IT': ['IT', 'INFO'],
-      };
-
-      const departmentName = department.toUpperCase().trim();
-      const prefixes = departmentMappings[departmentName] || [departmentName];
-
-      // Create regex pattern to match any of the prefixes at the beginning of subject_code
-      const regexPattern = `^(${prefixes.join('|')})`;
-      filter.subject_code = { $regex: regexPattern, $options: 'i' };
+    const { verifierId } = req.params;
+    if (!verifierId) {
+      return res.status(400).json({ error: 'verifierId is required' });
     }
-    if (semester) {
-      filter.semester = parseInt(semester);
-    }
+
     
     // Get question papers with filters
     const papers = await QuestionPaper.find(filter).sort({ subject_code: 1, semester: 1, question_number: 1 }).lean();
@@ -189,13 +204,30 @@ exports.updatePaper = async (req, res) => {
     
     if (!questions || !Array.isArray(questions)) {
       return res.status(400).json({ error: 'Questions array is required' });
+
+
+    // Try both cases — string and ObjectId
+    const verifier =
+      (await Verifier.findOne({ verifierId })) ||
+      (mongoose.Types.ObjectId.isValid(verifierId)
+        ? await Verifier.findOne({ verifierId: new mongoose.Types.ObjectId(verifierId) })
+        : null);
+
+    if (!verifier) {
+      return res.status(404).json({ error: 'Verifier not found' });
+
     }
-    
-    // Parse the composite ID to get subject_code and semester
-    const [subject_code, semester] = id.split('_');
-    if (!subject_code || !semester) {
-      return res.status(400).json({ error: 'Invalid paper ID format' });
+
+    // Delete the verifier
+    await Verifier.deleteOne({ _id: verifier._id });
+
+    // Delete the linked user (convert if ObjectId)
+    if (mongoose.Types.ObjectId.isValid(verifier.verifierId)) {
+      await User.deleteOne({ _id: new mongoose.Types.ObjectId(verifier.verifierId) });
+    } else {
+      await User.deleteOne({ _id: verifier.verifierId });
     }
+
     
     // Update each question in the paper only (no snapshot here)
     const updatePromises = questions.map(async (question) => {
@@ -269,11 +301,16 @@ exports.updatePaper = async (req, res) => {
     }
     
     return res.json({ message: 'Paper updated successfully', finalStatus: finalStatus || null });
+
+
+    return res.json({ success: true, message: 'Verifier and linked user deleted successfully.' });
+
   } catch (err) {
-    console.error('Verifier updatePaper error:', err);
+    console.error('Verifier removeOne error:', err);
     return res.status(500).json({ error: 'Server error' });
   }
 };
+
 
 // Get a single grouped paper by subject_code and semester
 exports.getPaperByCodeSemester = async (req, res) => {
@@ -391,6 +428,10 @@ exports.listRejectedPapers = async (_req, res) => {
     return res.status(500).json({ error: 'Server error' });
   }
 };
+
+
+
+
 
 // Normalize all Verifier.department values to match active Department names exactly
 // - Case-insensitive matching against active department names

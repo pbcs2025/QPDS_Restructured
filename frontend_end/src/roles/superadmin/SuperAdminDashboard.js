@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from "react";
+import axios from "axios";
 import { useNavigate } from "react-router-dom";
 import "../../common/dashboard.css";
 import ManageUsers from "./ManageUsers";
@@ -6,6 +7,7 @@ import ViewAssignees from "./ViewAssignees";
 import SubjectsPage from "./SubjectsPage";
 import DepartmentsPage from "./DepartmentsPage";
 import AdminManageFacultyPage from "./AdminManageFacultyPage";
+import VerifierManagement from "../verifier/VerifierManagement";
 
 
 function SuperAdminDashboard() {
@@ -18,11 +20,20 @@ function SuperAdminDashboard() {
   const [verifiers, setVerifiers] = useState([]);
   const [usersLoading, setUsersLoading] = useState(false);
   const [usersError, setUsersError] = useState(null);
+
   const [submittedPapers, setSubmittedPapers] = useState([]);
   const [openedPaper, setOpenedPaper] = useState(null);
   const [submittedLoading, setSubmittedLoading] = useState(false);
   const [submittedError, setSubmittedError] = useState(null);
   const API_BASE = process.env.REACT_APP_API_BASE_URL || 'http://localhost:5001/api';
+
+  const [departments, setDepartments] = useState([]);
+  const [newVerifierName, setNewVerifierName] = useState("");
+  const [newVerifierDept, setNewVerifierDept] = useState("");
+  const [submitLoading, setSubmitLoading] = useState(false);
+  const [submitMsg, setSubmitMsg] = useState("");
+  const API_BASE = process.env.REACT_APP_API_BASE_URL || 'http://localhost:5000/api';
+
   const notifications = [
     "📢 New faculty registered.",
     "⚠️ Password update request pending.",
@@ -76,7 +87,9 @@ function SuperAdminDashboard() {
           return res.json();
         })
         .then((data) => {
-          setVerifiers(Array.isArray(data) ? data : []);
+          const rows = Array.isArray(data) ? data : [];
+          setVerifiers(rows);
+          setVerifierCount(rows.length);
         })
         .catch((err) => {
           console.error("Fetch verifiers error:", err);
@@ -86,6 +99,7 @@ function SuperAdminDashboard() {
         .finally(() => setUsersLoading(false));
     }
   }, [activeTab, manageUsersView, API_BASE]);
+
 
   // Fetch submitted (approved) papers when tab active
   useEffect(() => {
@@ -108,6 +122,79 @@ function SuperAdminDashboard() {
         .finally(() => setSubmittedLoading(false));
     }
   }, [activeTab, API_BASE]);
+
+  // Fetch active departments for dropdown when verifiers view active
+  useEffect(() => {
+    if (activeTab === "manageFaculty" && manageUsersView === "verifiers") {
+      axios
+        .get(`${API_BASE}/departments/active`)
+        .then((res) => {
+          const rows = Array.isArray(res.data) ? res.data : [];
+          setDepartments(rows);
+          // Preselect first active department if none chosen
+          if (!newVerifierDept && rows.length > 0) {
+            setNewVerifierDept(rows[0].name || rows[0].department || "");
+          }
+        })
+        .catch((err) => {
+          console.error("Fetch departments error:", err);
+          setDepartments([]);
+        });
+    }
+  }, [activeTab, manageUsersView, API_BASE]);
+
+  const refreshVerifiers = async () => {
+    try {
+      const res = await fetch(`${API_BASE}/verifier/all/list`);
+      if (!res.ok) throw new Error(`Status ${res.status}`);
+      const rows = await res.json();
+      const list = Array.isArray(rows) ? rows : [];
+      setVerifiers(list);
+      setVerifierCount(list.length);
+    } catch (err) {
+      console.error("Refresh verifiers error:", err);
+      setVerifiers([]);
+    }
+  };
+
+  const handleAddVerifier = async () => {
+    setSubmitMsg("");
+    const name = newVerifierName.trim();
+    const dept = String(newVerifierDept || "").trim();
+    if (!dept) {
+      setSubmitMsg("Please select a department");
+      return;
+    }
+    setSubmitLoading(true);
+    try {
+      await axios.post(`${API_BASE}/verifier/register`, {
+        verifierName: name || undefined,
+        department: dept,
+      });
+      setSubmitMsg("Verifier created successfully");
+      setNewVerifierName("");
+      await refreshVerifiers();
+    } catch (err) {
+      const msg = err?.response?.data?.error || "Failed to create verifier";
+      setSubmitMsg(msg);
+    } finally {
+      setSubmitLoading(false);
+    }
+  };
+
+  const handleDeleteVerifier = async (id) => {
+    if (!id) return;
+    if (!window.confirm("Delete this verifier and its associated user?")) return;
+    setSubmitMsg("");
+    try {
+      await axios.delete(`${API_BASE}/verifier/${id}`);
+      await refreshVerifiers();
+    } catch (err) {
+      const msg = err?.response?.data?.error || "Failed to delete verifier";
+      setSubmitMsg(msg);
+    }
+  };
+
 
   return (
     <div className="dashboard-container">
@@ -250,22 +337,75 @@ function SuperAdminDashboard() {
           <>
             {manageUsersView === "cards" && (
               <>
-                <h1>Manage Users</h1>
+                <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: '14px' }}>
+                  <div>
+                    <h1 style={{ margin: 0 }}>Manage Users</h1>
+                    <p style={{ margin: '6px 0 0 0', color: '#64748b' }}>Quickly navigate to manage Faculty and Verifiers</p>
+                  </div>
+                  {!usersLoading && (
+                    <div style={{ display: 'flex', gap: '8px' }}>
+                      <span style={{ background: '#eef2ff', color: '#4f46e5', padding: '6px 10px', borderRadius: '9999px', fontWeight: 600 }}>
+                        Faculty:&nbsp;{facultyCount}
+                      </span>
+                      <span style={{ background: '#ecfeff', color: '#0891b2', padding: '6px 10px', borderRadius: '9999px', fontWeight: 600 }}>
+                        Verifiers: {verifierCount}
+                      </span>
+                    </div>
+                  )}
+                </div>
                 {usersError && <p className="error-msg">{usersError}</p>}
-                <div className="departments-grid">
+
+                <div className="departments-grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(360px, 1fr))', gap: '24px', width: '100%' }}>
                   <div
                     className="department-card"
                     onClick={() => setManageUsersView("faculty")}
                     role="button"
                     tabIndex={0}
                     onKeyDown={(e) => { if (e.key === "Enter") setManageUsersView("faculty"); }}
+                    style={{
+                      background: 'linear-gradient(135deg, #eef2ff 0%, #e0e7ff 100%)',
+                      border: '1px solid #c7d2fe',
+                      boxShadow: '0 8px 18px rgba(79,70,229,0.12)',
+                      transition: 'transform .12s ease, box-shadow .12s ease',
+                      cursor: 'pointer',
+                      padding: '22px',
+                      minHeight: '220px',
+                      borderRadius: '16px',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      justifyContent: 'space-between',
+                      boxSizing: 'border-box',
+                      overflow: 'hidden'
+                    }}
+                    onMouseEnter={(e) => { e.currentTarget.style.transform = 'translateY(-2px)'; e.currentTarget.style.boxShadow = '0 10px 22px rgba(79,70,229,0.16)'; }}
+                    onMouseLeave={(e) => { e.currentTarget.style.transform = 'none'; e.currentTarget.style.boxShadow = '0 8px 18px rgba(79,70,229,0.12)'; }}
                   >
-                    <div>
-                      Faculty
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                      <div style={{ fontSize: '20px', fontWeight: 800, color: '#1f2937' }}>
+                        <i className="fa fa-users" style={{ marginRight: 8, color: '#4f46e5' }}></i>
+                        Faculty
+                      </div>
+                      <span style={{ background: '#4f46e5', color: 'white', padding: '6px 12px', borderRadius: 10, fontSize: 13, fontWeight: 800 }}>
+                        {usersLoading ? '…' : `${facultyCount}`}
+                      </span>
                     </div>
-                    <div style={{ color: '#64748b', fontWeight: '600' }}>
-                      {usersLoading ? "…" : `${facultyCount} total`}
-                    </div>
+                    <p style={{ margin: '12px 0 18px 0', color: '#475569', lineHeight: 1.5, wordBreak: 'break-word' }}>Manage internal and external faculty users</p>
+                    <button
+                      type="button"
+                      className="no-bg-btn"
+                      onClick={() => setManageUsersView('faculty')}
+                      style={{
+                        background: '#4f46e5',
+                        color: 'black',
+                        borderRadius: 10,
+                        padding: '12px 16px',
+                        fontWeight: 800,
+                        fontSize: '15px',
+                        width: 'fit-content'
+                      }}
+                    >
+                      Manage Faculty
+                    </button>
                   </div>
 
                   <div
@@ -274,13 +414,50 @@ function SuperAdminDashboard() {
                     role="button"
                     tabIndex={0}
                     onKeyDown={(e) => { if (e.key === "Enter") setManageUsersView("verifiers"); }}
+                    style={{
+                      background: 'linear-gradient(135deg, #ecfeff 0%, #cffafe 100%)',
+                      border: '1px solid #a5f3fc',
+                      boxShadow: '0 8px 18px rgba(8,145,178,0.12)',
+                      transition: 'transform .12s ease, box-shadow .12s ease',
+                      cursor: 'pointer',
+                      padding: '22px',
+                      minHeight: '220px',
+                      borderRadius: '16px',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      justifyContent: 'space-between',
+                      boxSizing: 'border-box',
+                      overflow: 'hidden'
+                    }}
+                    onMouseEnter={(e) => { e.currentTarget.style.transform = 'translateY(-2px)'; e.currentTarget.style.boxShadow = '0 10px 22px rgba(8,145,178,0.16)'; }}
+                    onMouseLeave={(e) => { e.currentTarget.style.transform = 'none'; e.currentTarget.style.boxShadow = '0 8px 18px rgba(8,145,178,0.12)'; }}
                   >
-                    <div>
-                      Verifiers
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                      <div style={{ fontSize: '20px', fontWeight: 800, color: '#1f2937' }}>
+                        <i className="fa fa-check-circle" style={{ marginRight: 8, color: '#0891b2' }}></i>
+                        Verifiers
+                      </div>
+                      <span style={{ background: '#0891b2', color: 'white', padding: '6px 12px', borderRadius: 10, fontSize: 13, fontWeight: 800 }}>
+                        {usersLoading ? '…' : `${verifierCount}`}
+                      </span>
                     </div>
-                    <div style={{ color: '#64748b', fontWeight: '600' }}>
-                      {usersLoading ? "…" : `${verifierCount} total`}
-                    </div>
+                    <p style={{ margin: '12px 0 18px 0', color: '#475569', lineHeight: 1.5, wordBreak: 'break-word' }}>Register and manage department verifiers</p>
+                    <button
+                      type="button"
+                      className="no-bg-btn"
+                      onClick={() => setManageUsersView('verifiers')}
+                      style={{
+                        background: '#0891b2',
+                        color: 'black',
+                        borderRadius: 10,
+                        padding: '12px 16px',
+                        fontWeight: 800,
+                        fontSize: '15px',
+                        width: 'fit-content'
+                      }}
+                    >
+                      Manage Verifiers
+                    </button>
                   </div>
                 </div>
               </>
@@ -300,38 +477,7 @@ function SuperAdminDashboard() {
                 <button className="back-btn" onClick={() => setManageUsersView("cards")}>
                   ← Back to Manage Users
                 </button>
-                <h1>Verifiers</h1>
-                {usersLoading && <p>Loading verifiers…</p>}
-                {usersError && <p className="error-msg">{usersError}</p>}
-                {!usersLoading && !usersError && (
-                  <div className="table-wrapper">
-                    <table className="user-table">
-                      <thead>
-                        <tr>
-                          <th>Name</th>
-                          <th>Email</th>
-                          <th>Department</th>
-                          <th>College</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {verifiers.length === 0 && (
-                          <tr>
-                            <td colSpan={4}>No verifiers found.</td>
-                          </tr>
-                        )}
-                        {verifiers.map((u) => (
-                          <tr key={u._id || u.id}>
-                            <td>{u.name || '-'}</td>
-                            <td>{u.email || '-'}</td>
-                            <td>{u.deptName || u.department || '-'}</td>
-                            <td>{u.clgName || u.college || '-'}</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                )}
+                <VerifierManagement />
               </>
             )}
           </>

@@ -4,7 +4,7 @@ import "../../common/dashboard.css";
 import "./manageUsersMessage.css";
 import axios from "axios";
 
-const API_BASE = process.env.REACT_APP_API_BASE_URL || 'http://localhost:5000';
+const API_BASE = process.env.REACT_APP_API_BASE_URL || 'http://localhost:5000/api';
 
 function ManageUsers({ userType , userpage }) {
   const [internalFaculties, setInternalFaculties] = useState([]);
@@ -32,13 +32,17 @@ function ManageUsers({ userType , userpage }) {
   // ];
   useEffect(() => {
   axios
-    .get(`${API_BASE}/subject-codes`)
+  .get(`${API_BASE}/subjects`)
     .then((res) => {
-      // Handle both string arrays and object arrays
-      const codes = res.data.map(item => 
-        typeof item === 'string' ? item : item.subject_code
-      );
-      setSubjectCodes(codes);
+    // Normalize to array of { code, name }
+    const list = Array.isArray(res.data) ? res.data : [];
+    const normalized = list.map(item => {
+      if (typeof item === 'string') {
+        return { code: item, name: '' };
+      }
+      return { code: item.subject_code || item.code || '', name: item.subject_name || item.name || '' };
+    }).filter(x => x.code);
+    setSubjectCodes(normalized);
     })
     .catch((err) => console.error("Error fetching subject codes:", err));
 }, []);
@@ -272,11 +276,16 @@ useEffect(() => {
             style={{ padding: "6px", flex: 1 }}
           >
             <option value="">Select Subject Code</option>
-            {subjectCodes.map((code, idx) => (
-              <option key={idx} value={code}>
-                {code}
-              </option>
-            ))}
+            {subjectCodes.map((item, idx) => {
+              const codeVal = typeof item === 'string' ? item : item.code;
+              const nameVal = typeof item === 'string' ? '' : item.name;
+              const label = nameVal ? `${codeVal} - ${nameVal}` : codeVal;
+              return (
+                <option key={idx} value={codeVal}>
+                  {label}
+                </option>
+              );
+            })}
           </select>
           <input
             type="date"

@@ -1,7 +1,7 @@
 const Department = require('../models/Department');
 
 //GET all departments
-exports.list = async (_req, res) => {ean();
+exports.list = async (_req, res) => {
   //console.log('LIST: Found', rows.length, 'departments');
   try {
     const rows = await Department.find({}).sort({ name: 1 }).lean();
