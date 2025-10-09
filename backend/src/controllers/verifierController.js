@@ -2,7 +2,19 @@ const crypto = require('crypto');
 const mongoose = require('mongoose');
 const User = require('../models/User');
 const Verifier = require('../models/Verifier');
+
+const QuestionPaper = require('../models/QuestionPaper');
+const ApprovedPaper = require('../models/ApprovedPaper');
+const RejectedPaper = require('../models/RejectedPaper');
+
 const Department = require('../models/Department');
+const { Document, Packer, Paragraph, TextRun } = (() => {
+  try {
+    return require('docx');
+  } catch (e) {
+    return {};
+  }
+})();
 
 function generateRandomAlphanumeric(length) {
   const chars = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
@@ -137,6 +149,63 @@ exports.removeOne = async (req, res) => {
       return res.status(400).json({ error: 'verifierId is required' });
     }
 
+    
+    // Get question papers with filters
+    const papers = await QuestionPaper.find(filter).sort({ subject_code: 1, semester: 1, question_number: 1 }).lean();
+    
+    // Group papers by subject_code and semester
+    const groupedPapers = {};
+    papers.forEach(paper => {
+      const key = `${paper.subject_code}_${paper.semester}`;
+      if (!groupedPapers[key]) {
+        groupedPapers[key] = {
+          _id: `${paper.subject_code}_${paper.semester}`, // Use composite key as ID
+          subject_code: paper.subject_code,
+          subject_name: paper.subject_name,
+          semester: paper.semester,
+          questions: [],
+          status: 'pending'
+        };
+      }
+      groupedPapers[key].questions.push({
+        _id: paper._id,
+        question_number: paper.question_number,
+        question_text: paper.question_text,
+        marks: typeof paper.marks === 'number' ? paper.marks : 0,
+        co: paper.co || '',
+        l: paper.level || '',
+        approved: paper.approved,
+        remarks: paper.remarks,
+        file_name: paper.file_name,
+        file_type: paper.file_type,
+        file_url: paper.file_name ? `/question-bank/file/${paper._id}` : null
+      });
+      
+      // Update overall status based on individual question status
+      if (paper.status === 'approved') {
+        groupedPapers[key].status = 'approved';
+      } else if (paper.status === 'rejected') {
+        groupedPapers[key].status = 'rejected';
+      }
+    });
+    
+    const result = Object.values(groupedPapers);
+    return res.json(result);
+  } catch (err) {
+    console.error('Verifier getPapers error:', err);
+    return res.status(500).json({ error: 'Server error' });
+  }
+};
+
+exports.updatePaper = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { questions, finalStatus } = req.body;
+    
+    if (!questions || !Array.isArray(questions)) {
+      return res.status(400).json({ error: 'Questions array is required' });
+
+
     // Try both cases — string and ObjectId
     const verifier =
       (await Verifier.findOne({ verifierId })) ||
@@ -146,6 +215,7 @@ exports.removeOne = async (req, res) => {
 
     if (!verifier) {
       return res.status(404).json({ error: 'Verifier not found' });
+
     }
 
     // Delete the verifier
@@ -158,12 +228,207 @@ exports.removeOne = async (req, res) => {
       await User.deleteOne({ _id: verifier.verifierId });
     }
 
+    
+    // Update each question in the paper only (no snapshot here)
+    const updatePromises = questions.map(async (question) => {
+      const updateData = {
+        approved: question.approved || false,
+        remarks: question.remarks || '',
+        verified_at: new Date(),
+        status: question.approved ? 'approved' : 'rejected'
+      };
+      if (typeof question.question_text === 'string' && question.question_text.trim() !== '') {
+        updateData.question_text = question.question_text.trim();
+      }
+      if (typeof question.co === 'string') {
+        updateData.co = question.co;
+      }
+      if (typeof question.l === 'string') {
+        updateData.level = question.l;
+      }
+      if (typeof question.marks === 'number' && !Number.isNaN(question.marks)) {
+        updateData.marks = question.marks;
+      }
+      
+      const updated = await QuestionPaper.findOneAndUpdate(
+        { 
+          subject_code: subject_code,
+          semester: parseInt(semester),
+          question_number: question.question_number 
+        },
+        updateData,
+        { new: true }
+      );
+
+      return updated;
+    });
+    
+    await Promise.all(updatePromises);
+
+    // Upsert one record per subject_code into the respective collections
+    const anyApproved = finalStatus === 'approved' || questions.some(q => !!q.approved);
+    const anyRejected = finalStatus === 'rejected' || questions.some(q => q.approved === false);
+
+    // If verifier set a FINAL STATUS, enforce it across all questions for this paper
+    if (finalStatus === 'approved') {
+      await QuestionPaper.updateMany(
+        { subject_code, semester: parseInt(semester) },
+        { $set: { status: 'approved', approved: true, verified_at: new Date() } }
+      );
+    } else if (finalStatus === 'rejected') {
+      await QuestionPaper.updateMany(
+        { subject_code, semester: parseInt(semester) },
+        { $set: { status: 'rejected', approved: false, verified_at: new Date() } }
+      );
+    }
+
+    if (anyApproved && !anyRejected) {
+      await ApprovedPaper.updateOne(
+        { subject_code, semester: parseInt(semester) },
+        { $set: { subject_code, semester: parseInt(semester) } },
+        { upsert: true }
+      );
+      console.log('[ApprovedPaper] upserted for', subject_code, semester);
+    }
+
+    if (anyRejected && !anyApproved) {
+      await RejectedPaper.updateOne(
+        { subject_code, semester: parseInt(semester) },
+        { $set: { subject_code, semester: parseInt(semester) } },
+        { upsert: true }
+      );
+      console.log('[RejectedPaper] upserted for', subject_code, semester);
+    }
+    
+    return res.json({ message: 'Paper updated successfully', finalStatus: finalStatus || null });
+
+
     return res.json({ success: true, message: 'Verifier and linked user deleted successfully.' });
+
   } catch (err) {
     console.error('Verifier removeOne error:', err);
     return res.status(500).json({ error: 'Server error' });
   }
 };
+
+
+// Get a single grouped paper by subject_code and semester
+exports.getPaperByCodeSemester = async (req, res) => {
+  try {
+    const { subject_code, semester } = req.params;
+    if (!subject_code || !semester) {
+      return res.status(400).json({ error: 'subject_code and semester are required' });
+    }
+
+    const sem = parseInt(semester);
+    const normalizedCode = String(subject_code).trim();
+
+    let papers = await QuestionPaper.find({ subject_code: normalizedCode, semester: sem })
+      .sort({ question_number: 1 })
+      .lean();
+
+    if (!papers || papers.length === 0) {
+      // Fallback: case-insensitive match
+      papers = await QuestionPaper.find({ subject_code: { $regex: `^${normalizedCode}$`, $options: 'i' }, semester: sem })
+        .sort({ question_number: 1 })
+        .lean();
+    }
+
+    if (!papers || papers.length === 0) {
+      console.warn('getPaperByCodeSemester: no papers found for', { subject_code: normalizedCode, semester: sem });
+      return res.status(404).json({ error: 'Paper not found for given subject code and semester' });
+    }
+
+    const grouped = {
+      _id: `${subject_code}_${sem}`,
+      subject_code,
+      subject_name: papers[0].subject_name,
+      semester: sem,
+      questions: [],
+      status: 'pending'
+    };
+
+    for (const paper of papers) {
+      grouped.questions.push({
+        _id: paper._id,
+        question_number: paper.question_number,
+        question_text: paper.question_text,
+        marks: typeof paper.marks === 'number' ? paper.marks : 0,
+        co: paper.co || '',
+        l: paper.level || '',
+        approved: paper.approved,
+        remarks: paper.remarks,
+        file_name: paper.file_name,
+        file_type: paper.file_type,
+        file_url: paper.file_name ? `/question-bank/file/${paper._id}` : null
+      });
+
+      if (paper.status === 'approved') grouped.status = 'approved';
+      else if (paper.status === 'rejected') grouped.status = 'rejected';
+    }
+
+    return res.json(grouped);
+  } catch (err) {
+    console.error('Verifier getPaperByCodeSemester error:', err);
+    return res.status(500).json({ error: 'Server error' });
+  }
+};
+
+// Generate a DOCX for a paper
+exports.getPaperDocx = async (req, res) => {
+  try {
+    if (!Packer) return res.status(501).json({ error: 'DOCX generation not available on server' });
+    const { subject_code, semester } = req.params;
+    const sem = parseInt(semester);
+    const papers = await QuestionPaper.find({ subject_code, semester: sem }).sort({ question_number: 1 }).lean();
+    if (!papers || papers.length === 0) return res.status(404).json({ error: 'Paper not found' });
+
+    const header = [
+      new Paragraph({ children: [new TextRun({ text: `Subject: ${papers[0].subject_name} (${subject_code})`, bold: true })] }),
+      new Paragraph({ children: [new TextRun({ text: `Semester: ${sem}`, bold: true })] }),
+      new Paragraph({ children: [new TextRun({ text: ' ' })] }),
+    ];
+
+    const questionParas = papers.flatMap((q) => [
+      new Paragraph({ children: [new TextRun({ text: `${q.question_number}) ${q.question_text}` })] }),
+      new Paragraph({ children: [new TextRun({ text: `CO: ${q.co || ''}   L: ${q.level || ''}   Marks: ${typeof q.marks === 'number' ? q.marks : 0}` })] }),
+      new Paragraph({ children: [new TextRun({ text: `Remarks: ${q.remarks || ''}` })] }),
+      new Paragraph({ children: [new TextRun({ text: ' ' })] }),
+    ]);
+
+    const doc = new Document({ sections: [{ properties: {}, children: [...header, ...questionParas] }] });
+    const buffer = await Packer.toBuffer(doc);
+    const filename = `${subject_code}_${sem}.docx`;
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document');
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    return res.send(Buffer.from(buffer));
+  } catch (err) {
+    console.error('getPaperDocx error:', err);
+    return res.status(500).json({ error: 'Server error' });
+  }
+};
+// Diagnostics: list approved papers
+exports.listApprovedPapers = async (_req, res) => {
+  try {
+    const rows = await ApprovedPaper.find({}).sort({ createdAt: -1 }).limit(100).lean();
+    return res.json(rows);
+  } catch (err) {
+    console.error('Verifier listApprovedPapers error:', err);
+    return res.status(500).json({ error: 'Server error' });
+  }
+};
+
+// Diagnostics: list rejected papers
+exports.listRejectedPapers = async (_req, res) => {
+  try {
+    const rows = await RejectedPaper.find({}).sort({ createdAt: -1 }).limit(100).lean();
+    return res.json(rows);
+  } catch (err) {
+    console.error('Verifier listRejectedPapers error:', err);
+    return res.status(500).json({ error: 'Server error' });
+  }
+};
+
 
 
 
@@ -224,5 +489,6 @@ exports.normalizeDepartments = async (_req, res) => {
     return res.status(500).json({ error: 'Server error' });
   }
 };
+
 
 
