@@ -3,9 +3,11 @@ import axios from "axios";
 import "../App.css";
 import html2canvas from "html2canvas";
 import { jsPDF } from "jspdf";
+import { useLocation } from "react-router-dom";
 
 function QuestionPaperBuilder() {
   const API_BASE = process.env.REACT_APP_API_BASE_URL;
+  const location = useLocation();
   const [subject, setSubject] = useState("");
   const [subjectCode, setSubjectCode] = useState("");
   const [semester, setSemester] = useState("");
@@ -17,6 +19,8 @@ function QuestionPaperBuilder() {
   const [lastSavedAt, setLastSavedAt] = useState(null);
   const inactivityTimer = useRef(null);
   const previewRef = useRef(null);
+  const [assignedSubjects, setAssignedSubjects] = useState([]);
+  const [facultyEmail, setFacultyEmail] = useState("");
 
   const markPresets = {
     "a, b, c, d (5 marks each)": [5, 5, 5, 5],
@@ -24,6 +28,40 @@ function QuestionPaperBuilder() {
     "a, b, c (7,7,6 marks)": [7, 7, 6],
     "a, b, c (8,8,4 marks)": [8, 8, 4],
   };
+
+  /** ------------------------
+   * 🔍 Load Faculty Data and Assigned Subjects
+   ------------------------- */
+  useEffect(() => {
+    // Get faculty email from localStorage
+    const storedFacultyData = localStorage.getItem("faculty_data");
+    if (storedFacultyData) {
+      const data = JSON.parse(storedFacultyData);
+      setFacultyEmail(data.email);
+      
+      // Fetch assigned subjects for this faculty
+      if (data.email) {
+        fetch(`${API_BASE}/faculty/subject-codes/${data.email}`)
+          .then(res => res.json())
+          .then(subjects => {
+            setAssignedSubjects(subjects);
+            
+            // If state was passed from faculty dashboard, pre-select the subject
+            if (location.state?.subjectCode) {
+              const selectedSubject = subjects.find(sub => sub.subject_code === location.state.subjectCode);
+              if (selectedSubject) {
+                setSubjectCode(selectedSubject.subject_code);
+                setSubject(selectedSubject.subject_name || "");
+              }
+            }
+          })
+          .catch(err => {
+            console.error('Error fetching assigned subjects:', err);
+            setAssignedSubjects([]);
+          });
+      }
+    }
+  }, [API_BASE, location.state]);
 
   /** ------------------------
    * 🛑 Inactivity Logout (5 mins)
@@ -72,6 +110,20 @@ function QuestionPaperBuilder() {
     const updated = [...cos];
     updated[i] = val;
     setCOs(updated);
+  };
+
+  // Handle subject code selection and auto-populate subject name
+  const handleSubjectCodeChange = (selectedCode) => {
+    if (isSubmitted) return;
+    setSubjectCode(selectedCode);
+    
+    // Find the corresponding subject name
+    const selectedSubject = assignedSubjects.find(sub => sub.subject_code === selectedCode);
+    if (selectedSubject) {
+      setSubject(selectedSubject.subject_name || "");
+    } else {
+      setSubject("");
+    }
   };
 
   const generateQuestions = (prefix, marksList) => {
@@ -174,6 +226,7 @@ function QuestionPaperBuilder() {
               formData.append("co", q.co);
               formData.append("level", q.level);
               formData.append("marks", q.marks);
+              formData.append("faculty_email", facultyEmail);
               if (q.image) formData.append("file", q.image); // ✅ FIXED (was "image")
 
               await axios.post(
@@ -272,17 +325,32 @@ function QuestionPaperBuilder() {
 
         <div className="student-info">
           <label>Subject Code:</label>
-          <input
-            value={subjectCode}
-            onChange={(e) => setSubjectCode(e.target.value)}
-            placeholder="e.g., CSE23404"
-            disabled={isSubmitted}
-          />
+          {assignedSubjects.length > 0 ? (
+            <select
+              value={subjectCode}
+              onChange={(e) => handleSubjectCodeChange(e.target.value)}
+              disabled={isSubmitted}
+            >
+              <option value="">Select Assigned Subject Code</option>
+              {assignedSubjects.map((sub, index) => (
+                <option key={index} value={sub.subject_code}>
+                  {sub.subject_code}
+                </option>
+              ))}
+            </select>
+          ) : (
+            <input
+              value={subjectCode}
+              onChange={(e) => setSubjectCode(e.target.value)}
+              placeholder="No assigned subjects"
+              disabled={true}
+            />
+          )}
           <label>Subject Name:</label>
           <input
             value={subject}
             onChange={(e) => setSubject(e.target.value)}
-            placeholder="e.g., Theory of Computation"
+            placeholder="Auto-populated from selected subject code"
             disabled={isSubmitted}
           />
           <label>Semester:</label>
