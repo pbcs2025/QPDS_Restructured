@@ -197,6 +197,53 @@ exports.removeOne = async (req, res) => {
   }
 };
 
+// Get rejected papers for verifier with optional filtering
+exports.getRejectedPapers = async (req, res) => {
+  try {
+    const { department, semester } = req.query;
+    
+    // Build filter object
+    const filter = {};
+    if (department) {
+      filter.department = department;
+    }
+    if (semester) {
+      filter.semester = parseInt(semester);
+    }
+    
+    // Get rejected papers
+    const rejectedPapers = await RejectedPaper.find(filter)
+      .sort({ rejected_at: -1 })
+      .lean();
+    
+    // Get detailed information for each rejected paper
+    const detailedPapers = await Promise.all(
+      rejectedPapers.map(async (rejectedPaper) => {
+        // Get one question paper to get subject details
+        const samplePaper = await QuestionPaper.findOne({
+          subject_code: rejectedPaper.subject_code,
+          semester: rejectedPaper.semester
+        }).lean();
+        
+        return {
+          _id: rejectedPaper._id,
+          subject_code: rejectedPaper.subject_code,
+          subject_name: samplePaper?.subject_name || 'Unknown',
+          semester: rejectedPaper.semester,
+          department: samplePaper?.department || 'Unknown',
+          rejected_at: rejectedPaper.rejected_at,
+          status: 'rejected'
+        };
+      })
+    );
+    
+    return res.json(detailedPapers);
+  } catch (err) {
+    console.error('Get rejected papers error:', err);
+    return res.status(500).json({ error: 'Server error' });
+  }
+};
+
 // Get papers for verifier with optional filtering
 exports.getPapers = async (req, res) => {
   try {
@@ -212,7 +259,12 @@ exports.getPapers = async (req, res) => {
     }
     
     // Get papers that need verification (not yet approved or rejected)
-    const papers = await QuestionPaper.find({
+    // First, get all rejected paper subject_code and semester combinations
+    const rejectedPaperKeys = await RejectedPaper.find({}, { subject_code: 1, semester: 1 }).lean();
+    const rejectedKeys = rejectedPaperKeys.map(rp => `${rp.subject_code}_${rp.semester}`);
+    
+    // Get all question papers that are not in rejected papers
+    const allPapers = await QuestionPaper.find({
       ...filter,
       $or: [
         { status: { $exists: false } },
@@ -220,6 +272,12 @@ exports.getPapers = async (req, res) => {
         { status: 'pending' }
       ]
     }).sort({ subject_code: 1, semester: 1, question_number: 1 });
+    
+    // Filter out papers that are in rejected collection
+    const papers = allPapers.filter(paper => {
+      const key = `${paper.subject_code}_${paper.semester}`;
+      return !rejectedKeys.includes(key);
+    });
     
     // Group papers by subject_code and semester
     const groupedPapers = {};
@@ -268,22 +326,26 @@ exports.updatePaper = async (req, res) => {
     const { subject_code, semester } = req.params;
     const { questions, finalStatus } = req.body;
     
+    console.log('UpdatePaper called with:', { subject_code, semester, finalStatus, questionsCount: questions?.length });
+    
     if (!questions || !Array.isArray(questions)) {
+      console.log('Error: Questions array is required');
       return res.status(400).json({ error: 'Questions array is required' });
     }
 
     if (!subject_code || !semester) {
+      console.log('Error: Subject code and semester are required');
       return res.status(400).json({ error: 'Subject code and semester are required' });
     }
     
-    // Update each question in the paper only (no snapshot here)
+    // Update each question in the paper with final status
     const updatePromises = questions.map(async (question) => {
       const updateData = {
-        approved: question.approved || false,
-        remarks: question.remarks || '',
         verified_at: new Date(),
-        status: question.approved ? 'approved' : 'rejected'
+        status: finalStatus || 'pending'
       };
+      
+      // Update question content if provided
       if (typeof question.question_text === 'string' && question.question_text.trim() !== '') {
         updateData.question_text = question.question_text.trim();
       }
@@ -295,6 +357,13 @@ exports.updatePaper = async (req, res) => {
       }
       if (typeof question.marks === 'number' && !Number.isNaN(question.marks)) {
         updateData.marks = question.marks;
+      }
+      
+      // Set approval status based on final status
+      if (finalStatus === 'approved') {
+        updateData.approved = true;
+      } else if (finalStatus === 'rejected') {
+        updateData.approved = false;
       }
       
       const updated = await QuestionPaper.findOneAndUpdate(
@@ -312,41 +381,32 @@ exports.updatePaper = async (req, res) => {
     
     await Promise.all(updatePromises);
 
-    // Upsert one record per subject_code into the respective collections
-    const anyApproved = finalStatus === 'approved' || questions.some(q => !!q.approved);
-    const anyRejected = finalStatus === 'rejected' || questions.some(q => q.approved === false);
-
-    // If verifier set a FINAL STATUS, enforce it across all questions for this paper
+    // Handle final status - move to appropriate collection
     if (finalStatus === 'approved') {
-      await QuestionPaper.updateMany(
-        { subject_code, semester: parseInt(semester) },
-        { $set: { status: 'approved', approved: true, verified_at: new Date() } }
-      );
-    } else if (finalStatus === 'rejected') {
-      await QuestionPaper.updateMany(
-        { subject_code, semester: parseInt(semester) },
-        { $set: { status: 'rejected', approved: false, verified_at: new Date() } }
-      );
-    }
-
-    if (anyApproved && !anyRejected) {
+      // Remove from rejected papers if it exists there
+      await RejectedPaper.deleteOne({ subject_code, semester: parseInt(semester) });
+      
+      // Add to approved papers
       await ApprovedPaper.updateOne(
         { subject_code, semester: parseInt(semester) },
-        { $set: { subject_code, semester: parseInt(semester) } },
+        { $set: { subject_code, semester: parseInt(semester), approved_at: new Date() } },
         { upsert: true }
       );
       console.log('[ApprovedPaper] upserted for', subject_code, semester);
-    }
-
-    if (anyRejected && !anyApproved) {
+    } else if (finalStatus === 'rejected') {
+      // Remove from approved papers if it exists there
+      await ApprovedPaper.deleteOne({ subject_code, semester: parseInt(semester) });
+      
+      // Add to rejected papers
       await RejectedPaper.updateOne(
         { subject_code, semester: parseInt(semester) },
-        { $set: { subject_code, semester: parseInt(semester) } },
+        { $set: { subject_code, semester: parseInt(semester), rejected_at: new Date() } },
         { upsert: true }
       );
       console.log('[RejectedPaper] upserted for', subject_code, semester);
     }
     
+    console.log('Paper updated successfully:', { subject_code, semester, finalStatus });
     return res.json({ message: 'Paper updated successfully', finalStatus: finalStatus || null });
 
   } catch (err) {

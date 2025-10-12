@@ -1,6 +1,6 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 
-const API_BASE = process.env.REACT_APP_API_BASE_URL;
+const API_BASE = process.env.REACT_APP_API_BASE_URL || 'http://localhost:5000/api';
 
 const QuestionPapers = () => {
   const [papers, setPapers] = useState([]);
@@ -9,9 +9,10 @@ const QuestionPapers = () => {
   const [error, setError] = useState(null);
   const [updating, setUpdating] = useState(false);
   const [finalStatus, setFinalStatus] = useState('');
-  const [departments, setDepartments] = useState([]);
   const [selectedDepartment, setSelectedDepartment] = useState('');
   const [selectedSemester, setSelectedSemester] = useState('');
+  const [showRejectedPapers, setShowRejectedPapers] = useState(false);
+  const [rejectedPapers, setRejectedPapers] = useState([]);
 
   // Initialize department from logged-in verifier
   useEffect(() => {
@@ -26,17 +27,7 @@ const QuestionPapers = () => {
     } catch {}
   }, []);
 
-  // Fetch papers when department changes (semester is optional)
-  useEffect(() => {
-    if (selectedDepartment) {
-      fetchPapers();
-    }
-  }, [selectedDepartment, selectedSemester]);
-
-  // (Optional) Departments fetch retained for future use, but not needed now
-  const fetchDepartments = async () => {};
-
-  const fetchPapers = async () => {
+  const fetchPapers = useCallback(async () => {
     try {
       setLoading(true);
       const params = new URLSearchParams();
@@ -63,7 +54,43 @@ const QuestionPapers = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [selectedDepartment, selectedSemester]);
+
+  // Fetch papers when department changes (semester is optional)
+  useEffect(() => {
+    if (selectedDepartment) {
+      fetchPapers();
+    }
+  }, [selectedDepartment, selectedSemester, fetchPapers]);
+
+  const fetchRejectedPapers = useCallback(async () => {
+    try {
+      setLoading(true);
+      const params = new URLSearchParams();
+      if (selectedDepartment) params.append('department', selectedDepartment);
+      if (selectedSemester) params.append('semester', selectedSemester);
+      
+      const response = await fetch(`${API_BASE}/verifier/rejected?${params.toString()}`, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      });
+      
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+      
+      const data = await response.json();
+      setRejectedPapers(data);
+      setError(null);
+    } catch (err) {
+      console.error('Error fetching rejected papers:', err);
+      setError('Failed to fetch rejected papers. Please try again.');
+    } finally {
+      setLoading(false);
+    }
+  }, [selectedDepartment, selectedSemester]);
 
   const handlePaperClick = (paper) => {
     setSelectedPaper(paper);
@@ -74,31 +101,17 @@ const QuestionPapers = () => {
     setSelectedPaper(null);
   };
 
-  const handleQuestionApprovalChange = (questionIndex, approved) => {
-    if (!selectedPaper) return;
-    const updatedQuestions = (selectedPaper.questions || []).map((q, i) =>
-      i === questionIndex ? { ...q, approved } : q
-    );
-    setSelectedPaper({ ...selectedPaper, questions: updatedQuestions });
+  const handleViewRejectedPapers = () => {
+    setShowRejectedPapers(true);
+    fetchRejectedPapers();
   };
 
-  const handleQuestionRemarksChange = (questionIndex, remarks) => {
-    if (!selectedPaper) return;
-    const updatedQuestions = (selectedPaper.questions || []).map((q, i) =>
-      i === questionIndex ? { ...q, remarks } : q
-    );
-    setSelectedPaper({ ...selectedPaper, questions: updatedQuestions });
+  const handleBackToMainPapers = () => {
+    setShowRejectedPapers(false);
+    setSelectedPaper(null);
   };
 
-  const handleQuestionRejectionChange = (questionIndex, rejected) => {
-    if (!selectedPaper) return;
-    const updatedQuestions = (selectedPaper.questions || []).map((q, i) => {
-      if (i !== questionIndex) return q;
-      // Maintain a single source of truth: approved boolean
-      return { ...q, approved: rejected ? false : q.approved };
-    });
-    setSelectedPaper({ ...selectedPaper, questions: updatedQuestions });
-  };
+  // Removed per-question approval handlers as per requirements
 
   const handleSendToAdmin = async () => {
     if (!selectedPaper) return;
@@ -109,7 +122,7 @@ const QuestionPapers = () => {
 
     try {
       setUpdating(true);
-      const response = await fetch(`${API_BASE}/verifier/papers/${selectedPaper._id}`, {
+      const response = await fetch(`${API_BASE}/verifier/papers/${selectedPaper.subject_code}/${selectedPaper.semester}`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
@@ -121,7 +134,9 @@ const QuestionPapers = () => {
       });
 
       if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
+        const errorText = await response.text();
+        console.error('API Error Response:', errorText);
+        throw new Error(`HTTP error! status: ${response.status} - ${errorText}`);
       }
 
       const result = await response.json();
@@ -154,7 +169,7 @@ const QuestionPapers = () => {
 
     try {
       setUpdating(true);
-      const response = await fetch(`${API_BASE}/verifier/papers/${selectedPaper._id}`, {
+      const response = await fetch(`${API_BASE}/verifier/papers/${selectedPaper.subject_code}/${selectedPaper.semester}`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
@@ -346,39 +361,7 @@ const QuestionPapers = () => {
                   />
                 </div>
               </div>
-              {/* Remarks */}
-              <div style={{ padding: '14px 18px', borderTop: '1px solid #e9edf3', backgroundColor: '#ffffff' }}>
-                <label style={{ display: 'block', fontSize: '14px', fontWeight: 800, color: '#0d6efd', marginBottom: '6px', letterSpacing: '0.2px' }}>Remarks</label>
-                <textarea
-                  value={question.remarks || ''}
-                  onChange={(e) => handleQuestionRemarksChange(index, e.target.value)}
-                  placeholder="Enter your remarks here..."
-                  style={{ width: '100%', minHeight: '70px', padding: '12px 14px', border: '1px solid #b6d4fe', borderRadius: '10px', backgroundColor: '#f4f9ff', fontSize: '14px', resize: 'vertical', color: '#1b2a41' }}
-                />
-              </div>
-              {/* Approve / Reject checkboxes below remark */}
-              <div style={{ padding: '12px 18px', borderTop: '1px solid #e9edf3', backgroundColor: '#f8fffb', display: 'flex', alignItems: 'center', gap: '24px' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                  <input
-                    id={`approve_${index}`}
-                    type="checkbox"
-                    checked={Boolean(question.approved)}
-                    onChange={(e) => handleQuestionApprovalChange(index, e.target.checked)}
-                    style={{ transform: 'scale(1.2)', cursor: 'pointer', accentColor: '#198754' }}
-                  />
-                  <label htmlFor={`approve_${index}`} style={{ userSelect: 'none', color: '#0f5132', fontWeight: 700 }}>Approved</label>
-                </div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                  <input
-                    id={`reject_${index}`}
-                    type="checkbox"
-                    checked={question.approved === false}
-                    onChange={(e) => handleQuestionRejectionChange(index, e.target.checked)}
-                    style={{ transform: 'scale(1.2)', cursor: 'pointer', accentColor: '#dc3545' }}
-                  />
-                  <label htmlFor={`reject_${index}`} style={{ userSelect: 'none', color: '#842029', fontWeight: 700 }}>Rejected</label>
-                </div>
-              </div>
+              {/* Per-question approval checkboxes and remarks removed as per requirements */}
             </div>
           ))}
         </div>
@@ -429,16 +412,104 @@ const QuestionPapers = () => {
               fontWeight: 'bold'
             }}
           >
-            {updating ? 'Updating...' : 'Store in Rejected Papers'}
+            {updating ? 'Updating...' : 'Store in Rejected Papers Section'}
           </button>
         </div>
       </div>
     );
   }
 
+  // Show rejected papers view
+  if (showRejectedPapers) {
+    return (
+      <div style={{ padding: '20px' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+          <h1>Rejected Papers</h1>
+          <button
+            onClick={handleBackToMainPapers}
+            style={{
+              padding: '10px 20px',
+              backgroundColor: '#6c757d',
+              color: 'white',
+              border: 'none',
+              borderRadius: '4px',
+              cursor: 'pointer',
+              fontSize: '14px',
+              fontWeight: 'bold'
+            }}
+          >
+            ← Back to Main Papers
+          </button>
+        </div>
+        
+        {loading && <p>Loading rejected papers...</p>}
+        {error && <p className="error-msg">{error}</p>}
+        
+        {!loading && !error && (
+          <div className="table-wrapper">
+            <table className="user-table">
+              <thead>
+                <tr>
+                  <th>Subject Name</th>
+                  <th>Subject Code</th>
+                  <th>Semester</th>
+                  <th>Department</th>
+                  <th>Rejected At</th>
+                  <th>Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                {rejectedPapers.length === 0 ? (
+                  <tr>
+                    <td colSpan={6} style={{ textAlign: 'center', padding: '20px' }}>
+                      No rejected papers found.
+                    </td>
+                  </tr>
+                ) : (
+                  rejectedPapers.map((paper, index) => (
+                    <tr key={index} style={{ backgroundColor: '#f8d7da', color: '#721c24' }}>
+                      <td style={{ padding: '14px 12px', borderTop: '1px solid #e1e7ef', borderRight: '1px solid #e1e7ef', fontWeight: 600 }}>
+                        {paper.subject_name}
+                      </td>
+                      <td style={{ padding: '14px 12px', borderTop: '1px solid #e1e7ef', borderRight: '1px solid #e1e7ef' }}>
+                        {paper.subject_code}
+                      </td>
+                      <td style={{ padding: '14px 12px', borderTop: '1px solid #e1e7ef', borderRight: '1px solid #e1e7ef' }}>
+                        {paper.semester}
+                      </td>
+                      <td style={{ padding: '14px 12px', borderTop: '1px solid #e1e7ef', borderRight: '1px solid #e1e7ef' }}>
+                        {paper.department}
+                      </td>
+                      <td style={{ padding: '14px 12px', borderTop: '1px solid #e1e7ef', borderRight: '1px solid #e1e7ef' }}>
+                        {paper.rejected_at ? new Date(paper.rejected_at).toLocaleString() : '-'}
+                      </td>
+                      <td style={{ padding: '14px 12px', textAlign: 'center', borderTop: '1px solid #e1e7ef' }}>
+                        <span style={{
+                          display: 'inline-block',
+                          padding: '4px 10px',
+                          borderRadius: '999px',
+                          backgroundColor: '#f8d7da',
+                          color: '#721c24',
+                          fontWeight: 700,
+                          letterSpacing: '0.3px'
+                        }}>
+                          REJECTED
+                        </span>
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+    );
+  }
+
   // Show papers list
   return (
-    <div style={{ padding: '20px' }}>
+    <div style={{ padding: '20px', position: 'relative' }}>
       <h1>Question Papers</h1>
       
       {/* Department (from verifier) and optional Semester filter */}
@@ -582,6 +653,39 @@ const QuestionPapers = () => {
         </table>
         </>
       )}
+      
+      {/* Rejected Papers Button - Bottom Right Corner */}
+      <button
+        onClick={handleViewRejectedPapers}
+        style={{
+          position: 'fixed',
+          bottom: '20px',
+          right: '20px',
+          padding: '12px 20px',
+          backgroundColor: '#dc3545',
+          color: 'white',
+          border: 'none',
+          borderRadius: '8px',
+          cursor: 'pointer',
+          fontSize: '14px',
+          fontWeight: 'bold',
+          boxShadow: '0 4px 8px rgba(0,0,0,0.2)',
+          zIndex: 1000,
+          display: 'flex',
+          alignItems: 'center',
+          gap: '8px'
+        }}
+        onMouseEnter={(e) => {
+          e.target.style.backgroundColor = '#c82333';
+          e.target.style.transform = 'translateY(-2px)';
+        }}
+        onMouseLeave={(e) => {
+          e.target.style.backgroundColor = '#dc3545';
+          e.target.style.transform = 'translateY(0)';
+        }}
+      >
+        📋 Rejected Papers
+      </button>
     </div>
   );
 };
