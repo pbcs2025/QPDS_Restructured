@@ -206,14 +206,6 @@ function SuperAdminDashboard() {
         >
               🏠 Dashboard
         </a>
-        <a
-          href="#"
-          className={activeTab === "submitted" ? "active-tab" : ""}
-          onClick={(e) => { e.preventDefault(); setActiveTab("submitted"); }}
-        >
-          Submitted Papers
-        </a>
-
             <a
   href="#"
   className={activeTab === "manageFaculty" ? "active-tab" : ""}
@@ -256,6 +248,14 @@ function SuperAdminDashboard() {
             >
               📋 View Assignees
             </a>
+
+        <a
+          href="#"
+          className={activeTab === "submitted" ? "active-tab" : ""}
+          onClick={(e) => { e.preventDefault(); setActiveTab("submitted"); }}
+        >
+          📄 Submitted Papers
+        </a>
 
             <a
               href="#"
