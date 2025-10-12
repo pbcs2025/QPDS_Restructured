@@ -197,37 +197,84 @@ exports.removeOne = async (req, res) => {
   }
 };
 
+// Get papers for verifier with optional filtering
+exports.getPapers = async (req, res) => {
+  try {
+    const { department, semester } = req.query;
+    
+    // Build filter object
+    const filter = {};
+    if (department) {
+      filter.department = department;
+    }
+    if (semester) {
+      filter.semester = parseInt(semester);
+    }
+    
+    // Get papers that need verification (not yet approved or rejected)
+    const papers = await QuestionPaper.find({
+      ...filter,
+      $or: [
+        { status: { $exists: false } },
+        { status: null },
+        { status: 'pending' }
+      ]
+    }).sort({ subject_code: 1, semester: 1, question_number: 1 });
+    
+    // Group papers by subject_code and semester
+    const groupedPapers = {};
+    papers.forEach(paper => {
+      const key = `${paper.subject_code}_${paper.semester}`;
+      if (!groupedPapers[key]) {
+        groupedPapers[key] = {
+          _id: key,
+          subject_code: paper.subject_code,
+          subject_name: paper.subject_name,
+          semester: paper.semester,
+          department: paper.department,
+          questions: [],
+          status: 'pending'
+        };
+      }
+      groupedPapers[key].questions.push({
+        _id: paper._id,
+        question_number: paper.question_number,
+        question_text: paper.question_text,
+        marks: typeof paper.marks === 'number' ? paper.marks : 0,
+        co: paper.co || '',
+        l: paper.level || '',
+        approved: paper.approved,
+        remarks: paper.remarks,
+        verified_at: paper.verified_at,
+        file_url: paper.file_url,
+        file_name: paper.file_name
+      });
+    });
+    
+    // Convert to array and sort by subject_code
+    const result = Object.values(groupedPapers).sort((a, b) => 
+      a.subject_code.localeCompare(b.subject_code)
+    );
+    
+    return res.json(result);
+  } catch (err) {
+    console.error('Get papers error:', err);
+    return res.status(500).json({ error: 'Server error' });
+  }
+};
+
 exports.updatePaper = async (req, res) => {
   try {
-    const { id } = req.params;
+    const { subject_code, semester } = req.params;
     const { questions, finalStatus } = req.body;
     
     if (!questions || !Array.isArray(questions)) {
       return res.status(400).json({ error: 'Questions array is required' });
-
-
-    // Try both cases — string and ObjectId
-    const verifier =
-      (await Verifier.findOne({ verifierId })) ||
-      (mongoose.Types.ObjectId.isValid(verifierId)
-        ? await Verifier.findOne({ verifierId: new mongoose.Types.ObjectId(verifierId) })
-        : null);
-
-    if (!verifier) {
-      return res.status(404).json({ error: 'Verifier not found' });
-
     }
 
-    // Delete the verifier
-    await Verifier.deleteOne({ _id: verifier._id });
-
-    // Delete the linked user (convert if ObjectId)
-    if (mongoose.Types.ObjectId.isValid(verifier.verifierId)) {
-      await User.deleteOne({ _id: new mongoose.Types.ObjectId(verifier.verifierId) });
-    } else {
-      await User.deleteOne({ _id: verifier.verifierId });
+    if (!subject_code || !semester) {
+      return res.status(400).json({ error: 'Subject code and semester are required' });
     }
-
     
     // Update each question in the paper only (no snapshot here)
     const updatePromises = questions.map(async (question) => {
@@ -302,11 +349,8 @@ exports.updatePaper = async (req, res) => {
     
     return res.json({ message: 'Paper updated successfully', finalStatus: finalStatus || null });
 
-
-    return res.json({ success: true, message: 'Verifier and linked user deleted successfully.' });
-
   } catch (err) {
-    console.error('Verifier removeOne error:', err);
+    console.error('Update paper error:', err);
     return res.status(500).json({ error: 'Server error' });
   }
 };

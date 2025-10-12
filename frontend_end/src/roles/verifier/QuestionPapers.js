@@ -76,7 +76,7 @@ const QuestionPapers = () => {
 
   const handleQuestionApprovalChange = (questionIndex, approved) => {
     if (!selectedPaper) return;
-    const updatedQuestions = selectedPaper.questions.map((q, i) =>
+    const updatedQuestions = (selectedPaper.questions || []).map((q, i) =>
       i === questionIndex ? { ...q, approved } : q
     );
     setSelectedPaper({ ...selectedPaper, questions: updatedQuestions });
@@ -84,7 +84,7 @@ const QuestionPapers = () => {
 
   const handleQuestionRemarksChange = (questionIndex, remarks) => {
     if (!selectedPaper) return;
-    const updatedQuestions = selectedPaper.questions.map((q, i) =>
+    const updatedQuestions = (selectedPaper.questions || []).map((q, i) =>
       i === questionIndex ? { ...q, remarks } : q
     );
     setSelectedPaper({ ...selectedPaper, questions: updatedQuestions });
@@ -92,7 +92,7 @@ const QuestionPapers = () => {
 
   const handleQuestionRejectionChange = (questionIndex, rejected) => {
     if (!selectedPaper) return;
-    const updatedQuestions = selectedPaper.questions.map((q, i) => {
+    const updatedQuestions = (selectedPaper.questions || []).map((q, i) => {
       if (i !== questionIndex) return q;
       // Maintain a single source of truth: approved boolean
       return { ...q, approved: rejected ? false : q.approved };
@@ -269,7 +269,7 @@ const QuestionPapers = () => {
           <h4 style={{ marginBottom: '15px', color: '#0b5ed7', borderBottom: '2px solid #0d6efd', paddingBottom: '5px' }}>
             Questions
           </h4>
-          {selectedPaper.questions.map((question, index) => (
+          {(selectedPaper.questions || []).map((question, index) => (
             <div key={index} style={{
               border: '1px solid #b6d4fe',
               borderRadius: '12px',
@@ -286,7 +286,7 @@ const QuestionPapers = () => {
                     value={question.question_text || ''}
                     onChange={(e) => {
                       const newText = e.target.value;
-                      const updatedQuestions = selectedPaper.questions.map((q, i) => i === index ? { ...q, question_text: newText } : q);
+                      const updatedQuestions = (selectedPaper.questions || []).map((q, i) => i === index ? { ...q, question_text: newText } : q);
                       setSelectedPaper({ ...selectedPaper, questions: updatedQuestions });
                     }}
                     placeholder="Edit question text"
@@ -313,7 +313,7 @@ const QuestionPapers = () => {
                   <input
                     value={question.co || ''}
                     onChange={(e) => {
-                      const updatedQuestions = selectedPaper.questions.map((q, i) => i === index ? { ...q, co: e.target.value } : q);
+                      const updatedQuestions = (selectedPaper.questions || []).map((q, i) => i === index ? { ...q, co: e.target.value } : q);
                       setSelectedPaper({ ...selectedPaper, questions: updatedQuestions });
                     }}
                     placeholder="CO"
@@ -325,7 +325,7 @@ const QuestionPapers = () => {
                   <input
                     value={question.l || ''}
                     onChange={(e) => {
-                      const updatedQuestions = selectedPaper.questions.map((q, i) => i === index ? { ...q, l: e.target.value } : q);
+                      const updatedQuestions = (selectedPaper.questions || []).map((q, i) => i === index ? { ...q, l: e.target.value } : q);
                       setSelectedPaper({ ...selectedPaper, questions: updatedQuestions });
                     }}
                     placeholder="L"
@@ -339,7 +339,7 @@ const QuestionPapers = () => {
                     value={typeof question.marks === 'number' ? question.marks : 0}
                     onChange={(e) => {
                       const val = parseInt(e.target.value, 10);
-                      const updatedQuestions = selectedPaper.questions.map((q, i) => i === index ? { ...q, marks: Number.isNaN(val) ? 0 : val } : q);
+                      const updatedQuestions = (selectedPaper.questions || []).map((q, i) => i === index ? { ...q, marks: Number.isNaN(val) ? 0 : val } : q);
                       setSelectedPaper({ ...selectedPaper, questions: updatedQuestions });
                     }}
                     style={{ flex: 1, padding: '10px 12px', border: '1px solid #b6d4fe', borderRadius: '8px', background: '#e7f1ff', textAlign: 'center', fontWeight: 800, color: '#0b5ed7' }}
@@ -532,7 +532,7 @@ const QuestionPapers = () => {
             </tr>
           </thead>
           <tbody>
-            {papers.map((paper, index) => (
+            {(papers || []).map((paper, index) => (
               <tr key={index} style={{ backgroundColor: '#5f6f81', color: '#ffffff' }}>
                 <td style={{ padding: '14px 12px', borderTop: '1px solid #e1e7ef', borderRight: '1px solid #e1e7ef', fontWeight: 600 }}>
                   {paper.subject_name}
