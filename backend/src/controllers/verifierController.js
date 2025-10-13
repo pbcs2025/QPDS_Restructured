@@ -149,50 +149,23 @@ exports.removeOne = async (req, res) => {
       return res.status(400).json({ error: 'verifierId is required' });
     }
 
-    
-    // Get question papers with filters
-    const papers = await QuestionPaper.find(filter).sort({ subject_code: 1, semester: 1, question_number: 1 }).lean();
-    
-    // Group papers by subject_code and semester
-    const groupedPapers = {};
-    papers.forEach(paper => {
-      const key = `${paper.subject_code}_${paper.semester}`;
-      if (!groupedPapers[key]) {
-        groupedPapers[key] = {
-          _id: `${paper.subject_code}_${paper.semester}`, // Use composite key as ID
-          subject_code: paper.subject_code,
-          subject_name: paper.subject_name,
-          semester: paper.semester,
-          questions: [],
-          status: 'pending'
-        };
-      }
-      groupedPapers[key].questions.push({
-        _id: paper._id,
-        question_number: paper.question_number,
-        question_text: paper.question_text,
-        marks: typeof paper.marks === 'number' ? paper.marks : 0,
-        co: paper.co || '',
-        l: paper.level || '',
-        approved: paper.approved,
-        remarks: paper.remarks,
-        file_name: paper.file_name,
-        file_type: paper.file_type,
-        file_url: paper.file_name ? `/question-bank/file/${paper._id}` : null
-      });
-      
-      // Update overall status based on individual question status
-      if (paper.status === 'approved') {
-        groupedPapers[key].status = 'approved';
-      } else if (paper.status === 'rejected') {
-        groupedPapers[key].status = 'rejected';
-      }
-    });
-    
-    const result = Object.values(groupedPapers);
-    return res.json(result);
+    // Find and delete the verifier
+    const verifier = await Verifier.findById(verifierId);
+    if (!verifier) {
+      return res.status(404).json({ error: 'Verifier not found' });
+    }
+
+    // Delete the associated user
+    if (verifier.verifierId) {
+      await User.findByIdAndDelete(verifier.verifierId);
+    }
+
+    // Delete the verifier
+    await Verifier.findByIdAndDelete(verifierId);
+
+    return res.json({ message: 'Verifier deleted successfully' });
   } catch (err) {
-    console.error('Verifier getPapers error:', err);
+    console.error('Verifier removeOne error:', err);
     return res.status(500).json({ error: 'Server error' });
   }
 };
@@ -228,9 +201,9 @@ exports.getRejectedPapers = async (req, res) => {
         return {
           _id: rejectedPaper._id,
           subject_code: rejectedPaper.subject_code,
-          subject_name: samplePaper?.subject_name || 'Unknown',
+          subject_name: rejectedPaper.subject_name || samplePaper?.subject_name || 'Unknown',
           semester: rejectedPaper.semester,
-          department: samplePaper?.department || 'Unknown',
+          department: rejectedPaper.department || samplePaper?.department || 'Unknown',
           rejected_at: rejectedPaper.rejected_at,
           status: 'rejected'
         };
@@ -240,6 +213,53 @@ exports.getRejectedPapers = async (req, res) => {
     return res.json(detailedPapers);
   } catch (err) {
     console.error('Get rejected papers error:', err);
+    return res.status(500).json({ error: 'Server error' });
+  }
+};
+
+// Get approved papers for verifier with optional filtering
+exports.getApprovedPapers = async (req, res) => {
+  try {
+    const { department, semester } = req.query;
+    
+    // Build filter object
+    const filter = {};
+    if (department) {
+      filter.department = department;
+    }
+    if (semester) {
+      filter.semester = parseInt(semester);
+    }
+    
+    // Get approved papers
+    const approvedPapers = await ApprovedPaper.find(filter)
+      .sort({ approved_at: -1 })
+      .lean();
+    
+    // Get detailed information for each approved paper
+    const detailedPapers = await Promise.all(
+      approvedPapers.map(async (approvedPaper) => {
+        // Get one question paper to get subject details
+        const samplePaper = await QuestionPaper.findOne({
+          subject_code: approvedPaper.subject_code,
+          semester: approvedPaper.semester
+        }).lean();
+        
+        return {
+          _id: approvedPaper._id,
+          subject_code: approvedPaper.subject_code,
+          subject_name: approvedPaper.subject_name || samplePaper?.subject_name || 'Unknown',
+          semester: approvedPaper.semester,
+          department: approvedPaper.department || samplePaper?.department || 'Unknown',
+          approved_at: approvedPaper.approved_at,
+          status: 'approved'
+        };
+      })
+    );
+    
+    return res.json(detailedPapers);
+  } catch (err) {
+    console.error('Get approved papers error:', err);
     return res.status(500).json({ error: 'Server error' });
   }
 };
@@ -386,24 +406,44 @@ exports.updatePaper = async (req, res) => {
       // Remove from rejected papers if it exists there
       await RejectedPaper.deleteOne({ subject_code, semester: parseInt(semester) });
       
+      // Get department from the first question paper
+      const samplePaper = await QuestionPaper.findOne({ subject_code, semester: parseInt(semester) }).lean();
+      const department = samplePaper?.department || 'Unknown';
+      
       // Add to approved papers
       await ApprovedPaper.updateOne(
         { subject_code, semester: parseInt(semester) },
-        { $set: { subject_code, semester: parseInt(semester), approved_at: new Date() } },
+        { $set: { 
+          subject_code, 
+          semester: parseInt(semester), 
+          department,
+          subject_name: samplePaper?.subject_name || 'Unknown',
+          approved_at: new Date() 
+        } },
         { upsert: true }
       );
-      console.log('[ApprovedPaper] upserted for', subject_code, semester);
+      console.log('[ApprovedPaper] upserted for', subject_code, semester, 'department:', department);
     } else if (finalStatus === 'rejected') {
       // Remove from approved papers if it exists there
       await ApprovedPaper.deleteOne({ subject_code, semester: parseInt(semester) });
       
+      // Get department from the first question paper
+      const samplePaper = await QuestionPaper.findOne({ subject_code, semester: parseInt(semester) }).lean();
+      const department = samplePaper?.department || 'Unknown';
+      
       // Add to rejected papers
       await RejectedPaper.updateOne(
         { subject_code, semester: parseInt(semester) },
-        { $set: { subject_code, semester: parseInt(semester), rejected_at: new Date() } },
+        { $set: { 
+          subject_code, 
+          semester: parseInt(semester), 
+          department,
+          subject_name: samplePaper?.subject_name || 'Unknown',
+          rejected_at: new Date() 
+        } },
         { upsert: true }
       );
-      console.log('[RejectedPaper] upserted for', subject_code, semester);
+      console.log('[RejectedPaper] upserted for', subject_code, semester, 'department:', department);
     }
     
     console.log('Paper updated successfully:', { subject_code, semester, finalStatus });
@@ -478,7 +518,7 @@ exports.getPaperByCodeSemester = async (req, res) => {
   }
 };
 
-// Generate a DOCX for a paper
+// Generate a DOCX for a paper (excluding remarks)
 exports.getPaperDocx = async (req, res) => {
   try {
     if (!Packer) return res.status(501).json({ error: 'DOCX generation not available on server' });
@@ -487,25 +527,89 @@ exports.getPaperDocx = async (req, res) => {
     const papers = await QuestionPaper.find({ subject_code, semester: sem }).sort({ question_number: 1 }).lean();
     if (!papers || papers.length === 0) return res.status(404).json({ error: 'Paper not found' });
 
+    // Clean and sanitize text content
+    const cleanText = (text) => {
+      if (!text) return '';
+      return String(text).replace(/[^\x20-\x7E\u00A0-\uFFFF]/g, '').trim();
+    };
+
+    // Create proper question paper format with clean text
     const header = [
-      new Paragraph({ children: [new TextRun({ text: `Subject: ${papers[0].subject_name} (${subject_code})`, bold: true })] }),
-      new Paragraph({ children: [new TextRun({ text: `Semester: ${sem}`, bold: true })] }),
+      // Subject code on right
+      new Paragraph({ 
+        alignment: 'right',
+        children: [new TextRun({ text: cleanText(subject_code), bold: true, size: 24 })] 
+      }),
+      // College name centered
+      new Paragraph({ 
+        alignment: 'center',
+        children: [new TextRun({ text: 'GLOBAL ACADEMY OF TECHNOLOGY, BENGALURU', bold: true, size: 20 })] 
+      }),
+      // Institute line centered
+      new Paragraph({ 
+        alignment: 'center',
+        children: [new TextRun({ text: '(An Autonomous Institute, affiliated to VTU, Belegavi)', size: 16 })] 
+      }),
+      // Empty line
+      new Paragraph({ children: [new TextRun({ text: ' ' })] }),
+      // Semester centered
+      new Paragraph({ 
+        alignment: 'center',
+        children: [new TextRun({ text: `Semester: ${sem}`, bold: true, size: 18 })] 
+      }),
+      // Subject name centered
+      new Paragraph({ 
+        alignment: 'center',
+        children: [new TextRun({ text: cleanText(papers[0].subject_name), bold: true, size: 18 })] 
+      }),
+      // Time and Max marks
+      new Paragraph({ 
+        children: [
+          new TextRun({ text: 'TIME: 3hrs', bold: true, size: 16 }),
+          new TextRun({ text: '                    ' }),
+          new TextRun({ text: 'Max.Marks: 100', bold: true, size: 16 })
+        ] 
+      }),
+      // Empty line
       new Paragraph({ children: [new TextRun({ text: ' ' })] }),
     ];
 
     const questionParas = papers.flatMap((q) => [
-      new Paragraph({ children: [new TextRun({ text: `${q.question_number}) ${q.question_text}` })] }),
-      new Paragraph({ children: [new TextRun({ text: `CO: ${q.co || ''}   L: ${q.level || ''}   Marks: ${typeof q.marks === 'number' ? q.marks : 0}` })] }),
-      new Paragraph({ children: [new TextRun({ text: `Remarks: ${q.remarks || ''}` })] }),
+      new Paragraph({ 
+        children: [new TextRun({ text: `${cleanText(q.question_number)}) ${cleanText(q.question_text)}`, size: 16 })] 
+      }),
+      new Paragraph({ 
+        children: [new TextRun({ text: `Marks: ${typeof q.marks === 'number' ? q.marks : 0}   CO: ${cleanText(q.co)}   L: ${cleanText(q.level)}`, size: 14 })] 
+      }),
       new Paragraph({ children: [new TextRun({ text: ' ' })] }),
     ]);
 
-    const doc = new Document({ sections: [{ properties: {}, children: [...header, ...questionParas] }] });
+    // Create document with proper structure
+    const doc = new Document({
+      creator: "Question Paper System",
+      title: `${subject_code} - ${papers[0].subject_name}`,
+      description: `Question Paper for ${papers[0].subject_name} - Semester ${sem}`,
+      sections: [{ 
+        properties: {
+          page: {
+            margin: {
+              top: 1440,    // 1 inch
+              right: 1440,  // 1 inch
+              bottom: 1440, // 1 inch
+              left: 1440,   // 1 inch
+            },
+          },
+        },
+        children: [...header, ...questionParas] 
+      }] 
+    });
+    
     const buffer = await Packer.toBuffer(doc);
-    const filename = `${subject_code}_${sem}.docx`;
+    const filename = `${cleanText(subject_code)}_${sem}.docx`;
     res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document');
     res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
-    return res.send(Buffer.from(buffer));
+    res.setHeader('Content-Length', buffer.length);
+    return res.send(buffer);
   } catch (err) {
     console.error('getPaperDocx error:', err);
     return res.status(500).json({ error: 'Server error' });

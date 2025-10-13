@@ -9,6 +9,7 @@ const RejectedPaperSchema = new mongoose.Schema(
     subject_code: { type: String, required: true, index: true },
     subject_name: { type: String },
     semester: { type: Number, required: true, index: true },
+    department: { type: String, index: true },
     set_name: { type: String },
     question_number: { type: String, required: true },
     question_text: { type: String },
@@ -20,6 +21,7 @@ const RejectedPaperSchema = new mongoose.Schema(
     remarks: { type: String, default: '' },
     verified_by: { type: String, default: '' },
     verified_at: { type: Date },
+    rejected_at: { type: Date, default: Date.now },
   },
   { timestamps: true }
 );

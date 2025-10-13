@@ -160,6 +160,10 @@ function QuestionPaperBuilder() {
   const saveQuestionPaper = async (isDraft = false) => {
     try {
       const now = new Date().toISOString();
+      
+      // Get faculty department from localStorage
+      const facultyData = localStorage.getItem("faculty_data");
+      const department = facultyData ? JSON.parse(facultyData).department : '';
 
       for (let mod of modules) {
         for (let group of mod.groups) {
@@ -174,6 +178,7 @@ function QuestionPaperBuilder() {
               formData.append("co", q.co);
               formData.append("level", q.level);
               formData.append("marks", q.marks);
+              formData.append("department", department); // Add department field
               if (q.image) formData.append("file", q.image); // ✅ FIXED (was "image")
 
               await axios.post(

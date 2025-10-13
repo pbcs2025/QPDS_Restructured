@@ -12,6 +12,7 @@ const QuestionPaperSchema = new mongoose.Schema(
     marks: { type: Number, default: 0 },
     co: { type: String, default: '' },
     level: { type: String, default: '' },
+    department: { type: String, index: true }, // Department field for verifier filtering
     file_name: { type: String },
     file_type: { type: String },
     question_file: { type: Buffer },
@@ -22,7 +23,7 @@ const QuestionPaperSchema = new mongoose.Schema(
     verified_at: { type: Date },
     status: { type: String, enum: ['pending', 'approved', 'rejected'], default: 'pending' },
   },
-  { timestamps: true }
+  { timestamps: true, strict: false } // Allow additional fields
 );
 
 // Ensure no duplicate questions

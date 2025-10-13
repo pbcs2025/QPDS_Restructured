@@ -23,8 +23,16 @@ const getSetName = async (subject_code, semester, useLatest = false) => {
 
 // ---------------- Single Question ----------------
 exports.create = async (req, res) => {
-  const { subject_code, subject_name, semester, question_number, question_text, set_name, co, level, marks } = req.body;
+  const { subject_code, subject_name, semester, question_number, question_text, set_name, co, level, marks, department } = req.body;
   const file = req.file;
+
+  // Debug logging
+  console.log('📝 Question creation request:');
+  console.log('Body:', req.body);
+  console.log('Department from body:', department);
+  console.log('CO from body:', co);
+  console.log('Level from body:', level);
+  console.log('Marks from body:', marks);
 
   if (!subject_code || !subject_name || !semester || !question_number || !question_text) {
     return res.status(400).json({ error: 'All fields are required' });
@@ -42,7 +50,7 @@ exports.create = async (req, res) => {
       finalSetName = await getSetName(subject_code, semester, true);
     }
 
-    const doc = await QuestionPaper.create({
+    const docData = {
       subject_code,
       subject_name,
       semester,
@@ -52,10 +60,17 @@ exports.create = async (req, res) => {
       co: co || '',
       level: level || '',
       marks: typeof marks === 'number' ? marks : 0,
+      department: department || '',
       file_name: file ? file.originalname : null,
       file_type: file ? file.mimetype : null,
       question_file: file ? file.buffer : null,
-    });
+    };
+
+    console.log('📝 Document data to save:', docData);
+
+    const doc = await QuestionPaper.create(docData);
+
+    console.log('📝 Document saved:', doc.toObject());
 
     res.json({ message: '✅ Question saved successfully', id: doc._id, set_name: finalSetName });
   } catch (err) {
@@ -66,7 +81,7 @@ exports.create = async (req, res) => {
 
 // ---------------- Batch Upload ----------------
 exports.createBatch = async (req, res) => {
-  const { subject_code, subject_name, semester, questions } = req.body;
+  const { subject_code, subject_name, semester, questions, department } = req.body;
 
   if (!subject_code || !subject_name || !semester || !questions || !Array.isArray(questions)) {
     return res.status(400).json({ error: 'subject_code, subject_name, semester, and questions array are required' });
@@ -101,6 +116,7 @@ exports.createBatch = async (req, res) => {
       co: q.co || '',
       level: q.level || '',
       marks: typeof q.marks === 'number' ? q.marks : 0,
+      department: department || '',
       file_name: q.file_name || null,
       file_type: q.file_type || null,
       question_file: q.question_file || null,
@@ -131,6 +147,10 @@ exports.list = async (_req, res) => {
       set_name: 1,
       question_number: 1,
       question_text: 1,
+      co: 1,
+      level: 1,
+      marks: 1,
+      department: 1,
       file_name: 1,
       file_type: 1,
     }).sort({ _id: -1 }).lean();

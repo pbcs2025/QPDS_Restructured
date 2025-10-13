@@ -13,6 +13,8 @@ const QuestionPapers = () => {
   const [selectedSemester, setSelectedSemester] = useState('');
   const [showRejectedPapers, setShowRejectedPapers] = useState(false);
   const [rejectedPapers, setRejectedPapers] = useState([]);
+  const [showApprovedPapers, setShowApprovedPapers] = useState(false);
+  const [approvedPapers, setApprovedPapers] = useState([]);
 
   // Initialize department from logged-in verifier
   useEffect(() => {
@@ -92,9 +94,65 @@ const QuestionPapers = () => {
     }
   }, [selectedDepartment, selectedSemester]);
 
+  const fetchApprovedPapers = useCallback(async () => {
+    try {
+      setLoading(true);
+      const params = new URLSearchParams();
+      if (selectedDepartment) params.append('department', selectedDepartment);
+      if (selectedSemester) params.append('semester', selectedSemester);
+      
+      const response = await fetch(`${API_BASE}/verifier/approved?${params.toString()}`, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      });
+      
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+      
+      const data = await response.json();
+      setApprovedPapers(data);
+      setError(null);
+    } catch (err) {
+      console.error('Error fetching approved papers:', err);
+      setError('Failed to fetch approved papers. Please try again.');
+    } finally {
+      setLoading(false);
+    }
+  }, [selectedDepartment, selectedSemester]);
+
   const handlePaperClick = (paper) => {
     setSelectedPaper(paper);
     setFinalStatus('');
+  };
+
+  const handleViewPaperFromList = async (paper) => {
+    try {
+      setLoading(true);
+      const response = await fetch(`${API_BASE}/verifier/papers/${paper.subject_code}/${paper.semester}`, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      });
+      
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+      
+      const paperData = await response.json();
+      setSelectedPaper(paperData);
+      setFinalStatus('');
+      setShowRejectedPapers(false);
+      setShowApprovedPapers(false);
+    } catch (err) {
+      console.error('Error fetching paper details:', err);
+      setError('Failed to fetch paper details. Please try again.');
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleBackToList = () => {
@@ -103,11 +161,19 @@ const QuestionPapers = () => {
 
   const handleViewRejectedPapers = () => {
     setShowRejectedPapers(true);
+    setShowApprovedPapers(false);
     fetchRejectedPapers();
+  };
+
+  const handleViewApprovedPapers = () => {
+    setShowApprovedPapers(true);
+    setShowRejectedPapers(false);
+    fetchApprovedPapers();
   };
 
   const handleBackToMainPapers = () => {
     setShowRejectedPapers(false);
+    setShowApprovedPapers(false);
     setSelectedPaper(null);
   };
 
@@ -456,12 +522,13 @@ const QuestionPapers = () => {
                   <th>Department</th>
                   <th>Rejected At</th>
                   <th>Status</th>
+                  <th>Action</th>
                 </tr>
               </thead>
               <tbody>
                 {rejectedPapers.length === 0 ? (
                   <tr>
-                    <td colSpan={6} style={{ textAlign: 'center', padding: '20px' }}>
+                    <td colSpan={7} style={{ textAlign: 'center', padding: '20px' }}>
                       No rejected papers found.
                     </td>
                   </tr>
@@ -483,7 +550,7 @@ const QuestionPapers = () => {
                       <td style={{ padding: '14px 12px', borderTop: '1px solid #e1e7ef', borderRight: '1px solid #e1e7ef' }}>
                         {paper.rejected_at ? new Date(paper.rejected_at).toLocaleString() : '-'}
                       </td>
-                      <td style={{ padding: '14px 12px', textAlign: 'center', borderTop: '1px solid #e1e7ef' }}>
+                      <td style={{ padding: '14px 12px', textAlign: 'center', borderTop: '1px solid #e1e7ef', borderRight: '1px solid #e1e7ef' }}>
                         <span style={{
                           display: 'inline-block',
                           padding: '4px 10px',
@@ -495,6 +562,129 @@ const QuestionPapers = () => {
                         }}>
                           REJECTED
                         </span>
+                      </td>
+                      <td style={{ padding: '14px 12px', textAlign: 'center', borderTop: '1px solid #e1e7ef' }}>
+                        <button
+                          onClick={() => handleViewPaperFromList(paper)}
+                          style={{
+                            padding: '8px 16px',
+                            backgroundColor: '#dc3545',
+                            color: 'white',
+                            border: 'none',
+                            borderRadius: '4px',
+                            cursor: 'pointer',
+                            fontSize: '12px',
+                            fontWeight: 'bold'
+                          }}
+                        >
+                          View Paper
+                        </button>
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  // Show approved papers view
+  if (showApprovedPapers) {
+    return (
+      <div style={{ padding: '20px' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+          <h1>Approved Papers</h1>
+          <button
+            onClick={handleBackToMainPapers}
+            style={{
+              padding: '10px 20px',
+              backgroundColor: '#6c757d',
+              color: 'white',
+              border: 'none',
+              borderRadius: '4px',
+              cursor: 'pointer',
+              fontSize: '14px',
+              fontWeight: 'bold'
+            }}
+          >
+            ← Back to Main Papers
+          </button>
+        </div>
+        
+        {loading && <p>Loading approved papers...</p>}
+        {error && <p className="error-msg">{error}</p>}
+        
+        {!loading && !error && (
+          <div className="table-wrapper">
+            <table className="user-table">
+              <thead>
+                <tr>
+                  <th>Subject Name</th>
+                  <th>Subject Code</th>
+                  <th>Semester</th>
+                  <th>Department</th>
+                  <th>Approved At</th>
+                  <th>Status</th>
+                  <th>Action</th>
+                </tr>
+              </thead>
+              <tbody>
+                {approvedPapers.length === 0 ? (
+                  <tr>
+                    <td colSpan={7} style={{ textAlign: 'center', padding: '20px' }}>
+                      No approved papers found.
+                    </td>
+                  </tr>
+                ) : (
+                  approvedPapers.map((paper, index) => (
+                    <tr key={index} style={{ backgroundColor: '#d1f4e0', color: '#0f5132' }}>
+                      <td style={{ padding: '14px 12px', borderTop: '1px solid #e1e7ef', borderRight: '1px solid #e1e7ef', fontWeight: 600 }}>
+                        {paper.subject_name}
+                      </td>
+                      <td style={{ padding: '14px 12px', borderTop: '1px solid #e1e7ef', borderRight: '1px solid #e1e7ef' }}>
+                        {paper.subject_code}
+                      </td>
+                      <td style={{ padding: '14px 12px', borderTop: '1px solid #e1e7ef', borderRight: '1px solid #e1e7ef' }}>
+                        {paper.semester}
+                      </td>
+                      <td style={{ padding: '14px 12px', borderTop: '1px solid #e1e7ef', borderRight: '1px solid #e1e7ef' }}>
+                        {paper.department}
+                      </td>
+                      <td style={{ padding: '14px 12px', borderTop: '1px solid #e1e7ef', borderRight: '1px solid #e1e7ef' }}>
+                        {paper.approved_at ? new Date(paper.approved_at).toLocaleString() : '-'}
+                      </td>
+                      <td style={{ padding: '14px 12px', textAlign: 'center', borderTop: '1px solid #e1e7ef', borderRight: '1px solid #e1e7ef' }}>
+                        <span style={{
+                          display: 'inline-block',
+                          padding: '4px 10px',
+                          borderRadius: '999px',
+                          backgroundColor: '#d1f4e0',
+                          color: '#0f5132',
+                          fontWeight: 700,
+                          letterSpacing: '0.3px'
+                        }}>
+                          APPROVED
+                        </span>
+                      </td>
+                      <td style={{ padding: '14px 12px', textAlign: 'center', borderTop: '1px solid #e1e7ef' }}>
+                        <button
+                          onClick={() => handleViewPaperFromList(paper)}
+                          style={{
+                            padding: '8px 16px',
+                            backgroundColor: '#28a745',
+                            color: 'white',
+                            border: 'none',
+                            borderRadius: '4px',
+                            cursor: 'pointer',
+                            fontSize: '12px',
+                            fontWeight: 'bold'
+                          }}
+                        >
+                          View Paper
+                        </button>
                       </td>
                     </tr>
                   ))
@@ -654,38 +844,71 @@ const QuestionPapers = () => {
         </>
       )}
       
-      {/* Rejected Papers Button - Bottom Right Corner */}
-      <button
-        onClick={handleViewRejectedPapers}
-        style={{
-          position: 'fixed',
-          bottom: '20px',
-          right: '20px',
-          padding: '12px 20px',
-          backgroundColor: '#dc3545',
-          color: 'white',
-          border: 'none',
-          borderRadius: '8px',
-          cursor: 'pointer',
-          fontSize: '14px',
-          fontWeight: 'bold',
-          boxShadow: '0 4px 8px rgba(0,0,0,0.2)',
-          zIndex: 1000,
-          display: 'flex',
-          alignItems: 'center',
-          gap: '8px'
-        }}
-        onMouseEnter={(e) => {
-          e.target.style.backgroundColor = '#c82333';
-          e.target.style.transform = 'translateY(-2px)';
-        }}
-        onMouseLeave={(e) => {
-          e.target.style.backgroundColor = '#dc3545';
-          e.target.style.transform = 'translateY(0)';
-        }}
-      >
-        📋 Rejected Papers
-      </button>
+      {/* Action Buttons - Bottom Right Corner */}
+      <div style={{
+        position: 'fixed',
+        bottom: '20px',
+        right: '20px',
+        display: 'flex',
+        gap: '10px',
+        zIndex: 1000
+      }}>
+        <button
+          onClick={handleViewApprovedPapers}
+          style={{
+            padding: '12px 20px',
+            backgroundColor: '#28a745',
+            color: 'white',
+            border: 'none',
+            borderRadius: '8px',
+            cursor: 'pointer',
+            fontSize: '14px',
+            fontWeight: 'bold',
+            boxShadow: '0 4px 8px rgba(0,0,0,0.2)',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '8px'
+          }}
+          onMouseEnter={(e) => {
+            e.target.style.backgroundColor = '#218838';
+            e.target.style.transform = 'translateY(-2px)';
+          }}
+          onMouseLeave={(e) => {
+            e.target.style.backgroundColor = '#28a745';
+            e.target.style.transform = 'translateY(0)';
+          }}
+        >
+          ✅ Approved Papers
+        </button>
+        
+        <button
+          onClick={handleViewRejectedPapers}
+          style={{
+            padding: '12px 20px',
+            backgroundColor: '#dc3545',
+            color: 'white',
+            border: 'none',
+            borderRadius: '8px',
+            cursor: 'pointer',
+            fontSize: '14px',
+            fontWeight: 'bold',
+            boxShadow: '0 4px 8px rgba(0,0,0,0.2)',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '8px'
+          }}
+          onMouseEnter={(e) => {
+            e.target.style.backgroundColor = '#c82333';
+            e.target.style.transform = 'translateY(-2px)';
+          }}
+          onMouseLeave={(e) => {
+            e.target.style.backgroundColor = '#dc3545';
+            e.target.style.transform = 'translateY(0)';
+          }}
+        >
+          📋 Rejected Papers
+        </button>
+      </div>
     </div>
   );
 };

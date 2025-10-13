@@ -25,6 +25,26 @@ function SuperAdminDashboard() {
   const [openedPaper, setOpenedPaper] = useState(null);
   const [submittedLoading, setSubmittedLoading] = useState(false);
   const [submittedError, setSubmittedError] = useState(null);
+  const [selectedSemester, setSelectedSemester] = useState('');
+  const [papersSentForPrint, setPapersSentForPrint] = useState([]);
+  const [showSentForPrint, setShowSentForPrint] = useState(false);
+
+  // Load papers sent for print from localStorage on component mount
+  useEffect(() => {
+    const savedPapers = localStorage.getItem('papersSentForPrint');
+    if (savedPapers) {
+      try {
+        setPapersSentForPrint(JSON.parse(savedPapers));
+      } catch (err) {
+        console.error('Error loading papers sent for print:', err);
+      }
+    }
+  }, []);
+
+  // Save papers sent for print to localStorage whenever it changes
+  useEffect(() => {
+    localStorage.setItem('papersSentForPrint', JSON.stringify(papersSentForPrint));
+  }, [papersSentForPrint]);
   const API_BASE = process.env.REACT_APP_API_BASE_URL || 'http://localhost:5001/api';
 
   const [departments, setDepartments] = useState([]);
@@ -498,7 +518,38 @@ function SuperAdminDashboard() {
               <div style={{ marginBottom: '20px', padding: '16px', border: '1px solid #e1e7ef', borderRadius: '10px', background: '#fff' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                   <h3 style={{ margin: 0 }}>Paper: {openedPaper.subject_name} ({openedPaper.subject_code}) - Sem {openedPaper.semester}</h3>
-                  <button onClick={() => setOpenedPaper(null)} style={{ padding: '6px 12px', backgroundColor: '#6c757d', color: '#fff', border: 'none', borderRadius: '6px', cursor: 'pointer' }}>Close</button>
+                  <div style={{ display: 'flex', gap: '10px' }}>
+                    <button
+                      onClick={async () => {
+                        try {
+                          // Download DOCX file
+                          const response = await fetch(`${API_BASE}/verifier/papers/${encodeURIComponent(openedPaper.subject_code)}/${encodeURIComponent(openedPaper.semester)}/docx`);
+                          if (!response.ok) {
+                            throw new Error(`HTTP error! status: ${response.status}`);
+                          }
+                          
+                          const blob = await response.blob();
+                          const url = window.URL.createObjectURL(blob);
+                          const a = document.createElement('a');
+                          a.href = url;
+                          a.download = `${openedPaper.subject_code}_${openedPaper.semester}.docx`;
+                          document.body.appendChild(a);
+                          a.click();
+                          window.URL.revokeObjectURL(url);
+                          document.body.removeChild(a);
+                          
+                          alert('Question paper downloaded successfully!');
+                        } catch (err) {
+                          console.error('Download error:', err);
+                          alert(`Failed to download paper: ${err.message}`);
+                        }
+                      }}
+                      style={{ padding: '6px 12px', backgroundColor: '#28a745', color: '#fff', border: 'none', borderRadius: '6px', cursor: 'pointer' }}
+                    >
+                      📄 Download DOCX
+                    </button>
+                    <button onClick={() => setOpenedPaper(null)} style={{ padding: '6px 12px', backgroundColor: '#6c757d', color: '#fff', border: 'none', borderRadius: '6px', cursor: 'pointer' }}>Close</button>
+                  </div>
                 </div>
                 <div style={{ marginTop: '12px' }}>
                   {openedPaper.questions.map((q, idx) => (
@@ -508,13 +559,36 @@ function SuperAdminDashboard() {
                         <div style={{ flex: 1 }}>
                           <div style={{ fontWeight: 600 }}>{q.question_text}</div>
                           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '12px', marginTop: '10px' }}>
-                            <div><strong>CO:</strong> {q.co || ''}</div>
-                            <div><strong>L:</strong> {q.l || ''}</div>
-                            <div><strong>Marks:</strong> {typeof q.marks === 'number' ? q.marks : 0}</div>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                              <span style={{ color: '#fff', fontWeight: 800, minWidth: '44px', textAlign: 'center', backgroundColor: '#6f42c1', borderRadius: '999px', padding: '4px 10px' }}>CO</span>
+                              <span>{q.co || ''}</span>
+                            </div>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                              <span style={{ color: '#fff', fontWeight: 800, minWidth: '44px', textAlign: 'center', backgroundColor: '#fd7e14', borderRadius: '999px', padding: '4px 10px' }}>L</span>
+                              <span>{q.l || ''}</span>
+                            </div>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                              <span style={{ color: '#084298', fontWeight: 800 }}>Marks</span>
+                              <span style={{ fontWeight: 800, color: '#0b5ed7' }}>{typeof q.marks === 'number' ? q.marks : 0}</span>
+                            </div>
                           </div>
                           {q.file_url && (
                             <div style={{ marginTop: '10px' }}>
                               <img src={`${API_BASE}${q.file_url}`} alt={q.file_name || 'attachment'} style={{ maxWidth: '100%', borderRadius: '8px', border: '1px solid #e9edf3' }} />
+                            </div>
+                          )}
+                          {/* Verifier Remarks Display */}
+                          {q.remarks && q.remarks.trim() && (
+                            <div style={{ 
+                              marginTop: '10px', 
+                              padding: '10px', 
+                              backgroundColor: '#fff3cd', 
+                              border: '1px solid #ffeaa7', 
+                              borderRadius: '6px',
+                              borderLeft: '4px solid #ffc107'
+                            }}>
+                              <div style={{ fontWeight: 600, color: '#856404', marginBottom: '5px' }}>📝 Verifier Remarks:</div>
+                              <div style={{ color: '#856404', fontStyle: 'italic' }}>{q.remarks}</div>
                             </div>
                           )}
                         </div>
@@ -658,55 +732,228 @@ function SuperAdminDashboard() {
             {submittedLoading && <p>Loading…</p>}
             {submittedError && <p className="error-msg">{submittedError}</p>}
             {!submittedLoading && !submittedError && (
-              <div className="table-wrapper">
-                <table className="user-table">
-                  <thead>
-                    <tr>
-                      <th>Subject Code</th>
-                      <th>Semester</th>
-                      <th>Submitted At</th>
-                      <th>Action</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {submittedPapers.length === 0 && (
-                      <tr>
-                        <td colSpan={3}>No papers submitted yet.</td>
-                      </tr>
-                    )}
-                    {submittedPapers.map((p) => (
-                      <tr key={p._id}>
-                        <td>{p.subject_code}</td>
-                        <td>{p.semester}</td>
-                        <td>{p.createdAt ? new Date(p.createdAt).toLocaleString() : '-'}</td>
-                        <td>
-                          <button
-                            onClick={async () => {
-                              try {
-                                const res = await fetch(`${API_BASE}/verifier/papers/${encodeURIComponent(p.subject_code)}/${encodeURIComponent(p.semester)}`);
-                                const contentType = res.headers.get('content-type') || '';
-                                if (!contentType.includes('application/json')) {
-                                  const text = await res.text();
-                                  throw new Error(`Unexpected response (not JSON). Check API base URL. First bytes: ${text.slice(0, 60)}`);
-                                }
-                                const data = await res.json();
-                                if (!res.ok) throw new Error(data?.error || `Status ${res.status}`);
-                                setOpenedPaper(data);
-                              } catch (err) {
-                                console.error('Open paper error:', err);
-                                alert(`Failed to open paper: ${err.message}`);
-                              }
-                            }}
-                            style={{ padding: '6px 12px', backgroundColor: '#0d6efd', color: '#fff', border: 'none', borderRadius: '6px', cursor: 'pointer' }}
-                          >
-                            Open
-                          </button>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+              <>
+                {/* Semester Filter */}
+                <div style={{ marginBottom: '20px', padding: '15px', backgroundColor: '#f8f9fa', borderRadius: '8px', border: '1px solid #dee2e6' }}>
+                  <h3 style={{ marginBottom: '10px', color: '#495057' }}>Filter Papers</h3>
+                  <div style={{ display: 'flex', gap: '15px', alignItems: 'center' }}>
+                    <div>
+                      <label style={{ display: 'block', marginBottom: '5px', fontWeight: 'bold', color: '#495057' }}>
+                        Semester:
+                      </label>
+                      <select
+                        value={selectedSemester}
+                        onChange={(e) => setSelectedSemester(e.target.value)}
+                        style={{
+                          padding: '8px 12px',
+                          border: '1px solid #ced4da',
+                          borderRadius: '4px',
+                          fontSize: '14px',
+                          minWidth: '150px'
+                        }}
+                      >
+                        <option value="">All Semesters</option>
+                        {[1, 2, 3, 4, 5, 6, 7, 8].map((sem) => (
+                          <option key={sem} value={sem}>
+                            {sem}th Semester
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    <div>
+                      <button
+                        onClick={() => setShowSentForPrint(!showSentForPrint)}
+                        style={{
+                          padding: '8px 16px',
+                          backgroundColor: showSentForPrint ? '#6c757d' : '#28a745',
+                          color: 'white',
+                          border: 'none',
+                          borderRadius: '4px',
+                          cursor: 'pointer',
+                          fontSize: '14px',
+                          fontWeight: 'bold'
+                        }}
+                      >
+                        {showSentForPrint ? '← Back to Submitted' : '📄 Papers Sent for Print'}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Papers Sent for Print Section */}
+                {showSentForPrint ? (
+                  <div className="table-wrapper">
+                    <h3 style={{ marginBottom: '15px', color: '#495057' }}>Papers Sent for Print</h3>
+                    <table className="user-table">
+                      <thead>
+                        <tr>
+                          <th>Subject Code</th>
+                          <th>Subject Name</th>
+                          <th>Semester</th>
+                          <th>Sent for Print At</th>
+                          <th>Status</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {papersSentForPrint.length === 0 ? (
+                          <tr>
+                            <td colSpan={5} style={{ textAlign: 'center', padding: '20px' }}>
+                              No papers sent for print yet.
+                            </td>
+                          </tr>
+                        ) : (
+                          papersSentForPrint.map((paper, index) => (
+                            <tr key={index} style={{ backgroundColor: '#e7f3ff' }}>
+                              <td style={{ padding: '14px 12px', borderTop: '1px solid #e1e7ef', borderRight: '1px solid #e1e7ef', fontWeight: 600 }}>
+                                {paper.subject_code}
+                              </td>
+                              <td style={{ padding: '14px 12px', borderTop: '1px solid #e1e7ef', borderRight: '1px solid #e1e7ef' }}>
+                                {paper.subject_name || 'Unknown'}
+                              </td>
+                              <td style={{ padding: '14px 12px', borderTop: '1px solid #e1e7ef', borderRight: '1px solid #e1e7ef' }}>
+                                {paper.semester}
+                              </td>
+                              <td style={{ padding: '14px 12px', borderTop: '1px solid #e1e7ef', borderRight: '1px solid #e1e7ef' }}>
+                                {paper.sentForPrintAt ? new Date(paper.sentForPrintAt).toLocaleString() : '-'}
+                              </td>
+                              <td style={{ padding: '14px 12px', textAlign: 'center', borderTop: '1px solid #e1e7ef' }}>
+                                <span style={{
+                                  display: 'inline-block',
+                                  padding: '4px 10px',
+                                  borderRadius: '999px',
+                                  backgroundColor: '#cce5ff',
+                                  color: '#004085',
+                                  fontWeight: 700,
+                                  letterSpacing: '0.3px'
+                                }}>
+                                  SENT FOR PRINT
+                                </span>
+                              </td>
+                            </tr>
+                          ))
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                ) : (
+                  /* Regular Submitted Papers Table */
+                  <div className="table-wrapper">
+                    <table className="user-table">
+                      <thead>
+                        <tr>
+                          <th>Subject Code</th>
+                          <th>Subject Name</th>
+                          <th>Semester</th>
+                          <th>Submitted At</th>
+                          <th>Action</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {submittedPapers
+                          .filter(p => !selectedSemester || p.semester === parseInt(selectedSemester))
+                          .length === 0 && (
+                          <tr>
+                            <td colSpan={5} style={{ textAlign: 'center', padding: '20px' }}>
+                              {selectedSemester ? `No papers found for ${selectedSemester}th semester.` : 'No papers submitted yet.'}
+                            </td>
+                          </tr>
+                        )}
+                        {submittedPapers
+                          .filter(p => !selectedSemester || p.semester === parseInt(selectedSemester))
+                          .map((p) => (
+                          <tr key={p._id}>
+                            <td style={{ padding: '14px 12px', borderTop: '1px solid #e1e7ef', borderRight: '1px solid #e1e7ef', fontWeight: 600 }}>
+                              {p.subject_code}
+                            </td>
+                            <td style={{ padding: '14px 12px', borderTop: '1px solid #e1e7ef', borderRight: '1px solid #e1e7ef' }}>
+                              {p.subject_name || 'Unknown'}
+                            </td>
+                            <td style={{ padding: '14px 12px', borderTop: '1px solid #e1e7ef', borderRight: '1px solid #e1e7ef' }}>
+                              {p.semester}
+                            </td>
+                            <td style={{ padding: '14px 12px', borderTop: '1px solid #e1e7ef', borderRight: '1px solid #e1e7ef' }}>
+                              {p.createdAt ? new Date(p.createdAt).toLocaleString() : '-'}
+                            </td>
+                            <td style={{ padding: '14px 12px', textAlign: 'center', borderTop: '1px solid #e1e7ef' }}>
+                              <div style={{ display: 'flex', gap: '8px', justifyContent: 'center' }}>
+                                <button
+                                  onClick={async () => {
+                                    try {
+                                      const res = await fetch(`${API_BASE}/verifier/papers/${encodeURIComponent(p.subject_code)}/${encodeURIComponent(p.semester)}`);
+                                      const contentType = res.headers.get('content-type') || '';
+                                      if (!contentType.includes('application/json')) {
+                                        const text = await res.text();
+                                        throw new Error(`Unexpected response (not JSON). Check API base URL. First bytes: ${text.slice(0, 60)}`);
+                                      }
+                                      const data = await res.json();
+                                      if (!res.ok) throw new Error(data?.error || `Status ${res.status}`);
+                                      setOpenedPaper(data);
+                                    } catch (err) {
+                                      console.error('Open paper error:', err);
+                                      alert(`Failed to open paper: ${err.message}`);
+                                    }
+                                  }}
+                                  style={{ padding: '6px 12px', backgroundColor: '#0d6efd', color: '#fff', border: 'none', borderRadius: '6px', cursor: 'pointer', fontSize: '12px' }}
+                                >
+                                  Open
+                                </button>
+                                <button
+                                  onClick={async () => {
+                                    try {
+                                      console.log('Print button clicked for paper:', p);
+                                      
+                                      // Download DOCX file
+                                      const response = await fetch(`${API_BASE}/verifier/papers/${encodeURIComponent(p.subject_code)}/${encodeURIComponent(p.semester)}/docx`);
+                                      if (!response.ok) {
+                                        throw new Error(`HTTP error! status: ${response.status}`);
+                                      }
+                                      
+                                      const blob = await response.blob();
+                                      const url = window.URL.createObjectURL(blob);
+                                      const a = document.createElement('a');
+                                      a.href = url;
+                                      a.download = `${p.subject_code}_${p.semester}.docx`;
+                                      document.body.appendChild(a);
+                                      a.click();
+                                      window.URL.revokeObjectURL(url);
+                                      document.body.removeChild(a);
+                                      
+                                      // Add to sent for print list
+                                      const newPaper = {
+                                        ...p,
+                                        sentForPrintAt: new Date().toISOString(),
+                                        subject_name: p.subject_name || 'Unknown'
+                                      };
+                                      console.log('Adding paper to print queue:', newPaper);
+                                      
+                                      setPapersSentForPrint(prev => {
+                                        const updated = [...prev, newPaper];
+                                        console.log('Updated papers sent for print:', updated);
+                                        return updated;
+                                      });
+                                      
+                                      // Remove from submitted papers
+                                      setSubmittedPapers(prev => prev.filter(paper => paper._id !== p._id));
+                                      
+                                      alert('Paper downloaded and sent for print successfully!');
+                                    } catch (err) {
+                                      console.error('Print error:', err);
+                                      alert(`Failed to print paper: ${err.message}`);
+                                    }
+                                  }}
+                                  style={{ padding: '6px 12px', backgroundColor: '#28a745', color: '#fff', border: 'none', borderRadius: '6px', cursor: 'pointer', fontSize: '12px' }}
+                                >
+                                  Print
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </>
             )}
           </div>
         )}
