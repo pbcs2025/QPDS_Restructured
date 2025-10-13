@@ -18,8 +18,24 @@ exports.assignQPSetter = async (req, res) => {
           email,
           'Appointment as Question Paper Setter - GAT Exam Portal',
           '',
-          `<p>Assigned for <b>${subjectCode}</b>. Submission Deadline: ${submitDate}</p>
-           <p>Credentials:</p><ul><li>Username: ${email}</li><li>Password: ${password || ''}</li></ul>`
+          `<p>Dear Faculty,</p>
+          
+          <p>We are pleased to inform you that you have been assigned as a Question Paper Setter for the course <span style="font-size: 20px; font-weight: bold; color: #2c5aa0; background-color: #f0f8ff; padding: 4px 8px; border-radius: 4px;">${subjectCode}</span>.</p>
+          
+          <p><span style="background-color: #fff3cd; color: #856404; padding: 8px 12px; border-radius: 4px; font-weight: bold; border-left: 4px solid #ffc107;"><b>Submission Deadline:</b> ${submitDate}</span></p>
+          
+          <p>Your login credentials are as follows:</p>
+          
+          <p><b>Username:</b> ${email}<br>
+          <b>Password:</b> ${password || ''}</p>
+          
+          <p>Please use the above credentials to log in to the Question Paper Setting System. For security reasons, we strongly recommend that you change your password immediately after logging in.</p>
+          
+          <p>If you have any questions or face difficulties accessing the system, kindly contact the examination cell at support@gat.ac.in.</p>
+          
+          <p>Best regards,<br>
+          Examination Cell<br>
+          Global Academy of Technology</p>`
         );
       } catch (err) {
         console.error('Email error:', err.message);

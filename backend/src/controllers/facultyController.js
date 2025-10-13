@@ -58,7 +58,36 @@ exports.registerFaculty = async (req, res) => {
         email,
         'Welcome to GAT Portal - Faculty Registration',
         '',
-        `<p>Hi ${name},<br><br>Your registration as faculty is successful!<br><br>Login credentials:<br>Username: ${username}<br>Password: ${password}<br><br>Please change your password after logging in.</p>`
+        `<p>Dear ${name},</p>
+        
+        <p>Welcome to Global Academy of Technology! We are pleased to inform you that your faculty registration has been successfully completed.</p>
+        
+        <p>Your account has been created and activated. You can now access the Question Paper Development System (QPDS) using the credentials provided below:</p>
+        
+        <div style="background-color: #f8f9fa; border: 1px solid #dee2e6; border-radius: 8px; padding: 20px; margin: 20px 0;">
+          <h3 style="color: #2c5aa0; margin-top: 0;">Login Credentials</h3>
+          <p><strong>Username:</strong> ${username}</p>
+          <p><strong>Password:</strong> <span style="font-size: 18px; font-weight: bold; color: #333; background-color: #e9ecef; padding: 4px 8px; border-radius: 4px;">${password}</span></p>
+        </div>
+        
+        <p><strong>Important Security Notice:</strong> For security reasons, we strongly recommend that you change your password immediately after your first login.</p>
+        
+        <p>You can access the system by visiting the faculty login portal and using the credentials provided above.</p>
+        
+        <p>If you encounter any issues or have questions regarding the system, please do not hesitate to contact our technical support team at support@gat.ac.in.</p>
+        
+        <p>We look forward to your contribution to our academic community.</p>
+        
+        <p>Best regards,<br>
+        <strong>Examination Cell</strong><br>
+        Global Academy of Technology<br>
+        Bengaluru, Karnataka</p>
+        
+        <hr style="border: none; border-top: 1px solid #dee2e6; margin: 30px 0;">
+        <p style="font-size: 12px; color: #6c757d; text-align: center;">
+          This is an automated message. Please do not reply to this email.<br>
+          For support, contact: support@gat.ac.in
+        </p>`
       );
     } catch (err) {
       console.error('Email error:', err.message);
@@ -105,7 +134,13 @@ exports.loginFaculty = async (req, res) => {
         username,
         'Faculty Login - Verification Code',
         '',
-        `<p>Hello ${faculty.name},<br><br>Your verification code for faculty login:</p><h2>${code}</h2><p>Valid for 10 minutes.</p>`
+        `<p>Hello ${faculty.name},</p>
+        
+        <p>Your verification code for faculty login:</p>
+        
+        <h2 style="font-size: 24px; font-weight: bold; color: #333; margin: 20px 0;">${code}</h2>
+        
+        <p>Valid for 10 minutes.</p>`
       );
     } catch (err) {
       console.error('Email error:', err.message);
@@ -253,7 +288,19 @@ exports.forgotFacultyPassword = async (req, res) => {
         email,
         'GAT Portal - Faculty Password Recovery',
         '',
-        `<p>Hello ${faculty.name},<br><br>Your temporary password is:</p><h2>${user.password}</h2><p>Please login and change your password immediately.</p>`
+        `<p>Hello ${faculty.name},</p>
+        
+        <p>Your temporary password is:</p>
+        
+        <h2 style="font-size: 24px; font-weight: bold; color: #333; margin: 20px 0;">${user.password}</h2>
+        
+        <p>Please login and change your password immediately.</p>
+        
+        <p>If you have any questions or face difficulties accessing the system, kindly contact the examination cell at support@gat.ac.in.</p>
+        
+        <p>Best regards,<br>
+        Examination Cell<br>
+        Global Academy of Technology</p>`
       );
     } catch (err) {
       console.error('Email error:', err.message);

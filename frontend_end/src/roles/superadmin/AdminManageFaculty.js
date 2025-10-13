@@ -97,8 +97,12 @@ function AdminManageFaculty() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          ...formData,
+          name: formData.name,
+          clgName: formData.clgName,
           deptName: formData.deptName,
+          email: formData.email,
+          phone: formData.phone,
+          usertype: formData.usertype,
         }),
       });
 

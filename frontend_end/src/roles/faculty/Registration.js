@@ -86,12 +86,15 @@ function App() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          ...formValues,
-          name: formValues.username, // Send name as well
-          phone: formValues.phoneNo, // Map phoneNo to phone
+          name: formValues.username,
+          clgName: formValues.clgName,
+          deptName: formValues.deptName,
+          email: formValues.email,
+          phone: formValues.phoneNo,
+          usertype: formValues.usertype,
         }),
       })
-        .then((res) => res.text())
+        .then((res) => res.json())
         .then((data) => {
           console.log("Registered successfully:", data);
           setIsSubmit(true);
