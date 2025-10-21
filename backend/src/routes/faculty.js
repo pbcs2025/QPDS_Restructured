@@ -1,6 +1,8 @@
 const express = require('express');
 const router = express.Router();
 const facultyController = require('../controllers/facultyController');
+const multer = require('multer');
+const upload = multer({ storage: multer.memoryStorage() });
 
 // Faculty authentication routes
 router.post('/register', facultyController.registerFaculty);
@@ -16,6 +18,9 @@ router.put('/profile/:email', facultyController.updateFacultyProfile);
 // Faculty management routes
 router.get('/all', facultyController.getAllFaculties);
 router.get('/department/:department', facultyController.getFacultiesByDepartment);
+
+// Bulk upload
+router.post('/bulk-upload', upload.single('file'), facultyController.bulkUploadFaculties);
 
 module.exports = router;
 

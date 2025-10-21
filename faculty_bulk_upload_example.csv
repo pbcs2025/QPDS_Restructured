@@ -1,0 +1,23 @@
+# Faculty Bulk Upload Template
+# IMPORTANT: Department names must match exactly with the departments in the system
+# Valid departments: Computer Science and Engineering (CSE), Electronics and Communication Engineering (ECE), 
+# Mechanical Engineering (ME), Computer Science & Engineering AIDS (CSE-AIDS), 
+# Artificial Intelligence and Machine Learning (AIML), Electrical and Electronics Engineering (EEE),
+# Civil Engineering (CE), Electronics and Instrumentation Engineering (EIE), 
+# Biotechnology Engineering (BT), Aerospace Engineering (AE), Basic Science,
+# Computer Science & Engineering AIML (CSE-AIML)
+#
+name,email,phone,clgName,deptName,usertype
+Dr. Rajesh Kumar,rajesh.kumar@gat.ac.in,9876543210,Global Academy of Technology,Computer Science and Engineering (CSE),internal
+Prof. Priya Sharma,priya.sharma@gat.ac.in,9876543211,Global Academy of Technology,Electronics and Communication Engineering (ECE),internal
+Dr. Amit Singh,amit.singh@gat.ac.in,9876543212,Global Academy of Technology,Mechanical Engineering (ME),internal
+Ms. Sneha Patel,sneha.patel@gat.ac.in,9876543213,Global Academy of Technology,Computer Science & Engineering AIDS (CSE-AIDS),internal
+Dr. Vikram Reddy,vikram.reddy@gat.ac.in,9876543214,Global Academy of Technology,Artificial Intelligence and Machine Learning (AIML),internal
+Prof. Anjali Gupta,anjali.gupta@gat.ac.in,9876543215,Global Academy of Technology,Electrical and Electronics Engineering (EEE),internal
+Dr. Suresh Kumar,suresh.kumar@gat.ac.in,9876543216,Global Academy of Technology,Civil Engineering (CE),internal
+Ms. Deepika Joshi,deepika.joshi@gat.ac.in,9876543217,Global Academy of Technology,Electronics and Instrumentation Engineering (EIE),internal
+Dr. Manoj Agarwal,manoj.agarwal@gat.ac.in,9876543218,Global Academy of Technology,Biotechnology Engineering (BT),internal
+Prof. Kavitha Nair,kavitha.nair@gat.ac.in,9876543219,Global Academy of Technology,Aerospace Engineering (AE),internal
+Dr. Ravi Verma,ravi.verma@gat.ac.in,9876543220,Global Academy of Technology,Basic Science,internal
+Ms. Sunita Rao,sunita.rao@gat.ac.in,9876543221,Global Academy of Technology,Computer Science & Engineering AIML (CSE-AIML),internal
+Dr. External Faculty,external.faculty@external.edu,9876543222,External College,Computer Science and Engineering (CSE),external

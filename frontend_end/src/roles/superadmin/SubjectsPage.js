@@ -18,6 +18,24 @@ function SubjectsPage() {
   });
   const [message, setMessage] = useState("");
 
+
+  // Function to get contrasting text color
+  const getContrastColor = (hexColor) => {
+    // Remove # if present
+    const hex = hexColor.replace('#', '');
+    
+    // Convert to RGB
+    const r = parseInt(hex.substr(0, 2), 16);
+    const g = parseInt(hex.substr(2, 2), 16);
+    const b = parseInt(hex.substr(4, 2), 16);
+    
+    // Calculate luminance
+    const luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+    
+    // Return black for light backgrounds, white for dark backgrounds
+    return luminance > 0.5 ? '#000000' : '#ffffff';
+  };
+
   // Fetch subjects
   useEffect(() => {
     fetch(`${API_BASE}/subjects`)
@@ -265,15 +283,34 @@ function SubjectsPage() {
           <h1>Departments</h1>
           <div className="departments-grid">
             {departments.length === 0 && <p>No departments found.</p>}
-            {departments.map((dept) => (
-              <div
-                key={dept._id || dept.id}
-                className="department-card"
-                onClick={() => setSelectedDept(dept.name || dept.department)}
-              >
-                {dept.name || dept.department}
-              </div>
-            ))}
+            {departments.map((dept) => {
+              const deptName = dept.name || dept.department;
+              const deptColor = dept.color || "#6c757d"; // use dynamic color if provided, else default gray
+              return (
+                <div
+                  key={dept._id || dept.id}
+                  className="department-card"
+                  onClick={() => setSelectedDept(deptName)}
+                  style={{
+                    backgroundColor: deptColor,
+                    color: getContrastColor(deptColor),
+                    border: `2px solid ${deptColor}`,
+                    boxShadow: `0 4px 8px rgba(0,0,0,0.1)`,
+                    transition: 'transform 0.2s ease, box-shadow 0.2s ease'
+                  }}
+                  onMouseEnter={(e) => {
+                    e.target.style.transform = 'translateY(-2px)';
+                    e.target.style.boxShadow = `0 6px 12px rgba(0,0,0,0.15)`;
+                  }}
+                  onMouseLeave={(e) => {
+                    e.target.style.transform = 'translateY(0)';
+                    e.target.style.boxShadow = `0 4px 8px rgba(0,0,0,0.1)`;
+                  }}
+                >
+                  {deptName}
+                </div>
+              );
+            })}
           </div>
         </>
       )}

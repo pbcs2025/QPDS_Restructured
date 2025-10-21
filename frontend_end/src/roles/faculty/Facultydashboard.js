@@ -224,6 +224,7 @@ function FacultyDashboard() {
                         <th>Assigned Date</th>
                         <th>Submission Date</th>
                         <th>Status</th>
+                        <th>Action</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -248,6 +249,20 @@ function FacultyDashboard() {
                             >
                               {assignment.status}
                             </span>
+                          </td>
+                          <td>
+                            {assignment.status !== 'Submitted' && (
+                              <Link 
+                                to="/question-paper-builder" 
+                                state={{ 
+                                  subjectCode: assignment.subject_code,
+                                  subjectName: assignment.subject_name 
+                                }}
+                                className="btn btn-primary btn-sm"
+                              >
+                                📝 Create Paper
+                              </Link>
+                            )}
                           </td>
                         </tr>
                       ))}

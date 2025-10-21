@@ -1,7 +1,9 @@
 const crypto = require('crypto');
 const User = require('../models/User');
 const Faculty = require('../models/Faculty');
+const Department = require('../models/Department');
 const sendEmail = require('../utils/mailer');
+const xlsx = require('xlsx');
 
 // Generate 6-character alphanumeric password
 function generatePassword() {
@@ -339,5 +341,112 @@ exports.getFacultiesByDepartment = async (req, res) => {
   } catch (err) {
     console.error('Error fetching faculties by department:', err);
     res.status(500).json({ error: 'Failed to fetch faculties' });
+  }
+};
+
+// Bulk upload faculties via Excel/CSV (buffer from multer)
+exports.bulkUploadFaculties = async (req, res) => {
+  try {
+    if (!req.file || !req.file.buffer) {
+      return res.status(400).json({ error: 'No file uploaded' });
+    }
+
+    const workbook = xlsx.read(req.file.buffer, { type: 'buffer' });
+    const sheetName = workbook.SheetNames[0];
+    const sheet = workbook.Sheets[sheetName];
+    const rows = xlsx.utils.sheet_to_json(sheet, { defval: '' });
+
+    if (!Array.isArray(rows) || rows.length === 0) {
+      return res.status(400).json({ error: 'Uploaded file is empty or invalid' });
+    }
+
+    // Get valid departments from database
+    const validDepartments = await Department.find({ isActive: true }).select('name').lean();
+    const validDeptNames = validDepartments.map(dept => dept.name);
+
+    // Expected headers: name, email, phone, clgName, deptName, usertype
+    const results = { created: 0, skipped: 0, errors: [] };
+
+    for (const [index, row] of rows.entries()) {
+      const name = String(row.name || row.Name || '').trim();
+      const email = String(row.email || row.Email || '').trim();
+      const phone = String(row.phone || row.Phone || row.contactNumber || '').trim();
+      const clgName = String(row.clgName || row.College || row.college || '').trim();
+      const deptName = String(row.deptName || row.Department || row.department || '').trim();
+      const usertype = String(row.usertype || row.type || '').trim() || 'internal';
+
+      if (!name || !email || !deptName) {
+        results.errors.push({ row: index + 2, error: 'Missing required fields (name, email, deptName)' });
+        continue;
+      }
+
+      // Validate department name against database
+      if (!validDeptNames.includes(deptName)) {
+        results.errors.push({ 
+          row: index + 2, 
+          error: `Invalid department "${deptName}". Valid departments: ${validDeptNames.join(', ')}` 
+        });
+        continue;
+      }
+
+      try {
+        const existingUser = await User.findOne({ $or: [{ username: email }, { email }] });
+        if (existingUser) {
+          results.skipped++;
+          continue;
+        }
+
+        const username = email;
+        const password = generatePassword();
+
+        const user = await User.create({
+          name,
+          username,
+          clgName,
+          deptName,
+          email,
+          phoneNo: phone,
+          password,
+          usertype,
+          role: 'Faculty'
+        });
+
+        await Faculty.create({
+          facultyId: user._id,
+          name,
+          email,
+          passwordHash: password,
+          department: deptName,
+          clgName,
+          contactNumber: phone,
+          type: usertype,
+          role: 'faculty'
+        });
+
+        // Email is best-effort; don't fail the whole row if it errors
+        try {
+          await sendEmail(
+            email,
+            'Welcome to GAT Portal - Faculty Registration',
+            '',
+            `<p>Dear ${name},</p><p>Your account has been created.</p><p><strong>Username:</strong> ${username}<br/><strong>Password:</strong> ${password}</p>`
+          );
+        } catch (e) {
+          // Ignore email errors in bulk
+        }
+
+        results.created++;
+      } catch (e) {
+        results.errors.push({ row: index + 2, error: e.message });
+      }
+    }
+
+    return res.json({
+      message: 'Bulk upload processed',
+      ...results
+    });
+  } catch (err) {
+    console.error('Bulk upload error:', err);
+    res.status(500).json({ error: 'Failed to process bulk upload' });
   }
 };
