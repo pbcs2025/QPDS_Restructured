@@ -12,31 +12,12 @@ router.post('/api/assignQPSetter', require('../controllers/assignmentController'
 router.get('/api/assignedSubjects', require('../controllers/assignmentController').assignedSubjects);
 router.get('/api/assignments/:subjectCode', require('../controllers/assignmentController').assignmentsBySubject);
 router.get('/api/faculty/assignments/:email', require('../controllers/assignmentController').getFacultyAssignments);
+router.get('/api/faculty/subject-codes/:email', require('../controllers/assignmentController').getFacultySubjectCodes);
+router.post('/api/assignment/update-status', require('../controllers/assignmentController').updateAssignmentStatus);
 // Compatibility alias for legacy frontend route
 router.get('/api/subject-codes', require('../controllers/subjectController').subjectCodes);
 // Test DB endpoint
 router.get('/test-db', require('../controllers/testDbController').testDb);
-// Debug endpoint
-router.get('/debug-latest', async (req, res) => {
-  try {
-    const QuestionPaper = require('../models/QuestionPaper');
-    const papers = await QuestionPaper.find({ subject_code: 'TEST002' }).lean();
-    res.json({
-      count: papers.length,
-      papers: papers.map(p => ({
-        id: p._id,
-        question_number: p.question_number,
-        department: p.department,
-        co: p.co,
-        level: p.level,
-        marks: p.marks,
-        allFields: Object.keys(p)
-      }))
-    });
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
-});
 
 module.exports = router;
 

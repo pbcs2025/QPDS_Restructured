@@ -1,4 +1,6 @@
 const QuestionPaper = require('../models/QuestionPaper');
+const Assignment = require('../models/Assignment');
+const Faculty = require('../models/Faculty');
 
 // Helper to get the next set name or latest set name
 const getSetName = async (subject_code, semester, useLatest = false) => {
@@ -21,56 +23,78 @@ const getSetName = async (subject_code, semester, useLatest = false) => {
   }
 };
 
+// Helper to update assignment status when questions are submitted
+const updateAssignmentStatus = async (subject_code, facultyEmail) => {
+  try {
+    if (facultyEmail) {
+      await Assignment.findOneAndUpdate(
+        { email: facultyEmail, subject_code: subject_code },
+        { 
+          status: 'submitted',
+          submitted_at: new Date()
+        }
+      );
+    }
+  } catch (err) {
+    console.error('Error updating assignment status:', err);
+    // Don't throw error as this shouldn't break the main flow
+  }
+};
+
 // ---------------- Single Question ----------------
 exports.create = async (req, res) => {
-  const { subject_code, subject_name, semester, question_number, question_text, set_name, co, level, marks, department } = req.body;
+  const { subject_code, subject_name, semester, question_number, question_text, set_name, co, level, marks, faculty_email, department } = req.body;
   const file = req.file;
-
-  // Debug logging
-  console.log('📝 Question creation request:');
-  console.log('Body:', req.body);
-  console.log('Department from body:', department);
-  console.log('CO from body:', co);
-  console.log('Level from body:', level);
-  console.log('Marks from body:', marks);
 
   if (!subject_code || !subject_name || !semester || !question_number || !question_text) {
     return res.status(400).json({ error: 'All fields are required' });
   }
 
   try {
+    // Normalize semester to number
+    const semNum = parseInt(semester, 10);
+    if (Number.isNaN(semNum)) {
+      return res.status(400).json({ error: 'semester must be a number' });
+    }
+
+    // Derive department if missing
+    let derivedDept = (department || '').trim();
+    if (!derivedDept && faculty_email) {
+      const faculty = await Faculty.findOne({ email: faculty_email }).lean();
+      if (faculty && faculty.deptName) derivedDept = faculty.deptName;
+    }
+
     // Check for duplicate question
-    const exists = await QuestionPaper.findOne({ subject_code, semester, question_number }).lean();
+    const exists = await QuestionPaper.findOne({ subject_code, semester: semNum, question_number }).lean();
     if (exists) return res.status(409).json({ error: 'Question already exists' });
 
     // Determine set_name
     let finalSetName = set_name;
     if (!finalSetName) {
       // If no set_name provided, assign latest set for this paper, or Set1 if none exists
-      finalSetName = await getSetName(subject_code, semester, true);
+      finalSetName = await getSetName(subject_code, semNum, true);
     }
 
-    const docData = {
+    const doc = await QuestionPaper.create({
       subject_code,
       subject_name,
-      semester,
+      semester: semNum,
       set_name: finalSetName,
       question_number,
       question_text,
       co: co || '',
       level: level || '',
       marks: typeof marks === 'number' ? marks : 0,
-      department: department || '',
+      department: derivedDept || '',
       file_name: file ? file.originalname : null,
       file_type: file ? file.mimetype : null,
       question_file: file ? file.buffer : null,
-    };
+    });
 
-    console.log('📝 Document data to save:', docData);
-
-    const doc = await QuestionPaper.create(docData);
-
-    console.log('📝 Document saved:', doc.toObject());
+    // Update assignment status if faculty email is provided
+    if (faculty_email) {
+      await updateAssignmentStatus(subject_code, faculty_email);
+    }
 
     res.json({ message: '✅ Question saved successfully', id: doc._id, set_name: finalSetName });
   } catch (err) {
@@ -88,10 +112,15 @@ exports.createBatch = async (req, res) => {
   }
 
   try {
+    const semNum = parseInt(semester, 10);
+    if (Number.isNaN(semNum)) {
+      return res.status(400).json({ error: 'semester must be a number' });
+    }
+
     // Check for duplicate questions
     const existingQuestions = await QuestionPaper.find({
       subject_code,
-      semester,
+      semester: semNum,
       question_number: { $in: questions.map(q => q.question_number) }
     }).lean();
 
@@ -104,12 +133,12 @@ exports.createBatch = async (req, res) => {
     }
 
     // Assign new set name for this paper
-    const set_name = await getSetName(subject_code, semester, false);
+    const set_name = await getSetName(subject_code, semNum, false);
 
     const questionDocs = questions.map(q => ({
       subject_code,
       subject_name,
-      semester,
+      semester: semNum,
       set_name,
       question_number: q.question_number,
       question_text: q.question_text,
@@ -147,10 +176,6 @@ exports.list = async (_req, res) => {
       set_name: 1,
       question_number: 1,
       question_text: 1,
-      co: 1,
-      level: 1,
-      marks: 1,
-      department: 1,
       file_name: 1,
       file_type: 1,
     }).sort({ _id: -1 }).lean();
