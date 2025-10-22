@@ -9,15 +9,22 @@
   },
   "license": "MIT",
   "dependencies": {
+<<<<<<< HEAD
     "axios": "^1.12.2",
     "body-parser": "^1.20.2",
     "cors": "^2.8.5",
     "docx": "^8.5.0",
+=======
+    "body-parser": "^1.20.2",
+    "cors": "^2.8.5",
+    "docx": "^8.1.4",
+>>>>>>> 9fa3081a90a2849a3a9e74a25d756696ba387d79
     "dotenv": "^16.4.5",
     "express": "^4.19.2",
     "express-validator": "^7.2.1",
     "mongoose": "^8.6.2",
     "multer": "^2.0.2",
-    "nodemailer": "^6.9.14"
+    "nodemailer": "^6.9.14",
+    "xlsx": "^0.18.5"
   }
 }

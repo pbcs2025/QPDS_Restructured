@@ -37,12 +37,12 @@ function RoleSelection() {
           >
             Super Admin
           </button>
-          <button
+          {/* <button
             onClick={() => handleRoleClick("admin")}
             style={buttonStyle}
           >
             Admin
-          </button>
+          </button> */}
           <button
             onClick={() => handleRoleClick("faculty")}
             style={buttonStyle}
