@@ -21,12 +21,25 @@ function QuestionPaperBuilder() {
   const previewRef = useRef(null);
   const [assignedSubjects, setAssignedSubjects] = useState([]);
   const [facultyEmail, setFacultyEmail] = useState("");
+  const [examType, setExamType] = useState("SEE");
+  const [cieQuestions, setCieQuestions] = useState([]);
+  const [nextCieQuestionId, setNextCieQuestionId] = useState(1);
+  const [draftLoaded, setDraftLoaded] = useState(false);
 
   const markPresets = {
     "a, b, c, d (5 marks each)": [5, 5, 5, 5],
     "a, b (10 marks each)": [10, 10],
     "a, b, c (7,7,6 marks)": [7, 7, 6],
     "a, b, c (8,8,4 marks)": [8, 8, 4],
+  };
+
+  const ciePatterns = {
+    "1 question (10 marks)": { parts: ["main"], marks: [10] },
+    "2 sub-questions (6,4 marks)": { parts: ["a", "b"], marks: [6, 4] },
+    "2 sub-questions (5,5 marks)": { parts: ["a", "b"], marks: [5, 5] },
+    "2 sub-questions (7,3 marks)": { parts: ["a", "b"], marks: [7, 3] },
+    "3 sub-questions (4,3,3 marks)": { parts: ["a", "b", "c"], marks: [4, 3, 3] },
+    "3 sub-questions (5,3,2 marks)": { parts: ["a", "b", "c"], marks: [5, 3, 2] }
   };
 
   /** ------------------------
@@ -64,6 +77,47 @@ function QuestionPaperBuilder() {
   }, [API_BASE, location.state]);
 
   /** ------------------------
+   * 💾 Load Draft Data from localStorage
+   ------------------------- */
+  useEffect(() => {
+    const loadDraftData = () => {
+      try {
+        const draftKey = `questionPaper_draft_${facultyEmail}`;
+        const savedDraft = localStorage.getItem(draftKey);
+        
+        if (savedDraft) {
+          const draftData = JSON.parse(savedDraft);
+          
+          // Only load draft if not submitted
+          if (!draftData.isSubmitted) {
+            setSubject(draftData.subject || "");
+            setSubjectCode(draftData.subjectCode || "");
+            setSemester(draftData.semester || "");
+            setInstructions(draftData.instructions || "");
+            setCOs(draftData.cos || [""]);
+            setModules(draftData.modules || []);
+            setNextGroupNumber(draftData.nextGroupNumber || 1);
+            setExamType(draftData.examType || "SEE");
+            setCieQuestions(draftData.cieQuestions || []);
+            setNextCieQuestionId(draftData.nextCieQuestionId || 1);
+            setIsSubmitted(draftData.isSubmitted || false);
+            setDraftLoaded(true);
+            
+            console.log("📄 Draft data loaded successfully");
+          }
+        }
+      } catch (error) {
+        console.error("Error loading draft data:", error);
+      }
+    };
+
+    // Load draft after faculty email is set
+    if (facultyEmail) {
+      loadDraftData();
+    }
+  }, [facultyEmail]);
+
+  /** ------------------------
    * 🛑 Inactivity Logout (5 mins)
    ------------------------- */
   const resetInactivityTimer = () => {
@@ -95,11 +149,11 @@ function QuestionPaperBuilder() {
   useEffect(() => {
     const autoSaveInterval = setInterval(() => {
       if (!isSubmitted) {
-        saveQuestionPaper(true);
+        saveDraftToLocalStorage();
       }
     }, 2 * 60 * 1000);
     return () => clearInterval(autoSaveInterval);
-  }, []);
+  }, [subject, subjectCode, semester, instructions, cos, modules, examType, cieQuestions, isSubmitted]);
 
   /** ------------------------
    * 📌 Add / Update Functions
@@ -169,6 +223,63 @@ function QuestionPaperBuilder() {
     setModules(updatedModules);
   };
 
+  const addCieQuestion = () => {
+    if (isSubmitted) return;
+    const newQuestion = {
+      id: nextCieQuestionId,
+      pattern: "",
+      subQuestions: [],
+      co: "CO1",
+      level: "L1"
+    };
+    setCieQuestions([...cieQuestions, newQuestion]);
+    setNextCieQuestionId(nextCieQuestionId + 1);
+  };
+
+  const updateCieQuestionPattern = (questionId, pattern) => {
+    if (isSubmitted) return;
+    const patternData = ciePatterns[pattern];
+    if (!patternData) return;
+
+    const updatedQuestions = cieQuestions.map(q => 
+      q.id === questionId 
+        ? { 
+            ...q, 
+            pattern, 
+            subQuestions: patternData.parts.map((part, index) => ({
+              label: part,
+              text: "",
+              marks: patternData.marks[index],
+              co: q.co,
+              level: q.level,
+              image: null
+            }))
+          } 
+        : q
+    );
+    setCieQuestions(updatedQuestions);
+  };
+
+  const updateCieSubQuestion = (questionId, subIndex, key, val) => {
+    if (isSubmitted) return;
+    const updatedQuestions = cieQuestions.map(q => 
+      q.id === questionId 
+        ? {
+            ...q,
+            subQuestions: q.subQuestions.map((sub, index) => 
+              index === subIndex ? { ...sub, [key]: val } : sub
+            )
+          }
+        : q
+    );
+    setCieQuestions(updatedQuestions);
+  };
+
+  const deleteCieQuestion = (questionId) => {
+    if (isSubmitted) return;
+    setCieQuestions(cieQuestions.filter(q => q.id !== questionId));
+  };
+
   /** ------------------------
    * ✅ Validation Function
    ------------------------- */
@@ -183,6 +294,24 @@ function QuestionPaperBuilder() {
       return false;
     }
 
+    // Validate CIE questions
+    if (examType === "CIE") {
+      for (let question of cieQuestions) {
+        if (!question.pattern) {
+          alert(`⚠️ CIE Question ${question.id} - Please select a pattern.`);
+          return false;
+        }
+
+        for (let sub of question.subQuestions) {
+          if (!sub.text.trim()) {
+            alert(`⚠️ CIE Question ${question.id} - Please fill all sub-questions.`);
+            return false;
+          }
+        }
+      }
+    }
+
+    // Validate SEE modules (existing logic)
     for (let mod of modules) {
       for (let group of mod.groups) {
         // Validation: all sub-questions in a group must be filled
@@ -212,14 +341,82 @@ function QuestionPaperBuilder() {
   };
 
   /** ------------------------
+   * 💾 Save Draft to localStorage
+   ------------------------- */
+  const saveDraftToLocalStorage = () => {
+    try {
+      const draftKey = `questionPaper_draft_${facultyEmail}`;
+      const draftData = {
+        subject,
+        subjectCode,
+        semester,
+        instructions,
+        cos,
+        modules,
+        nextGroupNumber,
+        examType,
+        cieQuestions,
+        nextCieQuestionId,
+        isSubmitted,
+        lastSavedAt: new Date().toISOString()
+      };
+      
+      localStorage.setItem(draftKey, JSON.stringify(draftData));
+      setLastSavedAt(new Date().toISOString());
+      console.log("💾 Draft saved to localStorage");
+    } catch (error) {
+      console.error("Error saving draft to localStorage:", error);
+    }
+  };
+
+  /** ------------------------
    * 💾 Save or Submit
    ------------------------- */
   const saveQuestionPaper = async (isDraft = false) => {
     try {
       const now = new Date().toISOString();
 
-      // Normalize semester to a plain number (1-8)
-      const semNum = parseInt(String(semester).replace(/[^0-9]/g, ''), 10);
+
+      // Always save draft to localStorage first
+      saveDraftToLocalStorage();
+
+      // If it's just a draft, don't send to server
+      if (isDraft) {
+        console.log("Draft saved locally at", now);
+        return;
+      }
+
+      // Save CIE questions to server
+      if (examType === "CIE") {
+        for (let question of cieQuestions) {
+          for (let sub of question.subQuestions) {
+            if (sub.text.trim() !== "") {
+              const formData = new FormData();
+              formData.append("subject_code", subjectCode);
+              formData.append("subject_name", subject);
+              formData.append("semester", semester);
+              formData.append("question_number", `Q${question.id}(${sub.label})`);
+              formData.append("question_text", sub.text);
+              formData.append("co", sub.co);
+              formData.append("level", sub.level);
+              formData.append("marks", sub.marks);
+              formData.append("faculty_email", facultyEmail);
+              formData.append("exam_type", "CIE");
+              if (sub.image) formData.append("file", sub.image);
+
+              await axios.post(
+                `${API_BASE}/question-bank`,
+                formData,
+                {
+                  headers: { "Content-Type": "multipart/form-data" },
+                }
+              );
+            }
+          }
+        }
+      }
+
+      // Save SEE modules to server
 
       for (let mod of modules) {
         for (let group of mod.groups) {
@@ -235,6 +432,9 @@ function QuestionPaperBuilder() {
               formData.append("level", q.level);
               formData.append("marks", q.marks);
               formData.append("faculty_email", facultyEmail);
+
+              formData.append("exam_type", "SEE");
+
               if (q.image) formData.append("file", q.image);
 
               await axios.post(
@@ -249,13 +449,12 @@ function QuestionPaperBuilder() {
         }
       }
 
-      setLastSavedAt(now);
-      if (!isDraft) {
-        alert("✅ All questions submitted successfully!");
-        setIsSubmitted(true);
-      } else {
-        console.log("Draft auto-saved at", now);
-      }
+      // Mark as submitted and clear draft
+      setIsSubmitted(true);
+      const draftKey = `questionPaper_draft_${facultyEmail}`;
+      localStorage.removeItem(draftKey);
+      
+      alert("✅ All questions submitted successfully!");
     } catch (error) {
       console.error("Error saving question bank:", error && (error.response?.data || error.message));
       const msg = error?.response?.data?.error || "Failed to save questions.";
@@ -271,6 +470,33 @@ function QuestionPaperBuilder() {
       )
     ) {
       saveQuestionPaper(false);
+    }
+  };
+
+  /** ------------------------
+   * 🗑️ Clear Draft
+   ------------------------- */
+  const clearDraft = () => {
+    if (window.confirm("Are you sure you want to clear the saved draft? This action cannot be undone.")) {
+      const draftKey = `questionPaper_draft_${facultyEmail}`;
+      localStorage.removeItem(draftKey);
+      
+      // Reset form to initial state
+      setSubject("");
+      setSubjectCode("");
+      setSemester("");
+      setInstructions("");
+      setCOs([""]);
+      setModules([]);
+      setNextGroupNumber(1);
+      setExamType("SEE");
+      setCieQuestions([]);
+      setNextCieQuestionId(1);
+      setIsSubmitted(false);
+      setDraftLoaded(false);
+      setLastSavedAt(null);
+      
+      alert("✅ Draft cleared successfully!");
     }
   };
 
@@ -326,11 +552,36 @@ function QuestionPaperBuilder() {
       <div className="main-content">
         <h1>📘 Question Paper Builder</h1>
 
+        {draftLoaded && (
+          <div className="draft-notification" style={{
+            backgroundColor: '#e8f5e8',
+            border: '1px solid #4caf50',
+            borderRadius: '4px',
+            padding: '10px',
+            marginBottom: '15px',
+            color: '#2e7d32'
+          }}>
+            <p>📄 <strong>Draft loaded!</strong> Your previous work has been restored.</p>
+          </div>
+        )}
+
         {lastSavedAt && (
           <p className="timestamp">
             Last saved at: {new Date(lastSavedAt).toLocaleString()}
           </p>
         )}
+
+        <div className="exam-type-selection">
+          <label>Exam Type:</label>
+          <select
+            value={examType}
+            onChange={(e) => setExamType(e.target.value)}
+            disabled={isSubmitted}
+          >
+            <option value="SEE">SEE</option>
+            <option value="CIE">CIE</option>
+          </select>
+        </div>
 
         <div className="student-info">
           <label>Subject Code:</label>
@@ -396,8 +647,26 @@ function QuestionPaperBuilder() {
         ))}
         {!isSubmitted && <button onClick={addCO}>➕ Add CO</button>}
 
-        <h3>📚 Modules</h3>
-        {!isSubmitted && <button onClick={addEmptyModule}>➕ Add Module</button>}
+        {examType === "SEE" && (
+          <>
+            <h3>📚 Modules</h3>
+            {!isSubmitted && <button onClick={addEmptyModule}>➕ Add Module</button>}
+          </>
+        )}
+
+        {examType === "CIE" && (
+          <>
+            <h3>📝 CIE Questions</h3>
+            <div className="cie-info">
+              <p><strong>CIE Exam:</strong> Add questions with dynamic sub-questions and marks distribution</p>
+            </div>
+            {!isSubmitted && (
+              <button onClick={addCieQuestion} className="add-question-btn">
+                ➕ Add Question
+              </button>
+            )}
+          </>
+        )}
 
         {modules.map((mod, modIndex) => (
           <div key={modIndex} className="module-box">
@@ -526,6 +795,119 @@ function QuestionPaperBuilder() {
           </div>
         ))}
 
+        {/* CIE Questions Section */}
+        {examType === "CIE" && (
+          <div className="cie-questions-section">
+            {cieQuestions.map((question) => (
+              <div key={question.id} className="cie-question-box">
+                <div className="question-header">
+                  <h4>Question {question.id}</h4>
+                  {!isSubmitted && (
+                    <button 
+                      onClick={() => deleteCieQuestion(question.id)}
+                      className="delete-question-btn"
+                    >
+                      🗑️ Delete
+                    </button>
+                  )}
+                </div>
+
+                <div className="pattern-selection">
+                  <label>Choose Marks Distribution Pattern:</label>
+                  <select
+                    value={question.pattern}
+                    onChange={(e) => updateCieQuestionPattern(question.id, e.target.value)}
+                    disabled={isSubmitted}
+                  >
+                    <option value="">-- Select Pattern --</option>
+                    {Object.keys(ciePatterns).map((pattern, i) => (
+                      <option key={i} value={pattern}>
+                        {pattern}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                {question.subQuestions.length > 0 && (
+                  <div className="sub-questions">
+                    {question.subQuestions.map((sub, subIndex) => (
+                      <div key={subIndex} className="sub-question">
+                        <div className="sub-question-header">
+                          <label>{sub.label === "main" ? `${question.id})` : `${question.id}${sub.label})`}</label>
+                          <span className="marks-display">[{sub.marks} marks]</span>
+                        </div>
+                        
+                        <textarea
+                          value={sub.text}
+                          onChange={(e) => updateCieSubQuestion(question.id, subIndex, "text", e.target.value)}
+                          placeholder="Question text"
+                          rows={3}
+                          disabled={isSubmitted}
+                        />
+                        
+                        <div className="sub-question-meta">
+                          <select
+                            value={sub.co}
+                            onChange={(e) => updateCieSubQuestion(question.id, subIndex, "co", e.target.value)}
+                            disabled={isSubmitted}
+                            className="small"
+                          >
+                            <option value="CO1">CO1</option>
+                            <option value="CO2">CO2</option>
+                            <option value="CO3">CO3</option>
+                            <option value="CO4">CO4</option>
+                            <option value="CO5">CO5</option>
+                          </select>
+                          
+                          <select
+                            value={sub.level}
+                            onChange={(e) => updateCieSubQuestion(question.id, subIndex, "level", e.target.value)}
+                            disabled={isSubmitted}
+                            className="small"
+                          >
+                            <option value="L1">L1</option>
+                            <option value="L2">L2</option>
+                            <option value="L3">L3</option>
+                            <option value="L4">L4</option>
+                            <option value="L5">L5</option>
+                          </select>
+                          
+                          <input
+                            type="number"
+                            value={sub.marks}
+                            onChange={(e) => updateCieSubQuestion(question.id, subIndex, "marks", parseInt(e.target.value) || 0)}
+                            className="small"
+                            disabled={isSubmitted}
+                          />
+                          
+                          <input
+                            type="file"
+                            accept="image/*"
+                            onChange={(e) => updateCieSubQuestion(question.id, subIndex, "image", e.target.files[0])}
+                            disabled={isSubmitted}
+                          />
+                          
+                          {sub.image && (
+                            <img
+                              src={URL.createObjectURL(sub.image)}
+                              alt="question"
+                              style={{
+                                maxWidth: "150px",
+                                display: "block",
+                                marginTop: "5px",
+                              }}
+                            />
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+
         <hr />
         <h2>🖨 Question Paper Preview</h2>
         <div className="preview" ref={previewRef}>
@@ -534,6 +916,9 @@ function QuestionPaperBuilder() {
           </p>
           <p>
             <strong>Semester:</strong> {semester || "[Semester]"}
+          </p>
+          <p>
+            <strong>Exam Type:</strong> {examType}
           </p>
           <p>{instructions}</p>
 
@@ -544,7 +929,39 @@ function QuestionPaperBuilder() {
             ))}
           </ul>
 
-          {modules.map((mod, modIndex) => (
+          {/* CIE Questions Preview */}
+          {examType === "CIE" && cieQuestions.map((question, questionIndex) => (
+            <div key={question.id}>
+              <h4>Question {question.id}</h4>
+              {question.subQuestions.length === 0 ? (
+                <em>Pattern not selected yet</em>
+              ) : (
+                question.subQuestions.map((sub, subIndex) => (
+                  <div key={subIndex}>
+                    {sub.label === "main" ? `${question.id})` : `${question.id}${sub.label})`} {sub.text} <strong>[{sub.marks} marks]</strong>
+                    <em> CO: {sub.co || "N/A"}</em>
+                    <em> | L: {sub.level || "N/A"}</em>
+                    {sub.image && (
+                      <img
+                        src={URL.createObjectURL(sub.image)}
+                        alt="preview"
+                        style={{ maxWidth: "150px", display: "block" }}
+                      />
+                    )}
+                  </div>
+                ))
+              )}
+              {/* Add --OR-- separator between questions (except for the last question) */}
+              {questionIndex < cieQuestions.length - 1 && (
+                <p className="or-text">
+                  <strong>-- OR --</strong>
+                </p>
+              )}
+            </div>
+          ))}
+
+          {/* SEE Modules Preview */}
+          {examType === "SEE" && modules.map((mod, modIndex) => (
             <div key={modIndex}>
               <h4>{mod.title}</h4>
               {mod.groups.length === 0 ? (
@@ -590,13 +1007,18 @@ function QuestionPaperBuilder() {
 
         <div className="action-buttons">
           {!isSubmitted && (
-            <button className="save-btn" onClick={() => saveQuestionPaper(true)}>
+            <button className="save-btn" onClick={() => saveDraftToLocalStorage()}>
               💾 Save Draft
             </button>
           )}
           {!isSubmitted && (
             <button className="submit-btn" onClick={confirmAndSubmit}>
               📤 Submit Final
+            </button>
+          )}
+          {!isSubmitted && (draftLoaded || lastSavedAt) && (
+            <button className="clear-btn" onClick={clearDraft}>
+              🗑️ Clear Draft
             </button>
           )}
           <button className="save-btn" onClick={downloadPreviewAsPdf}>

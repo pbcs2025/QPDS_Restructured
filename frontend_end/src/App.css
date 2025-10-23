@@ -149,3 +149,185 @@
   padding: 20px;
   box-sizing: border-box;
 }
+
+/* Exam Type Selection */
+.exam-type-selection {
+  margin-bottom: 20px;
+  padding: 15px;
+  background: #e8f4fd;
+  border-radius: 8px;
+  border: 1px solid #b3d9ff;
+}
+
+.exam-type-selection label {
+  font-weight: bold;
+  margin-right: 10px;
+  color: #003366;
+}
+
+.exam-type-selection select {
+  padding: 8px 12px;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  font-size: 16px;
+  background: white;
+}
+
+/* CIE Info */
+.cie-info {
+  background: #fff3cd;
+  border: 1px solid #ffeaa7;
+  border-radius: 6px;
+  padding: 12px;
+  margin-bottom: 20px;
+}
+
+.cie-info p {
+  margin: 0;
+  color: #856404;
+  font-weight: bold;
+}
+
+/* CIE Questions Styles */
+.add-question-btn {
+  background: #28a745;
+  color: white;
+  border: none;
+  padding: 10px 20px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-weight: bold;
+  margin-bottom: 20px;
+}
+
+.add-question-btn:hover {
+  background: #218838;
+}
+
+.cie-questions-section {
+  margin-top: 20px;
+}
+
+.cie-question-box {
+  border: 1px solid #ccc;
+  border-radius: 12px;
+  padding: 20px;
+  margin-bottom: 20px;
+  background: #fff;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+.question-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 15px;
+}
+
+.question-header h4 {
+  margin: 0;
+  color: #003366;
+  border-bottom: 2px solid #003366;
+  padding-bottom: 8px;
+}
+
+.delete-question-btn {
+  background: #dc3545;
+  color: white;
+  border: none;
+  padding: 5px 10px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 12px;
+}
+
+.delete-question-btn:hover {
+  background: #c82333;
+}
+
+.pattern-selection {
+  margin-bottom: 20px;
+}
+
+.pattern-selection label {
+  display: block;
+  font-weight: bold;
+  margin-bottom: 8px;
+  color: #003366;
+}
+
+.pattern-selection select {
+  width: 100%;
+  padding: 10px;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  font-size: 16px;
+}
+
+.sub-questions {
+  margin-top: 15px;
+}
+
+.sub-question {
+  border: 1px solid #e0e0e0;
+  border-radius: 8px;
+  padding: 15px;
+  margin-bottom: 15px;
+  background: #f9f9f9;
+}
+
+.sub-question-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 10px;
+}
+
+.sub-question-header label {
+  font-weight: bold;
+  color: #003366;
+  font-size: 16px;
+}
+
+.marks-display {
+  background: #003366;
+  color: white;
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-size: 12px;
+  font-weight: bold;
+}
+
+.sub-question textarea {
+  width: 100%;
+  padding: 10px;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  font-family: inherit;
+  resize: vertical;
+  min-height: 80px;
+  margin-bottom: 10px;
+}
+
+.sub-question-meta {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.sub-question-meta select,
+.sub-question-meta input {
+  padding: 6px 8px;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+}
+
+.sub-question-meta .small {
+  width: 80px;
+}
+
+.sub-question-meta input[type="file"] {
+  flex: 1;
+  min-width: 150px;
+}
