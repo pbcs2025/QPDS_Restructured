@@ -15,8 +15,6 @@ function AdminManageFaculty() {
   const [departments, setDepartments] = useState([]);
   const [departmentsLoading, setDepartmentsLoading] = useState(true);
   const [message, setMessage] = useState("");
-  const [internalList, setInternalList] = useState([]);
-  const [externalList, setExternalList] = useState([]);
 
   useEffect(() => {
     // Fetch colleges
@@ -49,37 +47,6 @@ function AdminManageFaculty() {
 
     fetchColleges();
     fetchDepartments();
-  }, []);
-
-  useEffect(() => {
-    const refresh = () => {
-      // Fetch full list and split by type
-      fetch(`${API_BASE}/faculty/all`)
-        .then((res) => res.json())
-        .then((list) => {
-          const internal = (list || []).filter((f) => (f.type || f.usertype) === 'internal');
-          const external = (list || []).filter((f) => (f.type || f.usertype) === 'external');
-          setInternalList(internal);
-          setExternalList(external);
-        })
-        .catch(() => {
-          setInternalList([]);
-          setExternalList([]);
-        });
-    };
-
-    // initial
-    refresh();
-    // listen for bulk upload completion
-    const handler = () => refresh();
-    if (typeof window !== 'undefined' && window.addEventListener) {
-      window.addEventListener('faculties-updated', handler);
-    }
-    return () => {
-      if (typeof window !== 'undefined' && window.removeEventListener) {
-        window.removeEventListener('faculties-updated', handler);
-      }
-    };
   }, []);
 
   const handleInputChange = (e) => {
@@ -151,6 +118,10 @@ function AdminManageFaculty() {
           phone: "",
           usertype: "",
         });
+        // Notify other components to refresh their faculty lists
+        if (typeof window !== 'undefined' && window.dispatchEvent) {
+          window.dispatchEvent(new CustomEvent('faculties-updated'));
+        }
       } else {
         setMessage("❌ " + (data.error || "Registration failed"));
       }
@@ -278,63 +249,6 @@ function AdminManageFaculty() {
         </div>
 
         {message && <p className="message-status">{message}</p>}
-      </div>
-
-      {/* Lists */}
-      <div style={{ marginTop: 24 }}>
-        <h3>Internal Faculty</h3>
-        <div className="table-wrapper">
-          <table className="user-table">
-            <thead>
-              <tr>
-                <th>Name</th>
-                <th>Email</th>
-                <th>Department</th>
-                <th>Contact</th>
-              </tr>
-            </thead>
-            <tbody>
-              {internalList.length === 0 ? (
-                <tr><td colSpan="4">No internal faculty found.</td></tr>
-              ) : internalList.map((f) => (
-                <tr key={f._id || f.facultyId}>
-                  <td>{f.name}</td>
-                  <td>{f.email}</td>
-                  <td>{f.department}</td>
-                  <td>{f.contactNumber}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-
-        <div style={{ height: 16 }}></div>
-
-        <h3>External Faculty</h3>
-        <div className="table-wrapper">
-          <table className="user-table">
-            <thead>
-              <tr>
-                <th>Name</th>
-                <th>Email</th>
-                <th>Department</th>
-                <th>Contact</th>
-              </tr>
-            </thead>
-            <tbody>
-              {externalList.length === 0 ? (
-                <tr><td colSpan="4">No external faculty found.</td></tr>
-              ) : externalList.map((f) => (
-                <tr key={f._id || f.facultyId}>
-                  <td>{f.name}</td>
-                  <td>{f.email}</td>
-                  <td>{f.department}</td>
-                  <td>{f.contactNumber}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
       </div>
     </div>
   );

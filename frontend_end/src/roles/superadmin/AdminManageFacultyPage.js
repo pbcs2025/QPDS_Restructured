@@ -50,6 +50,7 @@ function AdminManageFacultyPage() {
         throw new Error((data && data.error) || 'Upload failed');
       }
       setUploadResult(data);
+      console.log('Upload result data:', data); // Debug log to see actual data structure
       const summary = `✅ Created: ${data.created || 0} | ⏭️ Skipped: ${data.skipped || 0} | ❌ Errors: ${(data.errors && data.errors.length) || 0}`;
       setMessage(summary);
       // Notify other components to refresh their faculty lists
@@ -183,6 +184,62 @@ function AdminManageFacultyPage() {
                             </p>
                           </div>
                         )}
+                      </div>
+                    </details>
+                  </div>
+                )}
+
+                {uploadResult && (
+                  (uploadResult.skipped && (
+                    (Array.isArray(uploadResult.skipped) && uploadResult.skipped.length > 0) || 
+                    (typeof uploadResult.skipped === 'number' && uploadResult.skipped > 0)
+                  )) || 
+                  (uploadResult.skipped === 0 && uploadResult.skipped !== undefined) // Show even if 0 skipped for debugging
+                ) && (
+                  <div style={{ marginTop: 8 }}>
+                    <details>
+                      <summary style={{ 
+                        background: '#fef3c7', 
+                        color: '#d97706', 
+                        padding: '8px 12px', 
+                        borderRadius: '6px', 
+                        fontWeight: 'bold',
+                        cursor: 'pointer',
+                        border: '1px solid #fde68a'
+                      }}>
+                        View skipped entries details ({Array.isArray(uploadResult.skipped) ? uploadResult.skipped.length : uploadResult.skipped})
+                      </summary>
+                      <div style={{ marginTop: 8, padding: '12px', background: '#fffbeb', borderRadius: '6px' }}>
+                        <h4 style={{ margin: '0 0 8px 0', color: '#92400e' }}>Skipped Entries Details:</h4>
+                        {Array.isArray(uploadResult.skipped) ? (
+                          <ul style={{ margin: 0, paddingLeft: '20px' }}>
+                            {uploadResult.skipped.slice(0, 50).map((skip, idx) => (
+                              <li key={idx} style={{ marginBottom: '4px' }}>
+                                <strong>Row {skip.row}:</strong> {skip.reason || 'Entry already exists or duplicate'}
+                              </li>
+                            ))}
+                            {uploadResult.skipped.length > 50 && (
+                              <li style={{ fontStyle: 'italic', color: '#6b7280' }}>
+                                ...and {uploadResult.skipped.length - 50} more skipped entries
+                              </li>
+                            )}
+                          </ul>
+                        ) : (
+                          <p style={{ margin: 0, color: '#92400e' }}>
+                            {uploadResult.skipped} entries were skipped during upload. This typically happens when:
+                          </p>
+                        )}
+                        
+                        {/* Additional info about skipped entries */}
+                        <div style={{ marginTop: '12px', padding: '8px', background: '#f0f9ff', borderRadius: '4px' }}>
+                          <h5 style={{ margin: '0 0 4px 0', color: '#1e40af' }}>Common Skip Reasons:</h5>
+                          <ul style={{ margin: 0, paddingLeft: '20px', fontSize: '14px', color: '#1e40af' }}>
+                            <li>Faculty with same email already exists</li>
+                            <li>Duplicate entries in the uploaded file</li>
+                            <li>Invalid or missing required data</li>
+                            <li>Faculty already registered in the system</li>
+                          </ul>
+                        </div>
                       </div>
                     </details>
                   </div>
