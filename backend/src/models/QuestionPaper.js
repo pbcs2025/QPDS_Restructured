@@ -2,32 +2,50 @@ const mongoose = require('mongoose');
 
 const QuestionPaperSchema = new mongoose.Schema(
   {
-    subject_code: { type: String, required: true, index: true, ref: 'Subject' },
-    subject_name: { type: String, required: true },
-    semester: { type: Number, required: true },
-    set_name: { type: String, required: true },
-    question_number: { type: String, required: true },
-    question_text: { type: String, required: true },
-    // Faculty-provided metadata
-    marks: { type: Number, default: 0 },
-    co: { type: String, default: '' },
-    level: { type: String, default: '' },
+    // Faculty identification
+    facultyId: { 
+      type: mongoose.Schema.Types.ObjectId, 
+      ref: 'User', 
+      required: true,
+      index: true
+    },
+    
+    // Paper details
+    title: { 
+      type: String, 
+      required: true, 
+      trim: true 
+    },
+    
+    // Content stores exactly as submitted by Faculty (HTML or JSON)
+    content: { 
+      type: mongoose.Schema.Types.Mixed, 
+      required: true 
+    },
+    
+    // Approval status
+    status: { 
+      type: String, 
+      enum: ['submitted', 'approved', 'rejected'], 
+      default: 'submitted',
+      index: true
+    },
+    
+    // Additional metadata
+    subject_code: { type: String, index: true, ref: 'Subject' },
+    subject_name: { type: String },
     department: { type: String, index: true },
-    file_name: { type: String },
-    file_type: { type: String },
-    question_file: { type: Buffer },
+    
     // Verification fields
-    approved: { type: Boolean, default: false },
     remarks: { type: String, default: '' },
-    verified_by: { type: String, default: '' },
+    verified_by: { type: String },
     verified_at: { type: Date },
-    status: { type: String, enum: ['pending', 'approved', 'rejected'], default: 'pending' },
   },
-  { timestamps: true }
+  { timestamps: true } // Automatically adds createdAt and updatedAt fields
 );
 
-// Ensure no duplicate questions
-QuestionPaperSchema.index({ subject_code: 1, semester: 1, question_number: 1 }, { unique: true });
+// Index for faster lookups
+QuestionPaperSchema.index({ facultyId: 1, title: 1 });
 
 module.exports = mongoose.model('QuestionPaper', QuestionPaperSchema);
 

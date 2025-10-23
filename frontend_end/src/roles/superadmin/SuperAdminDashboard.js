@@ -8,6 +8,7 @@ import SubjectsPage from "./SubjectsPage";
 import DepartmentsPage from "./DepartmentsPage";
 import AdminManageFacultyPage from "./AdminManageFacultyPage";
 import VerifierManagement from "../verifier/VerifierManagement";
+import { io } from "socket.io-client";
 
 
 function SuperAdminDashboard() {
@@ -125,12 +126,15 @@ function SuperAdminDashboard() {
     if (activeTab === "submitted") {
       setSubmittedLoading(true);
       setSubmittedError(null);
-      fetch(`${API_BASE}/verifier/approved`)
+      
+      // Using the new API endpoint for approved papers
+      fetch(`${API_BASE}/approvedpapers`)
         .then((res) => {
           if (!res.ok) throw new Error(`Status ${res.status}`);
           return res.json();
         })
         .then((data) => {
+          console.log('Fetched approved papers:', data);
           setSubmittedPapers(Array.isArray(data) ? data : []);
         })
         .catch((err) => {
@@ -142,7 +146,45 @@ function SuperAdminDashboard() {
     }
   }, [activeTab, API_BASE]);
 
-  // Fetch active departments for dropdown when verifiers view active
+  // Socket.io connection for real-time updates
+  useEffect(() => {
+    if (activeTab === "submitted") {
+      // Connect to socket server
+      const socketURL = process.env.REACT_APP_API_BASE_URL || 'http://localhost:5001';
+      console.log('Connecting to socket server at:', socketURL);
+      const socket = io(socketURL);
+      
+      // Listen for paper_approved events
+      socket.on('paper_approved', (newPaper) => {
+        console.log('Received real-time paper approval:', newPaper);
+        setSubmittedPapers(prevPapers => {
+          // Check if paper already exists in the list
+          const exists = prevPapers.some(p => p._id === newPaper._id);
+          if (!exists) {
+            return [...prevPapers, newPaper];
+          }
+          return prevPapers;
+        });
+      });
+      
+      // Handle connection events
+      socket.on('connect', () => {
+        console.log('Socket connected successfully');
+      });
+      
+      socket.on('connect_error', (error) => {
+        console.error('Socket connection error:', error);
+      });
+      
+      // Clean up socket connection when component unmounts or tab changes
+      return () => {
+        console.log('Disconnecting socket');
+        socket.disconnect();
+      };
+    }
+  }, [activeTab]);
+  
+  // Fetch departments when verifiers view is active
   useEffect(() => {
     if (activeTab === "manageFaculty" && manageUsersView === "verifiers") {
       axios
@@ -160,7 +202,7 @@ function SuperAdminDashboard() {
           setDepartments([]);
         });
     }
-  }, [activeTab, manageUsersView, API_BASE]);
+  }, [activeTab, manageUsersView, API_BASE, newVerifierDept]);
 
   const refreshVerifiers = async () => {
     try {

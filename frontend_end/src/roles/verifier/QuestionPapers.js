@@ -36,7 +36,8 @@ const QuestionPapers = () => {
       if (selectedDepartment) params.append('department', selectedDepartment);
       if (selectedSemester) params.append('semester', selectedSemester);
       
-      const response = await fetch(`${API_BASE}/verifier/papers?${params.toString()}`, {
+      // Use the new API endpoint for submitted papers
+      const response = await fetch(`${API_BASE}/papers`, {
         method: 'GET',
         headers: {
           'Content-Type': 'application/json',
@@ -48,7 +49,17 @@ const QuestionPapers = () => {
       }
       
       const data = await response.json();
-      setPapers(data);
+      console.log('Fetched submitted papers:', data);
+      // Ensure data is an array - if it's wrapped in an object, extract the papers array
+      if (data && data.papers) {
+        setPapers(data.papers);
+      } else if (Array.isArray(data)) {
+        setPapers(data);
+      } else {
+        // If neither format is valid, set to empty array
+        console.error('Unexpected data format:', data);
+        setPapers([]);
+      }
       setError(null);
     } catch (err) {
       console.error('Error fetching papers:', err);
@@ -72,7 +83,8 @@ const QuestionPapers = () => {
       if (selectedDepartment) params.append('department', selectedDepartment);
       if (selectedSemester) params.append('semester', selectedSemester);
       
-      const response = await fetch(`${API_BASE}/verifier/rejected?${params.toString()}`, {
+      // Use the new API endpoint for rejected papers
+      const response = await fetch(`${API_BASE}/rejectedpapers`, {
         method: 'GET',
         headers: {
           'Content-Type': 'application/json',
@@ -84,7 +96,16 @@ const QuestionPapers = () => {
       }
       
       const data = await response.json();
-      setRejectedPapers(data);
+      console.log('Fetched rejected papers:', data);
+      // Ensure data is an array
+      if (data && data.papers) {
+        setRejectedPapers(data.papers);
+      } else if (Array.isArray(data)) {
+        setRejectedPapers(data);
+      } else {
+        console.error('Unexpected data format for rejected papers:', data);
+        setRejectedPapers([]);
+      }
       setError(null);
     } catch (err) {
       console.error('Error fetching rejected papers:', err);
@@ -101,7 +122,8 @@ const QuestionPapers = () => {
       if (selectedDepartment) params.append('department', selectedDepartment);
       if (selectedSemester) params.append('semester', selectedSemester);
       
-      const response = await fetch(`${API_BASE}/verifier/approved?${params.toString()}`, {
+      // Use the new API endpoint for approved papers
+      const response = await fetch(`${API_BASE}/approvedpapers`, {
         method: 'GET',
         headers: {
           'Content-Type': 'application/json',
@@ -113,7 +135,16 @@ const QuestionPapers = () => {
       }
       
       const data = await response.json();
-      setApprovedPapers(data);
+      console.log('Fetched approved papers:', data);
+      // Ensure data is an array
+      if (data && data.papers) {
+        setApprovedPapers(data.papers);
+      } else if (Array.isArray(data)) {
+        setApprovedPapers(data);
+      } else {
+        console.error('Unexpected data format for approved papers:', data);
+        setApprovedPapers([]);
+      }
       setError(null);
     } catch (err) {
       console.error('Error fetching approved papers:', err);
@@ -188,14 +219,14 @@ const QuestionPapers = () => {
 
     try {
       setUpdating(true);
-      const response = await fetch(`${API_BASE}/verifier/papers/${selectedPaper.subject_code}/${selectedPaper.semester}`, {
+      // Use the new API endpoint for approving papers
+      const response = await fetch(`${API_BASE}/papers/${selectedPaper._id}/approve`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          questions: selectedPaper.questions,
-          finalStatus: 'approved'
+          remarks: 'Approved by verifier'
         }),
       });
 
@@ -235,14 +266,14 @@ const QuestionPapers = () => {
 
     try {
       setUpdating(true);
-      const response = await fetch(`${API_BASE}/verifier/papers/${selectedPaper.subject_code}/${selectedPaper.semester}`, {
+      // Use the new API endpoint for rejecting papers
+      const response = await fetch(`${API_BASE}/papers/${selectedPaper._id}/reject`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          questions: selectedPaper.questions,
-          finalStatus: 'rejected'
+          remarks: 'Rejected by verifier'
         }),
       });
 
