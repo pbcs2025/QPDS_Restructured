@@ -8,6 +8,7 @@ router.use('/api/subjects', require('./subjects'));
 router.use('/api/departments', require('./departments'));
 router.use('/api/colleges', require('./colleges'));
 router.use('/api/verifier', require('./verifier'));
+router.use('/api', require('./papers')); // Question Paper Approval System routes
 router.post('/api/assignQPSetter', require('../controllers/assignmentController').assignQPSetter);
 router.get('/api/assignedSubjects', require('../controllers/assignmentController').assignedSubjects);
 router.get('/api/assignments/:subjectCode', require('../controllers/assignmentController').assignmentsBySubject);

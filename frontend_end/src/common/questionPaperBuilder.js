@@ -6,7 +6,7 @@ import { jsPDF } from "jspdf";
 import { useLocation } from "react-router-dom";
 
 function QuestionPaperBuilder() {
-  const API_BASE = process.env.REACT_APP_API_BASE_URL;
+  const API_BASE = process.env.REACT_APP_API_BASE_URL || 'http://localhost:5000/api';
   const location = useLocation();
   const [subject, setSubject] = useState("");
   const [subjectCode, setSubjectCode] = useState("");
@@ -187,7 +187,7 @@ function QuestionPaperBuilder() {
       marks: mark,
       co: "",
       level: "",
-      image: null, // 👈 store selected file
+      image: null, // store selected file
     }));
   };
 
@@ -288,6 +288,11 @@ function QuestionPaperBuilder() {
       alert("⚠️ Please fill subject code, name and semester.");
       return false;
     }
+    const semNum = parseInt(String(semester).replace(/[^0-9]/g, ''), 10);
+    if (Number.isNaN(semNum) || semNum < 1 || semNum > 8) {
+      alert("⚠️ Semester must be a number between 1 and 8.");
+      return false;
+    }
 
     // Validate CIE questions
     if (examType === "CIE") {
@@ -371,6 +376,7 @@ function QuestionPaperBuilder() {
     try {
       const now = new Date().toISOString();
 
+
       // Always save draft to localStorage first
       saveDraftToLocalStorage();
 
@@ -411,6 +417,7 @@ function QuestionPaperBuilder() {
       }
 
       // Save SEE modules to server
+
       for (let mod of modules) {
         for (let group of mod.groups) {
           for (let q of group) {
@@ -418,14 +425,16 @@ function QuestionPaperBuilder() {
               const formData = new FormData();
               formData.append("subject_code", subjectCode);
               formData.append("subject_name", subject);
-              formData.append("semester", semester);
+              formData.append("semester", semNum);
               formData.append("question_number", q.label);
               formData.append("question_text", q.text);
               formData.append("co", q.co);
               formData.append("level", q.level);
               formData.append("marks", q.marks);
               formData.append("faculty_email", facultyEmail);
+
               formData.append("exam_type", "SEE");
+
               if (q.image) formData.append("file", q.image);
 
               await axios.post(
@@ -447,8 +456,9 @@ function QuestionPaperBuilder() {
       
       alert("✅ All questions submitted successfully!");
     } catch (error) {
-      console.error("Error saving question bank:", error);
-      alert("❌ Failed to save questions.");
+      console.error("Error saving question bank:", error && (error.response?.data || error.message));
+      const msg = error?.response?.data?.error || "Failed to save questions.";
+      alert(`❌ ${msg}`);
     }
   };
 
@@ -604,13 +614,16 @@ function QuestionPaperBuilder() {
             disabled={isSubmitted}
           />
           <label>Semester:</label>
-          <input
-            type="text"
-            value={semester}
+          <select
+            value={String(semester)}
             onChange={(e) => setSemester(e.target.value)}
-            placeholder="e.g., 4th Semester B.E."
             disabled={isSubmitted}
-          />
+          >
+            <option value="">Select Semester</option>
+            {[1,2,3,4,5,6,7,8].map(n => (
+              <option key={n} value={n}>{n}</option>
+            ))}
+          </select>
         </div>
 
         <label>Student Instructions:</label>
@@ -743,7 +756,7 @@ function QuestionPaperBuilder() {
                         disabled={isSubmitted}
                       />
 
-                      {/* 👇 Image Upload */}
+                      {/* Image Upload */}
                       <input
                         type="file"
                         accept="image/*"
