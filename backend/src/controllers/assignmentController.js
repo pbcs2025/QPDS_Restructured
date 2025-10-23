@@ -18,8 +18,24 @@ exports.assignQPSetter = async (req, res) => {
           email,
           'Appointment as Question Paper Setter - GAT Exam Portal',
           '',
-          `<p>Assigned for <b>${subjectCode}</b>. Submission Deadline: ${submitDate}</p>
-           <p>Credentials:</p><ul><li>Username: ${email}</li><li>Password: ${password || ''}</li></ul>`
+          `<p>Dear Faculty,</p>
+          
+          <p>We are pleased to inform you that you have been assigned as a Question Paper Setter for the course <span style="font-size: 20px; font-weight: bold; color: #2c5aa0; background-color: #f0f8ff; padding: 4px 8px; border-radius: 4px;">${subjectCode}</span>.</p>
+          
+          <p><span style="background-color: #fff3cd; color: #856404; padding: 8px 12px; border-radius: 4px; font-weight: bold; border-left: 4px solid #ffc107;"><b>Submission Deadline:</b> ${submitDate}</span></p>
+          
+          <p>Your login credentials are as follows:</p>
+          
+          <p><b>Username:</b> ${email}<br>
+          <b>Password:</b> ${password || ''}</p>
+          
+          <p>Please use the above credentials to log in to the Question Paper Setting System. For security reasons, we strongly recommend that you change your password immediately after logging in.</p>
+          
+          <p>If you have any questions or face difficulties accessing the system, kindly contact the examination cell at support@gat.ac.in.</p>
+          
+          <p>Best regards,<br>
+          Examination Cell<br>
+          Global Academy of Technology</p>`
         );
       } catch (err) {
         console.error('Email error:', err.message);
@@ -114,9 +130,15 @@ exports.getFacultyAssignments = async (req, res) => {
         submit_date: 1,
         status: {
           $cond: {
-            if: { $lt: ['$submit_date', new Date()] },
-            then: 'Overdue',
-            else: 'Pending'
+            if: { $eq: ['$status', 'submitted'] },
+            then: 'Submitted',
+            else: {
+              $cond: {
+                if: { $lt: ['$submit_date', new Date()] },
+                then: 'Overdue',
+                else: 'Pending'
+              }
+            }
           }
         }
       } }
@@ -127,11 +149,69 @@ exports.getFacultyAssignments = async (req, res) => {
       assignments: assignments,
       total_assignments: assignments.length,
       pending: assignments.filter(a => a.status === 'Pending').length,
-      overdue: assignments.filter(a => a.status === 'Overdue').length
+      overdue: assignments.filter(a => a.status === 'Overdue').length,
+      submitted: assignments.filter(a => a.status === 'Submitted').length
     });
   } catch (err) {
     console.error('Error fetching faculty assignments:', err);
     res.status(500).json({ error: 'Failed to fetch faculty assignments' });
+  }
+};
+
+// Get assigned subject codes for a faculty member
+exports.getFacultySubjectCodes = async (req, res) => {
+  try {
+    const { email } = req.params;
+    
+    if (!email) {
+      return res.status(400).json({ error: 'Email is required' });
+    }
+
+    const assignments = await Assignment.aggregate([
+      { $match: { email: email } },
+      { $lookup: { from: 'subjects', localField: 'subject_code', foreignField: 'subject_code', as: 'subject' } },
+      { $unwind: { path: '$subject', preserveNullAndEmptyArrays: true } },
+      { $project: {
+        subject_code: 1,
+        subject_name: '$subject.subject_name',
+        submit_date: 1,
+        status: 1
+      } }
+    ]);
+
+    res.json(assignments);
+  } catch (err) {
+    console.error('Error fetching faculty subject codes:', err);
+    res.status(500).json({ error: 'Failed to fetch faculty subject codes' });
+  }
+};
+
+// Update assignment status to submitted
+exports.updateAssignmentStatus = async (req, res) => {
+  try {
+    const { email, subjectCode } = req.body;
+    
+    if (!email || !subjectCode) {
+      return res.status(400).json({ error: 'Email and subject code are required' });
+    }
+
+    const assignment = await Assignment.findOneAndUpdate(
+      { email: email, subject_code: subjectCode },
+      { 
+        status: 'submitted',
+        submitted_at: new Date()
+      },
+      { new: true }
+    );
+
+    if (!assignment) {
+      return res.status(404).json({ error: 'Assignment not found' });
+    }
+
+    res.json({ message: 'Assignment status updated successfully', assignment });
+  } catch (err) {
+    console.error('Error updating assignment status:', err);
+    res.status(500).json({ error: 'Failed to update assignment status' });
   }
 };
 

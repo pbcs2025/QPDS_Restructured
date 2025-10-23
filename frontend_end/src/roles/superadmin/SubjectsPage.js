@@ -7,6 +7,7 @@ function SubjectsPage() {
   const [subjects, setSubjects] = useState([]);
   const [departments, setDepartments] = useState([]);
   const [selectedDept, setSelectedDept] = useState(null);
+  const [selectedSemester, setSelectedSemester] = useState(null);
   const [showForm, setShowForm] = useState(false);
   const [newSubject, setNewSubject] = useState({
     subject_code: "",
@@ -16,6 +17,24 @@ function SubjectsPage() {
     credits: "",
   });
   const [message, setMessage] = useState("");
+
+
+  // Function to get contrasting text color
+  const getContrastColor = (hexColor) => {
+    // Remove # if present
+    const hex = hexColor.replace('#', '');
+    
+    // Convert to RGB
+    const r = parseInt(hex.substr(0, 2), 16);
+    const g = parseInt(hex.substr(2, 2), 16);
+    const b = parseInt(hex.substr(4, 2), 16);
+    
+    // Calculate luminance
+    const luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+    
+    // Return black for light backgrounds, white for dark backgrounds
+    return luminance > 0.5 ? '#000000' : '#ffffff';
+  };
 
   // Fetch subjects
   useEffect(() => {
@@ -67,6 +86,16 @@ function SubjectsPage() {
     return acc;
   }, {});
 
+  // Get available semesters for selected department
+  const availableSemesters = selectedDept 
+    ? Object.keys(groupedBySemester).sort((a, b) => parseInt(a) - parseInt(b))
+    : [];
+
+  // Filter subjects for selected semester
+  const semesterSubjects = selectedSemester 
+    ? groupedBySemester[selectedSemester] || []
+    : [];
+
   // Add subject
   const handleAdd = async () => {
     setMessage("");
@@ -93,12 +122,20 @@ function SubjectsPage() {
         setNewSubject({
           subject_code: "",
           subject_name: "",
-          department: selectedDept || "",
+          department: "",
           semester: "",
           credits: "",
         });
         setShowForm(false);
-        window.location.reload();
+        
+        // Refresh subjects data without page reload
+        fetch(`${API_BASE}/subjects`)
+          .then((res) => res.json())
+          .then((data) => setSubjects(data || []))
+          .catch((err) => {
+            console.error("Fetch error (subjects):", err);
+            setSubjects([]);
+          });
       } else {
         setMessage("❌ " + (data.error || "Failed to add subject"));
       }
@@ -111,15 +148,35 @@ function SubjectsPage() {
   // Delete subject
   const handleDelete = (id) => {
     if (window.confirm("Delete this subject?")) {
-      fetch(`${API_BASE}/subjects/${id}`, { method: "DELETE" }).then(() =>
-        window.location.reload()
-      );
+      fetch(`${API_BASE}/subjects/${id}`, { method: "DELETE" })
+        .then(() => {
+          // Refresh subjects data without page reload
+          fetch(`${API_BASE}/subjects`)
+            .then((res) => res.json())
+            .then((data) => setSubjects(data || []))
+            .catch((err) => {
+              console.error("Fetch error (subjects):", err);
+              setSubjects([]);
+            });
+        })
+        .catch((err) => {
+          console.error("Delete error:", err);
+          setMessage("❌ Failed to delete subject.");
+        });
     }
   };
 
   // Back to department cards
   const handleBack = () => {
     setSelectedDept(null);
+    setSelectedSemester(null);
+    setShowForm(false);
+    setMessage("");
+  };
+
+  // Back to semester cards
+  const handleBackToSemesters = () => {
+    setSelectedSemester(null);
     setShowForm(false);
     setMessage("");
   };
@@ -129,7 +186,19 @@ function SubjectsPage() {
       {/* Add Subject button stays at the top */}
       <button
         className="add-btn"
-        onClick={() => setShowForm((prev) => !prev)}
+        onClick={() => {
+          setShowForm((prev) => !prev);
+          if (!showForm) {
+            // Pre-populate form based on current context
+            setNewSubject({
+              subject_code: "",
+              subject_name: "",
+              department: selectedDept || "",
+              semester: selectedSemester || "",
+              credits: "",
+            });
+          }
+        }}
       >
         {showForm ? "Cancel" : "+ Add New Subject"}
       </button>
@@ -146,7 +215,6 @@ function SubjectsPage() {
                 setNewSubject({
                   ...newSubject,
                   subject_code: e.target.value,
-                  department: selectedDept || "",
                 })
               }
             />
@@ -171,21 +239,19 @@ function SubjectsPage() {
             />
           </div>
           <div className="form-group">
-            {!selectedDept && (
-              <select
-                value={newSubject.department}
-                onChange={(e) =>
-                  setNewSubject({ ...newSubject, department: e.target.value })
-                }
-              >
-                <option value="">-- Select Department --</option>
-                {departments.map((dept) => (
-                  <option key={dept._id || dept.id} value={dept.name || dept.department}>
-                    {dept.name || dept.department}
-                  </option>
-                ))}
-              </select>
-            )}
+            <select
+              value={newSubject.department}
+              onChange={(e) =>
+                setNewSubject({ ...newSubject, department: e.target.value })
+              }
+            >
+              <option value="">-- Select Department --</option>
+              {departments.map((dept) => (
+                <option key={dept._id || dept.id} value={dept.name || dept.department}>
+                  {dept.name || dept.department}
+                </option>
+              ))}
+            </select>
           </div>
           <div className="form-group">
             <select
@@ -217,59 +283,106 @@ function SubjectsPage() {
           <h1>Departments</h1>
           <div className="departments-grid">
             {departments.length === 0 && <p>No departments found.</p>}
-            {departments.map((dept) => (
+            {departments.map((dept) => {
+              const deptName = dept.name || dept.department;
+              const deptColor = dept.color || "#6c757d"; // use dynamic color if provided, else default gray
+              return (
+                <div
+                  key={dept._id || dept.id}
+                  className="department-card"
+                  onClick={() => setSelectedDept(deptName)}
+                  style={{
+                    backgroundColor: deptColor,
+                    color: getContrastColor(deptColor),
+                    border: `2px solid ${deptColor}`,
+                    boxShadow: `0 4px 8px rgba(0,0,0,0.1)`,
+                    transition: 'transform 0.2s ease, box-shadow 0.2s ease'
+                  }}
+                  onMouseEnter={(e) => {
+                    e.target.style.transform = 'translateY(-2px)';
+                    e.target.style.boxShadow = `0 6px 12px rgba(0,0,0,0.15)`;
+                  }}
+                  onMouseLeave={(e) => {
+                    e.target.style.transform = 'translateY(0)';
+                    e.target.style.boxShadow = `0 4px 8px rgba(0,0,0,0.1)`;
+                  }}
+                >
+                  {deptName}
+                </div>
+              );
+            })}
+          </div>
+        </>
+      )}
+
+      {/* Selected Department - Show Semester Cards */}
+      {selectedDept && !selectedSemester && (
+        <>
+          <button className="back-btn" onClick={handleBack}>
+            ← Back to Departments
+          </button>
+          <h1>{selectedDept}</h1>
+          
+          <div className="departments-grid">
+            {availableSemesters.length === 0 && <p>No subjects found for this department.</p>}
+            {availableSemesters.map((sem) => (
               <div
-                key={dept._id || dept.id}
+                key={sem}
                 className="department-card"
-                onClick={() => setSelectedDept(dept.name || dept.department)}
+                onClick={() => setSelectedSemester(sem)}
+                style={{ cursor: 'pointer' }}
               >
-                {dept.name || dept.department}
+                <div style={{ fontSize: '18px', fontWeight: 'bold' }}>
+                  Semester {sem}
+                </div>
+                <div style={{ fontSize: '14px', color: '#666', marginTop: '4px' }}>
+                  {groupedBySemester[sem]?.length || 0} subjects
+                </div>
               </div>
             ))}
           </div>
         </>
       )}
 
-      {/* Selected Department Subjects */}
-      {selectedDept && (
+      {/* Selected Semester Subjects */}
+      {selectedDept && selectedSemester && (
         <>
-          <button className="back-btn" onClick={handleBack}>
-            ← Back to Departments
+          <button className="back-btn" onClick={handleBackToSemesters}>
+            ← Back to Semesters
           </button>
-          <h1>{selectedDept}</h1>
+          <h1>{selectedDept} - Semester {selectedSemester}</h1>
 
-          {/* Subjects Table grouped by semester */}
-          {Object.keys(groupedBySemester)
-            .sort((a, b) => a - b)
-            .map((sem) => (
-              <div key={sem} className="table-wrapper">
-                <h3>Semester {sem}</h3>
-                <table className="user-table">
-                  <thead>
-                    <tr>
-                      <th>Code</th>
-                      <th>Name</th>
-                      <th>Credits</th>
-                      <th>Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {groupedBySemester[sem].map((sub) => (
-                      <tr key={sub._id || sub.id}>
-                        <td>{sub.subject_code}</td>
-                        <td>{sub.subject_name}</td>
-                        <td>{sub.credits}</td>
-                        <td>
-                          <button onClick={() => handleDelete(sub._id || sub.id)}>
-                            Delete
-                          </button>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            ))}
+          <div className="table-wrapper">
+            <table className="user-table">
+              <thead>
+                <tr>
+                  <th>Code</th>
+                  <th>Name</th>
+                  <th>Credits</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {semesterSubjects.length === 0 && (
+                  <tr>
+                    <td colSpan="4">No subjects found for this semester.</td>
+                  </tr>
+                )}
+                {semesterSubjects.map((sub) => (
+                  <tr key={sub._id || sub.id}>
+                    <td>{sub.subject_code}</td>
+                    <td>{sub.subject_name}</td>
+                    <td>{sub.credits}</td>
+                    <td>
+                      <button onClick={() => handleDelete(sub._id || sub.id)}>
+                        Delete
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </>
       )}
     </div>

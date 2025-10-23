@@ -141,10 +141,23 @@ exports.listAll = async (_req, res) => {
   }
 };
 
+<<<<<<< HEAD
 // List grouped papers across all subject_code and semester
 exports.getPapers = async (_req, res) => {
   try {
     const papers = await QuestionPaper.find({})
+=======
+// List and group question papers (helper for UI overview)
+exports.getPapers = async (req, res) => {
+  try {
+    const { subject_code, semester } = req.query;
+
+    const filter = {};
+    if (subject_code) filter.subject_code = { $regex: `^${String(subject_code).trim()}$`, $options: 'i' };
+    if (semester) filter.semester = parseInt(semester, 10);
+
+    const papers = await QuestionPaper.find(filter)
+>>>>>>> 9fa3081a90a2849a3a9e74a25d756696ba387d79
       .sort({ subject_code: 1, semester: 1, question_number: 1 })
       .lean();
 
@@ -153,12 +166,20 @@ exports.getPapers = async (_req, res) => {
       const key = `${paper.subject_code}_${paper.semester}`;
       if (!groupedPapers[key]) {
         groupedPapers[key] = {
+<<<<<<< HEAD
           _id: `${paper.subject_code}_${paper.semester}`,
+=======
+          _id: key,
+>>>>>>> 9fa3081a90a2849a3a9e74a25d756696ba387d79
           subject_code: paper.subject_code,
           subject_name: paper.subject_name,
           semester: paper.semester,
           questions: [],
           status: 'pending',
+<<<<<<< HEAD
+=======
+          createdAt: paper.createdAt,
+>>>>>>> 9fa3081a90a2849a3a9e74a25d756696ba387d79
         };
       }
       groupedPapers[key].questions.push({
@@ -188,6 +209,7 @@ exports.getPapers = async (_req, res) => {
 
 /// ... existing imports above
 exports.removeOne = async (req, res) => {
+<<<<<<< HEAD
   try {
     const { verifierId } = req.params;
     if (!verifierId) {
@@ -226,12 +248,75 @@ exports.updatePaper = async (req, res) => {
     }
 
     // Update each question in the paper only (no snapshot here)
+=======
+  try {
+    const { verifierId } = req.params;
+    if (!verifierId) {
+      return res.status(400).json({ error: 'verifierId is required' });
+    }
+
+    let verifier = null;
+    if (mongoose.Types.ObjectId.isValid(verifierId)) {
+      // Try by Verifier _id or by stored verifierId (linked User _id)
+      verifier = await Verifier.findOne({
+        $or: [
+          { _id: new mongoose.Types.ObjectId(verifierId) },
+          { verifierId: new mongoose.Types.ObjectId(verifierId) },
+        ],
+      }).lean();
+    }
+    if (!verifier) {
+      // Fallback: try direct match on verifierId field (string form)
+      verifier = await Verifier.findOne({ verifierId }).lean();
+    }
+
+    if (!verifier) {
+      return res.status(404).json({ error: 'Verifier not found' });
+    }
+
+    // Delete the verifier document
+    await Verifier.deleteOne({ _id: verifier._id });
+
+    // Delete the linked user if present
+    if (verifier.verifierId) {
+      const linkedId = mongoose.Types.ObjectId.isValid(verifier.verifierId)
+        ? new mongoose.Types.ObjectId(verifier.verifierId)
+        : verifier.verifierId;
+      await User.deleteOne({ _id: linkedId });
+    }
+
+    return res.json({ success: true, message: 'Verifier and linked user deleted successfully.' });
+  } catch (err) {
+    console.error('Verifier removeOne error:', err);
+    return res.status(500).json({ error: 'Server error' });
+  }
+};
+
+exports.updatePaper = async (req, res) => {
+  try {
+    const { subject_code: pCode, semester: pSem } = req.params;
+    const { subject_code: bCode, semester: bSem, questions, finalStatus } = req.body || {};
+
+    const subject_code = String(pCode || bCode || '').trim();
+    const semester = parseInt(pSem || bSem, 10);
+
+    if (!subject_code || Number.isNaN(semester)) {
+      return res.status(400).json({ error: 'subject_code and semester are required' });
+    }
+    if (!questions || !Array.isArray(questions)) {
+      return res.status(400).json({ error: 'Questions array is required' });
+    }
+
+    const normalizedCode = subject_code;
+
+    // Update each question in the paper
+>>>>>>> 9fa3081a90a2849a3a9e74a25d756696ba387d79
     const updatePromises = questions.map(async (question) => {
       const updateData = {
-        approved: question.approved || false,
+        approved: !!question.approved,
         remarks: question.remarks || '',
         verified_at: new Date(),
-        status: question.approved ? 'approved' : 'rejected'
+        status: question.approved ? 'approved' : 'rejected',
       };
       if (typeof question.question_text === 'string' && question.question_text.trim() !== '') {
         updateData.question_text = question.question_text.trim();
@@ -245,61 +330,61 @@ exports.updatePaper = async (req, res) => {
       if (typeof question.marks === 'number' && !Number.isNaN(question.marks)) {
         updateData.marks = question.marks;
       }
-      
-      const updated = await QuestionPaper.findOneAndUpdate(
-        { 
-          subject_code: subject_code,
-          semester: parseInt(semester),
-          question_number: question.question_number 
-        },
-        updateData,
-        { new: true }
-      );
 
-      return updated;
+      return await QuestionPaper.findOneAndUpdate(
+        {
+          subject_code: { $regex: `^${normalizedCode}$`, $options: 'i' },
+          semester: semester,
+          question_number: question.question_number,
+        },
+        { $set: updateData },
+        { new: true }
+      ).lean();
     });
-    
+
     await Promise.all(updatePromises);
 
-    // Upsert one record per subject_code into the respective collections
-    const anyApproved = finalStatus === 'approved' || questions.some(q => !!q.approved);
-    const anyRejected = finalStatus === 'rejected' || questions.some(q => q.approved === false);
-
-    // If verifier set a FINAL STATUS, enforce it across all questions for this paper
+    // Enforce final status across all questions for this paper if provided
     if (finalStatus === 'approved') {
       await QuestionPaper.updateMany(
-        { subject_code, semester: parseInt(semester) },
+        { subject_code: { $regex: `^${normalizedCode}$`, $options: 'i' }, semester },
         { $set: { status: 'approved', approved: true, verified_at: new Date() } }
       );
     } else if (finalStatus === 'rejected') {
       await QuestionPaper.updateMany(
-        { subject_code, semester: parseInt(semester) },
+        { subject_code: { $regex: `^${normalizedCode}$`, $options: 'i' }, semester },
         { $set: { status: 'rejected', approved: false, verified_at: new Date() } }
       );
     }
 
+    const anyApproved = finalStatus === 'approved' || questions.some((q) => !!q.approved);
+    const anyRejected = finalStatus === 'rejected' || questions.some((q) => q.approved === false);
+
     if (anyApproved && !anyRejected) {
       await ApprovedPaper.updateOne(
-        { subject_code, semester: parseInt(semester) },
-        { $set: { subject_code, semester: parseInt(semester) } },
+        { subject_code: normalizedCode, semester },
+        { $set: { subject_code: normalizedCode, semester } },
         { upsert: true }
       );
-      console.log('[ApprovedPaper] upserted for', subject_code, semester);
     }
 
     if (anyRejected && !anyApproved) {
       await RejectedPaper.updateOne(
-        { subject_code, semester: parseInt(semester) },
-        { $set: { subject_code, semester: parseInt(semester) } },
+        { subject_code: normalizedCode, semester },
+        { $set: { subject_code: normalizedCode, semester } },
         { upsert: true }
       );
-      console.log('[RejectedPaper] upserted for', subject_code, semester);
     }
-    
+
     return res.json({ message: 'Paper updated successfully', finalStatus: finalStatus || null });
+<<<<<<< HEAD
 
   } catch (err) {
     console.error('Paper update error:', err);
+=======
+  } catch (err) {
+    console.error('Verifier updatePaper error:', err);
+>>>>>>> 9fa3081a90a2849a3a9e74a25d756696ba387d79
     return res.status(500).json({ error: 'Server error' });
   }
 };

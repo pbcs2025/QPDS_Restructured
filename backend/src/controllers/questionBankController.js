@@ -1,4 +1,5 @@
 const QuestionPaper = require('../models/QuestionPaper');
+const Assignment = require('../models/Assignment');
 
 // Helper to get the next set name or latest set name
 const getSetName = async (subject_code, semester, useLatest = false) => {
@@ -21,9 +22,27 @@ const getSetName = async (subject_code, semester, useLatest = false) => {
   }
 };
 
+// Helper to update assignment status when questions are submitted
+const updateAssignmentStatus = async (subject_code, facultyEmail) => {
+  try {
+    if (facultyEmail) {
+      await Assignment.findOneAndUpdate(
+        { email: facultyEmail, subject_code: subject_code },
+        { 
+          status: 'submitted',
+          submitted_at: new Date()
+        }
+      );
+    }
+  } catch (err) {
+    console.error('Error updating assignment status:', err);
+    // Don't throw error as this shouldn't break the main flow
+  }
+};
+
 // ---------------- Single Question ----------------
 exports.create = async (req, res) => {
-  const { subject_code, subject_name, semester, question_number, question_text, set_name, co, level, marks } = req.body;
+  const { subject_code, subject_name, semester, question_number, question_text, set_name, co, level, marks, faculty_email } = req.body;
   const file = req.file;
 
   if (!subject_code || !subject_name || !semester || !question_number || !question_text) {
@@ -56,6 +75,11 @@ exports.create = async (req, res) => {
       file_type: file ? file.mimetype : null,
       question_file: file ? file.buffer : null,
     });
+
+    // Update assignment status if faculty email is provided
+    if (faculty_email) {
+      await updateAssignmentStatus(subject_code, faculty_email);
+    }
 
     res.json({ message: '✅ Question saved successfully', id: doc._id, set_name: finalSetName });
   } catch (err) {

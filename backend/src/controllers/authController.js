@@ -123,7 +123,19 @@ exports.forgotPassword = async (req, res) => {
         email,
         'GAT Portal - Password Recovery',
         '',
-        `<p>Your temporary password is:</p><h2>${user.password}</h2>`
+        `<p>Dear User,</p>
+        
+        <p>Your temporary password is:</p>
+        
+        <h2 style="font-size: 24px; font-weight: bold; color: #333; margin: 20px 0;">${user.password}</h2>
+        
+        <p>Please login and change your password immediately.</p>
+        
+        <p>If you have any questions or face difficulties accessing the system, kindly contact the examination cell at support@gat.ac.in.</p>
+        
+        <p>Best regards,<br>
+        Examination Cell<br>
+        Global Academy of Technology</p>`
       );
     } catch (err) {
       console.error('Email error:', err.message);

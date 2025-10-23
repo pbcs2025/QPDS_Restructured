@@ -1,7 +1,9 @@
 const crypto = require('crypto');
 const User = require('../models/User');
 const Faculty = require('../models/Faculty');
+const Department = require('../models/Department');
 const sendEmail = require('../utils/mailer');
+const xlsx = require('xlsx');
 
 // Generate 6-character alphanumeric password
 function generatePassword() {
@@ -58,7 +60,36 @@ exports.registerFaculty = async (req, res) => {
         email,
         'Welcome to GAT Portal - Faculty Registration',
         '',
-        `<p>Hi ${name},<br><br>Your registration as faculty is successful!<br><br>Login credentials:<br>Username: ${username}<br>Password: ${password}<br><br>Please change your password after logging in.</p>`
+        `<p>Dear ${name},</p>
+        
+        <p>Welcome to Global Academy of Technology! We are pleased to inform you that your faculty registration has been successfully completed.</p>
+        
+        <p>Your account has been created and activated. You can now access the Question Paper Development System (QPDS) using the credentials provided below:</p>
+        
+        <div style="background-color: #f8f9fa; border: 1px solid #dee2e6; border-radius: 8px; padding: 20px; margin: 20px 0;">
+          <h3 style="color: #2c5aa0; margin-top: 0;">Login Credentials</h3>
+          <p><strong>Username:</strong> ${username}</p>
+          <p><strong>Password:</strong> <span style="font-size: 18px; font-weight: bold; color: #333; background-color: #e9ecef; padding: 4px 8px; border-radius: 4px;">${password}</span></p>
+        </div>
+        
+        <p><strong>Important Security Notice:</strong> For security reasons, we strongly recommend that you change your password immediately after your first login.</p>
+        
+        <p>You can access the system by visiting the faculty login portal and using the credentials provided above.</p>
+        
+        <p>If you encounter any issues or have questions regarding the system, please do not hesitate to contact our technical support team at support@gat.ac.in.</p>
+        
+        <p>We look forward to your contribution to our academic community.</p>
+        
+        <p>Best regards,<br>
+        <strong>Examination Cell</strong><br>
+        Global Academy of Technology<br>
+        Bengaluru, Karnataka</p>
+        
+        <hr style="border: none; border-top: 1px solid #dee2e6; margin: 30px 0;">
+        <p style="font-size: 12px; color: #6c757d; text-align: center;">
+          This is an automated message. Please do not reply to this email.<br>
+          For support, contact: support@gat.ac.in
+        </p>`
       );
     } catch (err) {
       console.error('Email error:', err.message);
@@ -105,7 +136,13 @@ exports.loginFaculty = async (req, res) => {
         username,
         'Faculty Login - Verification Code',
         '',
-        `<p>Hello ${faculty.name},<br><br>Your verification code for faculty login:</p><h2>${code}</h2><p>Valid for 10 minutes.</p>`
+        `<p>Hello ${faculty.name},</p>
+        
+        <p>Your verification code for faculty login:</p>
+        
+        <h2 style="font-size: 24px; font-weight: bold; color: #333; margin: 20px 0;">${code}</h2>
+        
+        <p>Valid for 10 minutes.</p>`
       );
     } catch (err) {
       console.error('Email error:', err.message);
@@ -253,7 +290,19 @@ exports.forgotFacultyPassword = async (req, res) => {
         email,
         'GAT Portal - Faculty Password Recovery',
         '',
-        `<p>Hello ${faculty.name},<br><br>Your temporary password is:</p><h2>${user.password}</h2><p>Please login and change your password immediately.</p>`
+        `<p>Hello ${faculty.name},</p>
+        
+        <p>Your temporary password is:</p>
+        
+        <h2 style="font-size: 24px; font-weight: bold; color: #333; margin: 20px 0;">${user.password}</h2>
+        
+        <p>Please login and change your password immediately.</p>
+        
+        <p>If you have any questions or face difficulties accessing the system, kindly contact the examination cell at support@gat.ac.in.</p>
+        
+        <p>Best regards,<br>
+        Examination Cell<br>
+        Global Academy of Technology</p>`
       );
     } catch (err) {
       console.error('Email error:', err.message);
@@ -292,5 +341,112 @@ exports.getFacultiesByDepartment = async (req, res) => {
   } catch (err) {
     console.error('Error fetching faculties by department:', err);
     res.status(500).json({ error: 'Failed to fetch faculties' });
+  }
+};
+
+// Bulk upload faculties via Excel/CSV (buffer from multer)
+exports.bulkUploadFaculties = async (req, res) => {
+  try {
+    if (!req.file || !req.file.buffer) {
+      return res.status(400).json({ error: 'No file uploaded' });
+    }
+
+    const workbook = xlsx.read(req.file.buffer, { type: 'buffer' });
+    const sheetName = workbook.SheetNames[0];
+    const sheet = workbook.Sheets[sheetName];
+    const rows = xlsx.utils.sheet_to_json(sheet, { defval: '' });
+
+    if (!Array.isArray(rows) || rows.length === 0) {
+      return res.status(400).json({ error: 'Uploaded file is empty or invalid' });
+    }
+
+    // Get valid departments from database
+    const validDepartments = await Department.find({ isActive: true }).select('name').lean();
+    const validDeptNames = validDepartments.map(dept => dept.name);
+
+    // Expected headers: name, email, phone, clgName, deptName, usertype
+    const results = { created: 0, skipped: 0, errors: [] };
+
+    for (const [index, row] of rows.entries()) {
+      const name = String(row.name || row.Name || '').trim();
+      const email = String(row.email || row.Email || '').trim();
+      const phone = String(row.phone || row.Phone || row.contactNumber || '').trim();
+      const clgName = String(row.clgName || row.College || row.college || '').trim();
+      const deptName = String(row.deptName || row.Department || row.department || '').trim();
+      const usertype = String(row.usertype || row.type || '').trim() || 'internal';
+
+      if (!name || !email || !deptName) {
+        results.errors.push({ row: index + 2, error: 'Missing required fields (name, email, deptName)' });
+        continue;
+      }
+
+      // Validate department name against database
+      if (!validDeptNames.includes(deptName)) {
+        results.errors.push({ 
+          row: index + 2, 
+          error: `Invalid department "${deptName}". Valid departments: ${validDeptNames.join(', ')}` 
+        });
+        continue;
+      }
+
+      try {
+        const existingUser = await User.findOne({ $or: [{ username: email }, { email }] });
+        if (existingUser) {
+          results.skipped++;
+          continue;
+        }
+
+        const username = email;
+        const password = generatePassword();
+
+        const user = await User.create({
+          name,
+          username,
+          clgName,
+          deptName,
+          email,
+          phoneNo: phone,
+          password,
+          usertype,
+          role: 'Faculty'
+        });
+
+        await Faculty.create({
+          facultyId: user._id,
+          name,
+          email,
+          passwordHash: password,
+          department: deptName,
+          clgName,
+          contactNumber: phone,
+          type: usertype,
+          role: 'faculty'
+        });
+
+        // Email is best-effort; don't fail the whole row if it errors
+        try {
+          await sendEmail(
+            email,
+            'Welcome to GAT Portal - Faculty Registration',
+            '',
+            `<p>Dear ${name},</p><p>Your account has been created.</p><p><strong>Username:</strong> ${username}<br/><strong>Password:</strong> ${password}</p>`
+          );
+        } catch (e) {
+          // Ignore email errors in bulk
+        }
+
+        results.created++;
+      } catch (e) {
+        results.errors.push({ row: index + 2, error: e.message });
+      }
+    }
+
+    return res.json({
+      message: 'Bulk upload processed',
+      ...results
+    });
+  } catch (err) {
+    console.error('Bulk upload error:', err);
+    res.status(500).json({ error: 'Failed to process bulk upload' });
   }
 };

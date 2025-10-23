@@ -9,6 +9,7 @@ exports.list = async (_req, res) => {
       id: r._id.toString(),
       name: r.name,
       isActive: r.isActive,
+      color: r.color,
       createdAt: r.createdAt,
     }));
     console.log('LIST: Mapped result:', result.length);
@@ -47,7 +48,7 @@ exports.list = async (_req, res) => {
 exports.active = async (_req, res) => {
   try {
     const rows = await Department.find({ isActive: true }).sort({ name: 1 }).lean();
-    res.json(rows.map(r => ({ id: r._id, name: r.name,createdAt: r.createdAt})));
+    res.json(rows.map(r => ({ id: r._id, name: r.name, color: r.color, createdAt: r.createdAt})));
   } catch (err) {
     console.error('Error fetching active departments:', err);
     res.status(500).json({ error: 'Failed to fetch active departments' });
@@ -56,10 +57,14 @@ exports.active = async (_req, res) => {
 
 // POST add new department
 exports.create = async (req, res) => {
-  const { name, isActive } = req.body;
+  const { name, isActive, color } = req.body;
   if (!name) return res.status(400).json({ error: 'Department name is required' });
   try {
-    await Department.create({ name, isActive: isActive !== undefined ? isActive : true });
+    await Department.create({ 
+      name, 
+      isActive: isActive !== undefined ? isActive : true,
+      color: color || '#6c757d' // Default gray color if not provided
+    });
     res.status(201).json({ message: 'Department added successfully' });
   } catch (err) {
     console.error('Error adding department:', err);
@@ -70,12 +75,13 @@ exports.create = async (req, res) => {
 // PUT update department
 exports.update = async (req, res) => {
   const { id } = req.params;
-  const { newDepartment, isActive } = req.body;
-  if (!newDepartment && isActive === undefined) return res.status(400).json({ error: 'Nothing to update' });
+  const { newDepartment, isActive, color } = req.body;
+  if (!newDepartment && isActive === undefined && !color) return res.status(400).json({ error: 'Nothing to update' });
   try {
     const update = {};
     if (newDepartment) update.name = newDepartment;
     if (isActive !== undefined) update.isActive = isActive;
+    if (color) update.color = color;
     await Department.findByIdAndUpdate(id, update);
     res.json({ message: 'Department updated successfully' });
   } catch (err) {
