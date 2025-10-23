@@ -89,6 +89,7 @@ exports.create = async (req, res) => {
       file_name: file ? file.originalname : null,
       file_type: file ? file.mimetype : null,
       question_file: file ? file.buffer : null,
+      status: 'pending' // Set status to pending for verifier review
     });
 
     // Update assignment status if faculty email is provided
@@ -149,6 +150,7 @@ exports.createBatch = async (req, res) => {
       file_name: q.file_name || null,
       file_type: q.file_type || null,
       question_file: q.question_file || null,
+      status: 'pending' // Set status to pending for verifier review
     }));
 
     const createdDocs = await QuestionPaper.insertMany(questionDocs);

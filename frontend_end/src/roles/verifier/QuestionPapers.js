@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 
-const API_BASE = process.env.REACT_APP_API_BASE_URL || 'http://localhost:5000/api';
+const API_BASE = process.env.REACT_APP_API_BASE_URL || 'http://localhost:5001/api';
 
 const QuestionPapers = () => {
   const [papers, setPapers] = useState([]);
@@ -15,6 +15,7 @@ const QuestionPapers = () => {
   const [rejectedPapers, setRejectedPapers] = useState([]);
   const [showApprovedPapers, setShowApprovedPapers] = useState(false);
   const [approvedPapers, setApprovedPapers] = useState([]);
+  const [verifierRemarks, setVerifierRemarks] = useState('');
 
   // Initialize department from logged-in verifier
   useEffect(() => {
@@ -36,8 +37,8 @@ const QuestionPapers = () => {
       if (selectedDepartment) params.append('department', selectedDepartment);
       if (selectedSemester) params.append('semester', selectedSemester);
       
-      // Use the new API endpoint for submitted papers
-      const response = await fetch(`${API_BASE}/papers`, {
+      // Use the verifier-specific API endpoint for submitted papers
+      const response = await fetch(`${API_BASE}/verifier/papers`, {
         method: 'GET',
         headers: {
           'Content-Type': 'application/json',
@@ -219,14 +220,28 @@ const QuestionPapers = () => {
 
     try {
       setUpdating(true);
-      // Use the new API endpoint for approving papers
-      const response = await fetch(`${API_BASE}/papers/${selectedPaper._id}/approve`, {
+      
+      // Get verifier info for remarks
+      const verifierInfo = JSON.parse(localStorage.getItem('verifier') || '{}');
+      const verifierName = verifierInfo.username || 'Unknown Verifier';
+      
+      // Use the new API endpoint for approving papers with corrected questions
+      console.log('Sending approval request to:', `${API_BASE}/verifier/papers/${selectedPaper.subject_code}/${selectedPaper.semester}/approve-corrected`);
+      console.log('Request data:', {
+        corrected_questions: selectedPaper.questions,
+        verifier_remarks: verifierRemarks || 'Approved by verifier with corrections',
+        verified_by: verifierName
+      });
+
+      const response = await fetch(`${API_BASE}/verifier/papers/${selectedPaper.subject_code}/${selectedPaper.semester}/approve-corrected`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          remarks: 'Approved by verifier'
+          corrected_questions: selectedPaper.questions,
+          verifier_remarks: verifierRemarks || 'Approved by verifier with corrections',
+          verified_by: verifierName
         }),
       });
 
@@ -249,9 +264,11 @@ const QuestionPapers = () => {
 
       setSelectedPaper(null);
       setFinalStatus('');
+      setVerifierRemarks('');
     } catch (err) {
       console.error('Error updating paper:', err);
-      alert('Failed to update paper. Please try again.');
+      console.error('Error details:', err.message);
+      alert(`Failed to update paper: ${err.message}. Please try again.`);
     } finally {
       setUpdating(false);
     }
@@ -461,6 +478,26 @@ const QuestionPapers = () => {
               {/* Per-question approval checkboxes and remarks removed as per requirements */}
             </div>
           ))}
+        </div>
+
+        {/* VERIFIER REMARKS Section */}
+        <div style={{ background: '#fff', padding: '20px', borderRadius: '12px', border: '1px solid #dee2e6', boxShadow: '0 2px 4px rgba(0,0,0,0.1)', marginBottom: '20px' }}>
+          <h4 style={{ marginBottom: '15px', color: '#0b5ed7', borderBottom: '2px solid #0d6efd', paddingBottom: '5px' }}>VERIFIER REMARKS</h4>
+          <textarea
+            value={verifierRemarks}
+            onChange={(e) => setVerifierRemarks(e.target.value)}
+            placeholder="Enter your remarks about this paper..."
+            style={{
+              width: '100%',
+              minHeight: '80px',
+              padding: '12px',
+              border: '1px solid #ced4da',
+              borderRadius: '8px',
+              fontSize: '14px',
+              resize: 'vertical',
+              fontFamily: 'inherit'
+            }}
+          />
         </div>
 
         {/* FINAL STATUS Section */}

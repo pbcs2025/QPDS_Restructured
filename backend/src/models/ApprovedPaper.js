@@ -14,6 +14,8 @@ const ApprovedPaperSchema = new mongoose.Schema(
     question_number: { type: String, required: true },
     question_text: { type: String },
     marks: { type: Number },
+    co: { type: String },
+    level: { type: String },
     file_name: { type: String },
     file_type: { type: String },
 

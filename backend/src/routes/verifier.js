@@ -17,6 +17,11 @@ router.put('/papers/:subject_code/:semester', ctrl.updatePaper);
 router.get('/papers/:subject_code/:semester/docx', ctrl.getPaperDocx);
 router.get('/papers/:subject_code/:semester', ctrl.getPaperByCodeSemester);
 
+// Corrected questions routes
+router.post('/papers/:subject_code/:semester/save-corrected', ctrl.saveCorrectedQuestions);
+router.put('/papers/:subject_code/:semester/approve-corrected', ctrl.approveCorrectedQuestions);
+router.get('/papers/:subject_code/:semester/corrected', ctrl.getCorrectedQuestions);
+
 // Diagnostics
 router.get('/approved-list', ctrl.listApprovedPapers);
 router.get('/rejected-list', ctrl.listRejectedPapers);

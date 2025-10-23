@@ -182,6 +182,12 @@ exports.getApprovedPapers = async (req, res) => {
       .lean();
 
     console.log(`Retrieved ${approvedPapers.length} approved papers`);
+    console.log('Sample approved papers:', approvedPapers.slice(0, 3).map(p => ({
+      subject_code: p.subject_code,
+      semester: p.semester,
+      question_number: p.question_number,
+      approved_at: p.approved_at
+    })));
 
     return res.status(200).json({
       success: true,

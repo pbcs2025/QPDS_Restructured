@@ -135,7 +135,50 @@ function SuperAdminDashboard() {
         })
         .then((data) => {
           console.log('Fetched approved papers:', data);
-          setSubmittedPapers(Array.isArray(data) ? data : []);
+          // Handle the API response format: { success: true, count: X, papers: [...] }
+          let papers = [];
+          if (data && data.papers && Array.isArray(data.papers)) {
+            papers = data.papers;
+          } else if (Array.isArray(data)) {
+            papers = data;
+          } else {
+            console.error('Unexpected data format:', data);
+            setSubmittedPapers([]);
+            return;
+          }
+          
+          // Group papers by subject_code and semester since we have individual question records
+          const groupedPapers = {};
+          papers.forEach(paper => {
+            const key = `${paper.subject_code}_${paper.semester}`;
+            if (!groupedPapers[key]) {
+              groupedPapers[key] = {
+                _id: key,
+                subject_code: paper.subject_code,
+                subject_name: paper.subject_name,
+                semester: paper.semester,
+                department: paper.department,
+                createdAt: paper.approved_at || paper.createdAt,
+                verified_by: paper.verified_by,
+                questions: []
+              };
+            }
+            groupedPapers[key].questions.push({
+              question_number: paper.question_number,
+              question_text: paper.question_text,
+              marks: paper.marks,
+              co: paper.co,
+              level: paper.level,
+              remarks: paper.remarks
+            });
+          });
+          
+          const result = Object.values(groupedPapers).sort((a, b) => 
+            new Date(b.createdAt) - new Date(a.createdAt)
+          );
+          
+          console.log('Grouped papers for Super Admin:', result.length);
+          setSubmittedPapers(result);
         })
         .catch((err) => {
           console.error("Fetch submitted papers error:", err);
@@ -627,6 +670,21 @@ function SuperAdminDashboard() {
                             }}>
                               <div style={{ fontWeight: 600, color: '#856404', marginBottom: '5px' }}>📝 Verifier Remarks:</div>
                               <div style={{ color: '#856404', fontStyle: 'italic' }}>{q.remarks}</div>
+                            </div>
+                          )}
+                          
+                          {/* Verifier General Remarks Display */}
+                          {openedPaper.verifier_remarks && openedPaper.verifier_remarks.trim() && (
+                            <div style={{ 
+                              marginTop: '10px', 
+                              padding: '10px', 
+                              backgroundColor: '#e7f3ff', 
+                              border: '1px solid #b3d9ff', 
+                              borderRadius: '6px',
+                              borderLeft: '4px solid #0d6efd'
+                            }}>
+                              <div style={{ fontWeight: 600, color: '#0b5ed7', marginBottom: '5px' }}>📋 Verifier General Remarks:</div>
+                              <div style={{ color: '#0b5ed7', fontStyle: 'italic' }}>{openedPaper.verifier_remarks}</div>
                             </div>
                           )}
                         </div>

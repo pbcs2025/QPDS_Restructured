@@ -59,7 +59,12 @@ exports.getSubmittedPapers = async (req, res) => {
     console.log('Fetching submitted papers...');
     
     // Apply filters if provided in query params
-    const filter = { status: 'submitted' };
+    const filter = { 
+      $or: [
+        { status: 'submitted' },
+        { status: 'pending' }
+      ]
+    };
     if (req.query.department) {
       filter.department = req.query.department;
       console.log(`Filtering by department: ${req.query.department}`);
@@ -69,7 +74,7 @@ exports.getSubmittedPapers = async (req, res) => {
       console.log(`Filtering by semester: ${req.query.semester}`);
     }
     
-    // Query for papers with submitted status
+    // Query for papers with submitted or pending status
     const papers = await QuestionPaper.find(filter)
       .sort({ createdAt: -1 }) // Sort by newest first
       .populate('facultyId', 'name email department') // Get faculty details
