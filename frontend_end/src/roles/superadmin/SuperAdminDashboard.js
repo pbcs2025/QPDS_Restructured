@@ -25,7 +25,7 @@ function SuperAdminDashboard() {
   const [openedPaper, setOpenedPaper] = useState(null);
   const [submittedLoading, setSubmittedLoading] = useState(false);
   const [submittedError, setSubmittedError] = useState(null);
-  const API_BASE = process.env.REACT_APP_API_BASE_URL || 'http://localhost:5001/api';
+  const QP_API_BASE = process.env.REACT_APP_QP_API_BASE_URL || process.env.REACT_APP_API_BASE_URL || 'http://localhost:5001/api';
 
   const [departments, setDepartments] = useState([]);
   const [newVerifierName, setNewVerifierName] = useState("");
@@ -106,7 +106,7 @@ function SuperAdminDashboard() {
     if (activeTab === "submitted") {
       setSubmittedLoading(true);
       setSubmittedError(null);
-      fetch(`${API_BASE}/verifier/approved`)
+      fetch(`${QP_API_BASE}/verifier/approved`)
         .then((res) => {
           if (!res.ok) throw new Error(`Status ${res.status}`);
           return res.json();
@@ -121,7 +121,7 @@ function SuperAdminDashboard() {
         })
         .finally(() => setSubmittedLoading(false));
     }
-  }, [activeTab, API_BASE]);
+  }, [activeTab, QP_API_BASE]);
 
   // Fetch active departments for dropdown when verifiers view active
   useEffect(() => {
@@ -515,7 +515,7 @@ function SuperAdminDashboard() {
                           </div>
                           {q.file_url && (
                             <div style={{ marginTop: '10px' }}>
-                              <img src={`${API_BASE}${q.file_url}`} alt={q.file_name || 'attachment'} style={{ maxWidth: '100%', borderRadius: '8px', border: '1px solid #e9edf3' }} />
+                              <img src={`${QP_API_BASE}${q.file_url}`} alt={q.file_name || 'attachment'} style={{ maxWidth: '100%', borderRadius: '8px', border: '1px solid #e9edf3' }} />
                             </div>
                           )}
                         </div>
@@ -617,7 +617,7 @@ function SuperAdminDashboard() {
                               </div>
                               {q.file_url && (
                                 <div style={{ marginTop: '8px', marginLeft: '46px' }}>
-                                  <img src={`${API_BASE}${q.file_url}`} alt={q.file_name || 'attachment'} style={{ maxWidth: '100%', borderRadius: '8px', border: '1px solid #e9edf3' }} />
+                                  <img src={`${QP_API_BASE}${q.file_url}`} alt={q.file_name || 'attachment'} style={{ maxWidth: '100%', borderRadius: '8px', border: '1px solid #e9edf3' }} />
                                 </div>
                               )}
                             </div>
@@ -644,7 +644,7 @@ function SuperAdminDashboard() {
                               </div>
                               {q.file_url && (
                                 <div style={{ marginTop: '8px', marginLeft: '46px' }}>
-                                  <img src={`${API_BASE}${q.file_url}`} alt={q.file_name || 'attachment'} style={{ maxWidth: '100%', borderRadius: '8px', border: '1px solid #e9edf3' }} />
+                                  <img src={`${QP_API_BASE}${q.file_url}`} alt={q.file_name || 'attachment'} style={{ maxWidth: '100%', borderRadius: '8px', border: '1px solid #e9edf3' }} />
                                 </div>
                               )}
                             </div>
@@ -684,7 +684,7 @@ function SuperAdminDashboard() {
                           <button
                             onClick={async () => {
                               try {
-                                const res = await fetch(`${API_BASE}/verifier/papers/${encodeURIComponent(p.subject_code)}/${encodeURIComponent(p.semester)}`);
+                                const res = await fetch(`${QP_API_BASE}/verifier/papers/${encodeURIComponent(p.subject_code)}/${encodeURIComponent(p.semester)}`);
                                 const contentType = res.headers.get('content-type') || '';
                                 if (!contentType.includes('application/json')) {
                                   const text = await res.text();

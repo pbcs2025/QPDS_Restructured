@@ -141,30 +141,24 @@ exports.listAll = async (_req, res) => {
   }
 };
 
-/// ... existing imports above
-exports.removeOne = async (req, res) => {
+// List grouped papers across all subject_code and semester
+exports.getPapers = async (_req, res) => {
   try {
-    const { verifierId } = req.params;
-    if (!verifierId) {
-      return res.status(400).json({ error: 'verifierId is required' });
-    }
+    const papers = await QuestionPaper.find({})
+      .sort({ subject_code: 1, semester: 1, question_number: 1 })
+      .lean();
 
-    
-    // Get question papers with filters
-    const papers = await QuestionPaper.find(filter).sort({ subject_code: 1, semester: 1, question_number: 1 }).lean();
-    
-    // Group papers by subject_code and semester
     const groupedPapers = {};
-    papers.forEach(paper => {
+    papers.forEach((paper) => {
       const key = `${paper.subject_code}_${paper.semester}`;
       if (!groupedPapers[key]) {
         groupedPapers[key] = {
-          _id: `${paper.subject_code}_${paper.semester}`, // Use composite key as ID
+          _id: `${paper.subject_code}_${paper.semester}`,
           subject_code: paper.subject_code,
           subject_name: paper.subject_name,
           semester: paper.semester,
           questions: [],
-          status: 'pending'
+          status: 'pending',
         };
       }
       groupedPapers[key].questions.push({
@@ -178,57 +172,59 @@ exports.removeOne = async (req, res) => {
         remarks: paper.remarks,
         file_name: paper.file_name,
         file_type: paper.file_type,
-        file_url: paper.file_name ? `/question-bank/file/${paper._id}` : null
+        file_url: paper.file_name ? `/question-bank/file/${paper._id}` : null,
       });
-      
-      // Update overall status based on individual question status
-      if (paper.status === 'approved') {
-        groupedPapers[key].status = 'approved';
-      } else if (paper.status === 'rejected') {
-        groupedPapers[key].status = 'rejected';
-      }
+
+      if (paper.status === 'approved') groupedPapers[key].status = 'approved';
+      else if (paper.status === 'rejected') groupedPapers[key].status = 'rejected';
     });
-    
-    const result = Object.values(groupedPapers);
-    return res.json(result);
+
+    return res.json(Object.values(groupedPapers));
   } catch (err) {
     console.error('Verifier getPapers error:', err);
     return res.status(500).json({ error: 'Server error' });
   }
 };
 
+/// ... existing imports above
+exports.removeOne = async (req, res) => {
+  try {
+    const { verifierId } = req.params;
+    if (!verifierId) {
+      return res.status(400).json({ error: 'verifierId is required' });
+    }
+
+    const verifier = await Verifier.findById(verifierId).lean();
+    if (!verifier) {
+      return res.status(404).json({ error: 'Verifier not found' });
+    }
+
+    const delVerifier = await Verifier.deleteOne({ _id: verifierId });
+    let delUser = { deletedCount: 0 };
+    if (verifier.verifierId) {
+      delUser = await User.deleteOne({ _id: verifier.verifierId });
+    }
+
+    return res.json({
+      success: true,
+      verifierDeleted: delVerifier.deletedCount || 0,
+      userDeleted: delUser.deletedCount || 0,
+    });
+  } catch (err) {
+    console.error('Verifier removeOne error:', err);
+    return res.status(500).json({ error: 'Server error' });
+  }
+};
+
 exports.updatePaper = async (req, res) => {
   try {
-    const { id } = req.params;
+    const { subject_code, semester } = req.params;
     const { questions, finalStatus } = req.body;
     
     if (!questions || !Array.isArray(questions)) {
       return res.status(400).json({ error: 'Questions array is required' });
-
-
-    // Try both cases — string and ObjectId
-    const verifier =
-      (await Verifier.findOne({ verifierId })) ||
-      (mongoose.Types.ObjectId.isValid(verifierId)
-        ? await Verifier.findOne({ verifierId: new mongoose.Types.ObjectId(verifierId) })
-        : null);
-
-    if (!verifier) {
-      return res.status(404).json({ error: 'Verifier not found' });
-
     }
 
-    // Delete the verifier
-    await Verifier.deleteOne({ _id: verifier._id });
-
-    // Delete the linked user (convert if ObjectId)
-    if (mongoose.Types.ObjectId.isValid(verifier.verifierId)) {
-      await User.deleteOne({ _id: new mongoose.Types.ObjectId(verifier.verifierId) });
-    } else {
-      await User.deleteOne({ _id: verifier.verifierId });
-    }
-
-    
     // Update each question in the paper only (no snapshot here)
     const updatePromises = questions.map(async (question) => {
       const updateData = {
@@ -302,11 +298,8 @@ exports.updatePaper = async (req, res) => {
     
     return res.json({ message: 'Paper updated successfully', finalStatus: finalStatus || null });
 
-
-    return res.json({ success: true, message: 'Verifier and linked user deleted successfully.' });
-
   } catch (err) {
-    console.error('Verifier removeOne error:', err);
+    console.error('Paper update error:', err);
     return res.status(500).json({ error: 'Server error' });
   }
 };
