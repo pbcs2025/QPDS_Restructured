@@ -120,13 +120,14 @@ exports.listAll = async (_req, res) => {
 // List and group question papers (helper for UI overview)
 exports.getPapers = async (req, res) => {
   try {
+    // Accept optional filters from query
     const { department, semester } = req.query;
     console.log('Verifier getPapers called with:', { department, semester });
 
     const filter = {};
     if (department) filter.department = String(department).trim();
     if (semester) filter.semester = parseInt(semester, 10);
-    
+
     console.log('Filter applied:', filter);
 
     // Exclude papers already stored in rejected
@@ -141,7 +142,7 @@ exports.getPapers = async (req, res) => {
         { status: 'pending' },
         { status: 'submitted' },
         { status: 'approved' },
-        { status: 'rejected' },
+        { status: 'rejected' }
       ]
     }).sort({ subject_code: 1, semester: 1, question_number: 1 }).lean();
 
@@ -153,9 +154,11 @@ exports.getPapers = async (req, res) => {
       status: p.status
     })));
 
+    // Exclude rejected papers (by subject_code+semester group)
     const papers = allPapers.filter(p => !rejectedKeys.has(`${p.subject_code}_${p.semester}`));
     console.log('Papers after filtering rejected:', papers.length);
 
+    // Group by subject_code & semester
     const groupedPapers = {};
     papers.forEach((paper) => {
       const key = `${paper.subject_code}_${paper.semester}`;
@@ -185,6 +188,7 @@ exports.getPapers = async (req, res) => {
         file_url: paper.file_name ? `/question-bank/file/${paper._id}` : null,
       });
 
+      // If any paper in the group is 'approved'/'rejected', set the group status so
       if (paper.status === 'approved') groupedPapers[key].status = 'approved';
       else if (paper.status === 'rejected') groupedPapers[key].status = 'rejected';
     });
@@ -198,6 +202,7 @@ exports.getPapers = async (req, res) => {
   }
 };
 
+/// ... existing imports above
 exports.removeOne = async (req, res) => {
   try {
     const { verifierId } = req.params;
@@ -205,37 +210,22 @@ exports.removeOne = async (req, res) => {
       return res.status(400).json({ error: 'verifierId is required' });
     }
 
-    let verifier = null;
-    if (mongoose.Types.ObjectId.isValid(verifierId)) {
-      // Try by Verifier _id or by stored verifierId (linked User _id)
-      verifier = await Verifier.findOne({
-        $or: [
-          { _id: new mongoose.Types.ObjectId(verifierId) },
-          { verifierId: new mongoose.Types.ObjectId(verifierId) },
-        ],
-        }).lean();
-    }
-    if (!verifier) {
-      // Fallback: try direct match on verifierId field (string form)
-      verifier = await Verifier.findOne({ verifierId }).lean();
-    }
-
+    const verifier = await Verifier.findById(verifierId).lean();
     if (!verifier) {
       return res.status(404).json({ error: 'Verifier not found' });
     }
 
-    // Delete the verifier document
-    await Verifier.deleteOne({ _id: verifier._id });
-
-    // Delete the linked user if present
+    const delVerifier = await Verifier.deleteOne({ _id: verifierId });
+    let delUser = { deletedCount: 0 };
     if (verifier.verifierId) {
-      const linkedId = mongoose.Types.ObjectId.isValid(verifier.verifierId)
-        ? new mongoose.Types.ObjectId(verifier.verifierId)
-        : verifier.verifierId;
-      await User.deleteOne({ _id: linkedId });
+      delUser = await User.deleteOne({ _id: verifier.verifierId });
     }
 
-    return res.json({ success: true, message: 'Verifier and linked user deleted successfully.' });
+    return res.json({
+      success: true,
+      verifierDeleted: delVerifier.deletedCount || 0,
+      userDeleted: delUser.deletedCount || 0,
+    });
   } catch (err) {
     console.error('Verifier removeOne error:', err);
     return res.status(500).json({ error: 'Server error' });
@@ -244,6 +234,7 @@ exports.removeOne = async (req, res) => {
 
 exports.updatePaper = async (req, res) => {
   try {
+    // Merge conflict resolved: Support both possible req param/body formats (legacy and new) 
     const { subject_code: pCode, semester: pSem } = req.params;
     const { subject_code: bCode, semester: bSem, questions, finalStatus } = req.body || {};
     
@@ -258,8 +249,7 @@ exports.updatePaper = async (req, res) => {
     }
 
     const normalizedCode = subject_code;
-    
-    // Update each question in the paper
+    // Update each question in the paper only (no snapshot here)
     const updatePromises = questions.map(async (question) => {
       const updateData = {
         approved: !!question.approved,
@@ -485,9 +475,16 @@ exports.normalizeDepartments = async (_req, res) => {
       modifiedCount = result.modifiedCount || 0;
     }
 
-    res.json(groupedPaper);
+    res.json({
+      success: true,
+      matched,
+      alreadyCanonical,
+      skipped,
+      modifiedCount,
+      message: `Normalized ${modifiedCount} verifier departments`
+    });
   } catch (err) {
-    console.error('Get paper by code semester error:', err);
+    console.error('Normalize departments error:', err);
     res.status(500).json({ error: 'Server error' });
   }
 };

@@ -1057,6 +1057,55 @@ function SuperAdminDashboard() {
                     </table>
                   </div>
                 )}
+                <div className="table-wrapper">
+                <table className="user-table">
+                  <thead>
+                    <tr>
+                      <th>Subject Code</th>
+                      <th>Semester</th>
+                      <th>Submitted At</th>
+                      <th>Action</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {submittedPapers.length === 0 && (
+                      <tr>
+                        <td colSpan={3}>No papers submitted yet.</td>
+                      </tr>
+                    )}
+                    {submittedPapers.map((p) => (
+                      <tr key={p._id}>
+                        <td>{p.subject_code}</td>
+                        <td>{p.semester}</td>
+                        <td>{p.createdAt ? new Date(p.createdAt).toLocaleString() : '-'}</td>
+                        <td>
+                          <button
+                            onClick={async () => {
+                              try {
+                                const res = await fetch(`${QP_API_BASE}/verifier/papers/${encodeURIComponent(p.subject_code)}/${encodeURIComponent(p.semester)}`);
+                                const contentType = res.headers.get('content-type') || '';
+                                if (!contentType.includes('application/json')) {
+                                  const text = await res.text();
+                                  throw new Error(`Unexpected response (not JSON). Check API base URL. First bytes: ${text.slice(0, 60)}`);
+                                }
+                                const data = await res.json();
+                                if (!res.ok) throw new Error(data?.error || `Status ${res.status}`);
+                                setOpenedPaper(data);
+                              } catch (err) {
+                                console.error('Open paper error:', err);
+                                alert(`Failed to open paper: ${err.message}`);
+                              }
+                            }}
+                            style={{ padding: '6px 12px', backgroundColor: '#0d6efd', color: '#fff', border: 'none', borderRadius: '6px', cursor: 'pointer' }}
+                          >
+                            Open
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
               </>
             )}
           </div>
