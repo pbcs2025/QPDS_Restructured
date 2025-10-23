@@ -204,17 +204,9 @@ function SuperAdminDashboard() {
           className={activeTab === "dashboard" ? "active-tab" : ""}
           onClick={(e) => { e.preventDefault(); setActiveTab("dashboard"); }}
         >
-          Dashboard
+              🏠 Dashboard
         </a>
-        <a
-          href="#"
-          className={activeTab === "submitted" ? "active-tab" : ""}
-          onClick={(e) => { e.preventDefault(); setActiveTab("submitted"); }}
-        >
-          Submitted Papers
-        </a>
-
-        <a
+            <a
   href="#"
   className={activeTab === "manageFaculty" ? "active-tab" : ""}
   onClick={(e) => {
@@ -223,54 +215,58 @@ function SuperAdminDashboard() {
     setManageUsersView("cards");
   }}
 >
-  Manage Users
+  👥 Manage Users
 </a>
 
-
-        
-        <a
-          href="#"
-          className={activeTab === "manageUsers" ? "active-tab" : ""}
-          onClick={(e) => { e.preventDefault(); setActiveTab("manageUsers"); }}
-        >
-          Select QP Setters
-        </a>
-        <a
-          href="#"
-          className={activeTab === "viewAssignees" ? "active-tab" : ""}
-          onClick={(e) => { e.preventDefault(); setActiveTab("viewAssignees"); }}
-        >
-          View Assignees
-        </a>
-
-       <a
-  href="#"
-  className={activeTab === "subjects" ? "active-tab" : ""}
-  onClick={(e) => { e.preventDefault(); setActiveTab("subjects"); }}
->
-  Subjects
-</a>
-
-<a
+            <a
   href="#"
   className={activeTab === "departments" ? "active-tab" : ""}
   onClick={(e) => { e.preventDefault(); setActiveTab("departments"); }}
 >
-  Departments
+  🏢 Departments
 </a>
 
+            <a
+  href="#"
+  className={activeTab === "subjects" ? "active-tab" : ""}
+  onClick={(e) => { e.preventDefault(); setActiveTab("subjects"); }}
+>
+  📚 Subjects
+</a>
 
+            <a
+              href="#"
+              className={activeTab === "manageUsers" ? "active-tab" : ""}
+              onClick={(e) => { e.preventDefault(); setActiveTab("manageUsers"); }}
+            >
+              👩‍🏫 Select QP Setters
+            </a>
+            <a
+              href="#"
+              className={activeTab === "viewAssignees" ? "active-tab" : ""}
+              onClick={(e) => { e.preventDefault(); setActiveTab("viewAssignees"); }}
+            >
+              📋 View Assignees
+            </a>
 
         <a
           href="#"
-          className={activeTab === "settings" ? "active-tab" : ""}
-          onClick={(e) => { e.preventDefault(); setActiveTab("settings"); }}
+          className={activeTab === "submitted" ? "active-tab" : ""}
+          onClick={(e) => { e.preventDefault(); setActiveTab("submitted"); }}
         >
-          Settings
+          📄 Submitted Papers
         </a>
-        <a href="#" onClick={(e) => { e.preventDefault(); handleLogoutClick(); }} style={{ color: "red" }}>
-          Logout
-        </a>
+
+            <a
+              href="#"
+              className={activeTab === "settings" ? "active-tab" : ""}
+              onClick={(e) => { e.preventDefault(); setActiveTab("settings"); }}
+            >
+              ⚙️ Settings
+            </a>
+            <a href="#" onClick={(e) => { e.preventDefault(); handleLogoutClick(); }} style={{ color: "red" }}>
+              🚪 Logout
+            </a>
       </div>
 
       <div className="dashboard-content">

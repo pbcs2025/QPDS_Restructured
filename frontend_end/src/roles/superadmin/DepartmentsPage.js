@@ -7,8 +7,10 @@ const API_BASE = process.env.REACT_APP_API_BASE_URL || 'http://localhost:5000/ap
 function DepartmentsPage() {
   const [departments, setDepartments] = useState([]);
   const [newDept, setNewDept] = useState("");
+  const [newDeptColor, setNewDeptColor] = useState("#6c757d");
   const [editDeptId, setEditDeptId] = useState(null);
   const [updatedDept, setUpdatedDept] = useState("");
+  const [updatedDeptColor, setUpdatedDeptColor] = useState("");
 
   // Fetch all departments
   const fetchDepartments = async () => {
@@ -33,8 +35,12 @@ function DepartmentsPage() {
     if (!newDept.trim()) return;
 
     try {
-      await axios.post(`${API_BASE}/departments`, { name: newDept });
+      await axios.post(`${API_BASE}/departments`, { 
+        name: newDept, 
+        color: newDeptColor 
+      });
       setNewDept("");
+      setNewDeptColor("#6c757d");
       fetchDepartments();
     } catch (err) {
       console.error("Error adding department:", err);
@@ -46,9 +52,13 @@ function DepartmentsPage() {
     if (!updatedDept.trim()) return;
 
     try {
-      await axios.put(`${API_BASE}/departments/${id}`, { newDepartment: updatedDept });
+      await axios.put(`${API_BASE}/departments/${id}`, { 
+        newDepartment: updatedDept,
+        color: updatedDeptColor || undefined
+      });
       setEditDeptId(null);
       setUpdatedDept("");
+      setUpdatedDeptColor("");
       fetchDepartments();
     } catch (err) {
       console.error("Error updating department:", err);
@@ -79,6 +89,13 @@ function DepartmentsPage() {
           value={newDept}
           onChange={(e) => setNewDept(e.target.value)}
         />
+        <input
+          style={{ marginRight: "10px", width: "100px" }}
+          type="color"
+          value={newDeptColor}
+          onChange={(e) => setNewDeptColor(e.target.value)}
+          title="Select department color"
+        />
         <button onClick={addDepartment} style={{ width: "10%" }}>
           Add
         </button>
@@ -88,6 +105,7 @@ function DepartmentsPage() {
         <thead>
           <tr style={{ backgroundColor: "#1f1f33" }}>
             <th>Department</th>
+            <th>Color</th>
             <th>Created At</th>
             <th>Actions</th>
           </tr>
@@ -104,6 +122,27 @@ function DepartmentsPage() {
           />
         ) : (
           dept.name
+        )}
+      </td>
+      <td>
+        {editDeptId === dept.id ? (
+          <input
+            type="color"
+            value={updatedDeptColor || dept.color || "#6c757d"}
+            onChange={(e) => setUpdatedDeptColor(e.target.value)}
+            style={{ width: "50px", height: "30px" }}
+          />
+        ) : (
+          <div 
+            style={{ 
+              width: "30px", 
+              height: "20px", 
+              backgroundColor: dept.color || "#6c757d",
+              border: "1px solid #ccc",
+              borderRadius: "3px"
+            }}
+            title={dept.color || "#6c757d"}
+          ></div>
         )}
       </td>
       <td>
@@ -125,6 +164,7 @@ function DepartmentsPage() {
               onClick={() => {
                 setEditDeptId(dept.id);
                 setUpdatedDept(dept.name); // preload dept name into input
+                setUpdatedDeptColor(dept.color || "#6c757d"); // preload color
               }}
             >
               <i className="fa fa-edit"></i>
