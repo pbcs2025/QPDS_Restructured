@@ -7,6 +7,7 @@ import ViewAssignees from "./ViewAssignees";
 import SubjectsPage from "./SubjectsPage";
 import DepartmentsPage from "./DepartmentsPage";
 import AdminManageFacultyPage from "./AdminManageFacultyPage";
+import DepartmentStats from "../../components/DepartmentStats";
 import VerifierManagement from "../verifier/VerifierManagement";
 
 
@@ -26,6 +27,7 @@ function SuperAdminDashboard() {
   const [submittedLoading, setSubmittedLoading] = useState(false);
   const [submittedError, setSubmittedError] = useState(null);
   const QP_API_BASE = process.env.REACT_APP_QP_API_BASE_URL || process.env.REACT_APP_API_BASE_URL || 'http://localhost:5001/api';
+  const API_BASE = process.env.REACT_APP_API_BASE_URL || 'http://localhost:5000/api';
 
   const [departments, setDepartments] = useState([]);
   const [newVerifierName, setNewVerifierName] = useState("");
@@ -322,6 +324,11 @@ function SuperAdminDashboard() {
                   <li key={index}>{note}</li>
                 ))}
               </ul>
+            </div>
+
+            {/* Department Analytics Section */}
+            <div className="section department-analytics">
+              <DepartmentStats />
             </div>
           </>
         )}

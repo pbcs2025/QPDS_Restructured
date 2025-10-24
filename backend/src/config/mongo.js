@@ -8,8 +8,6 @@ async function connectToDatabase() {
     try {
       await mongoose.connect(mongoUri, {
         dbName: 'GAT_QPDS', // ensure correct database
-        useNewUrlParser: true,
-        useUnifiedTopology: true,
       });
   
       console.log('✅ MongoDB connected successfully');

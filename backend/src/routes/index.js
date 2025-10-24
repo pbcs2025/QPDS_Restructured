@@ -8,6 +8,7 @@ router.use('/api/subjects', require('./subjects'));
 router.use('/api/departments', require('./departments'));
 router.use('/api/colleges', require('./colleges'));
 router.use('/api/verifier', require('./verifier'));
+router.use('/api/dashboard', require('./dashboard'));
 router.post('/api/assignQPSetter', require('../controllers/assignmentController').assignQPSetter);
 router.get('/api/assignedSubjects', require('../controllers/assignmentController').assignedSubjects);
 router.get('/api/assignments/:subjectCode', require('../controllers/assignmentController').assignmentsBySubject);
@@ -18,6 +19,11 @@ router.post('/api/assignment/update-status', require('../controllers/assignmentC
 router.get('/api/subject-codes', require('../controllers/subjectController').subjectCodes);
 // Test DB endpoint
 router.get('/test-db', require('../controllers/testDbController').testDb);
+
+// Root health endpoint
+router.get('/', (req, res) => {
+  res.json({ status: 'ok' });
+});
 
 module.exports = router;
 

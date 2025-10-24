@@ -20,10 +20,7 @@ const colorMap = {
 async function updateDepartmentColors() {
   try {
     // Connect to MongoDB
-    await mongoose.connect(process.env.MONGODB_URI || 'mongodb://localhost:27017/qpds', {
-      useNewUrlParser: true,
-      useUnifiedTopology: true,
-    });
+    await mongoose.connect(process.env.MONGODB_URI || 'mongodb://localhost:27017/qpds');
     
     console.log('Connected to MongoDB');
     
