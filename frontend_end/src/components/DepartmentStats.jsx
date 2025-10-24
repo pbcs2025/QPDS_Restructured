@@ -9,7 +9,6 @@ import {
 } from 'recharts';
 import '../common/dashboard.css';
 
-
 const DepartmentStats = () => {
   const [selectedDepartment, setSelectedDepartment] = useState('');
   const [analyticsData, setAnalyticsData] = useState(null);
@@ -237,7 +236,6 @@ const DepartmentStats = () => {
 
     return unifiedData;
   };
-
 
   const formatTimestamp = (timestamp) => {
     if (!timestamp) return 'N/A';

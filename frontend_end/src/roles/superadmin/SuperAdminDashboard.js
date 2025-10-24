@@ -32,24 +32,6 @@ function SuperAdminDashboard() {
   const [showSentForPrint, setShowSentForPrint] = useState(false);
 
   const QP_API_BASE = process.env.REACT_APP_QP_API_BASE_URL || process.env.REACT_APP_API_BASE_URL || 'http://localhost:5001/api';
-  const API_BASE = process.env.REACT_APP_API_BASE_URL || 'http://localhost:5001/api';
-
-  // Load papers sent for print from localStorage on component mount
-  useEffect(() => {
-    const savedPapers = localStorage.getItem('papersSentForPrint');
-    if (savedPapers) {
-      try {
-        setPapersSentForPrint(JSON.parse(savedPapers));
-      } catch (err) {
-        console.error('Error loading papers sent for print:', err);
-      }
-    }
-  }, []);
-
-  // Save papers sent for print to localStorage whenever it changes
-  useEffect(() => {
-    localStorage.setItem('papersSentForPrint', JSON.stringify(papersSentForPrint));
-  }, [papersSentForPrint]);
 
   const [departments, setDepartments] = useState([]);
   const [newVerifierName, setNewVerifierName] = useState("");
