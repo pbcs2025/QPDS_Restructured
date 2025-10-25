@@ -428,13 +428,19 @@ function QuestionPaperBuilder() {
               formData.append("exam_type", "SEE");
               if (q.image) formData.append("file", q.image);
 
-              await axios.post(
-                `${API_BASE}/question-bank`,
-                formData,
-                {
-                  headers: { "Content-Type": "multipart/form-data" },
-                }
-              );
+              try {
+                const response = await axios.post(
+                  `${API_BASE}/question-bank`,
+                  formData,
+                  {
+                    headers: { "Content-Type": "multipart/form-data" },
+                  }
+                );
+                console.log(`✅ Question ${q.label} saved:`, response.data);
+              } catch (error) {
+                console.error(`❌ Error saving question ${q.label}:`, error.response?.data || error.message);
+                throw new Error(`Failed to save question ${q.label}: ${error.response?.data?.error || error.message}`);
+              }
             }
           }
         }
@@ -447,8 +453,13 @@ function QuestionPaperBuilder() {
       
       alert("✅ All questions submitted successfully!");
     } catch (error) {
-      console.error("Error saving question bank:", error);
-      alert("❌ Failed to save questions.");
+      console.error("❌ Error saving question bank:", error);
+      console.error("❌ Error details:", error.message);
+      console.error("❌ Full error:", error);
+      
+      // Show detailed error message
+      const errorMessage = error.message || "Unknown error occurred";
+      alert(`❌ Failed to save questions: ${errorMessage}`);
     }
   };
 

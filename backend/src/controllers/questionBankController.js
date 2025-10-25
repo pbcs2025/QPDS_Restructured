@@ -47,7 +47,10 @@ exports.create = async (req, res) => {
   const file = req.file;
 
   if (!subject_code || !subject_name || !semester || !question_number || !question_text) {
-    return res.status(400).json({ error: 'All fields are required' });
+    return res.status(400).json({ 
+      error: 'Missing required fields',
+      required: ['subject_code', 'subject_name', 'semester', 'question_number', 'question_text']
+    });
   }
 
   try {
@@ -61,12 +64,26 @@ exports.create = async (req, res) => {
     let derivedDept = (department || '').trim();
     if (!derivedDept && faculty_email) {
       const faculty = await Faculty.findOne({ email: faculty_email }).lean();
-      if (faculty && faculty.deptName) derivedDept = faculty.deptName;
+      if (faculty && faculty.department) {
+        derivedDept = faculty.department;
+        console.log(`✅ Department derived from faculty: ${derivedDept}`);
+      } else {
+        console.log(`⚠️  Faculty not found or no department: ${faculty_email}`);
+      }
     }
 
     // Check for duplicate question
     const exists = await QuestionPaper.findOne({ subject_code, semester: semNum, question_number }).lean();
-    if (exists) return res.status(409).json({ error: 'Question already exists' });
+    if (exists) {
+      return res.status(409).json({ 
+        error: 'Question already exists',
+        existing_question: {
+          subject_code: exists.subject_code,
+          semester: exists.semester,
+          question_number: exists.question_number
+        }
+      });
+    }
 
     // Determine set_name
     let finalSetName = set_name;
@@ -97,10 +114,22 @@ exports.create = async (req, res) => {
       await updateAssignmentStatus(subject_code, faculty_email);
     }
 
-    res.json({ message: '✅ Question saved successfully', id: doc._id, set_name: finalSetName });
+    console.log(`✅ Question saved: ${doc._id} for department: ${derivedDept}`);
+    
+    res.json({ 
+      message: '✅ Question saved successfully', 
+      id: doc._id, 
+      set_name: finalSetName,
+      department: derivedDept
+    });
   } catch (err) {
     console.error('❌ Error inserting data:', err.message);
-    res.status(500).json({ error: 'Database error', details: err.message });
+    console.error('❌ Full error:', err);
+    res.status(500).json({ 
+      error: 'Database error', 
+      details: err.message,
+      suggestion: 'Check database connection and try again'
+    });
   }
 };
 
