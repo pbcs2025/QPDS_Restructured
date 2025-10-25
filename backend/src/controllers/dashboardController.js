@@ -4,6 +4,17 @@ const RejectedPaper = require('../models/RejectedPaper');
 const Subject = require('../models/Subject');
 const Department = require('../models/Department');
 
+// Get all departments for analytics
+exports.getDepartments = async (req, res) => {
+  try {
+    const departments = await Department.find({}).select('name _id').lean();
+    res.json(departments);
+  } catch (err) {
+    console.error('Get departments error:', err);
+    res.status(500).json({ error: 'Server error' });
+  }
+};
+
 // Get department-wise analytics
 exports.getDepartmentAnalytics = async (req, res) => {
   try {
@@ -13,16 +24,29 @@ exports.getDepartmentAnalytics = async (req, res) => {
       return res.status(400).json({ error: 'Department name is required' });
     }
 
+    // Decode URL-encoded department name
+    const decodedDeptName = decodeURIComponent(deptName);
+    
     // Find the department - try exact match first, then partial match
     let department = await Department.findOne({ 
-      name: { $regex: `^${deptName}$`, $options: 'i' } 
+      name: { $regex: `^${decodedDeptName}$`, $options: 'i' } 
     });
     
     // If not found, try partial match (for cases like "CSE" matching "Computer Science and Engineering (CSE)")
     if (!department) {
       department = await Department.findOne({ 
-        name: { $regex: deptName, $options: 'i' } 
+        name: { $regex: decodedDeptName, $options: 'i' } 
       });
+    }
+    
+    // If still not found, try matching just the abbreviation part
+    if (!department) {
+      const abbreviation = decodedDeptName.match(/\(([^)]+)\)$/);
+      if (abbreviation) {
+        department = await Department.findOne({ 
+          name: { $regex: abbreviation[1], $options: 'i' } 
+        });
+      }
     }
 
     if (!department) {

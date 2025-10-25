@@ -3,7 +3,7 @@ import { Link, useNavigate } from "react-router-dom";
 import validateLogin from "../../common/validateLogin";
 import "../../common/Main.css";
 
-const API_BASE = process.env.REACT_APP_API_BASE_URL;
+const API_BASE = process.env.REACT_APP_API_BASE_URL || 'http://localhost:5001/api';
 
 function FacultyLogin() {
   const navigate = useNavigate();

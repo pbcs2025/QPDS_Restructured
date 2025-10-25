@@ -369,11 +369,12 @@ exports.getPaperByCodeSemester = async (req, res) => {
         file_name: paper.file_name,
         file_type: paper.file_type,
         file_url: paper.file_name ? `/question-bank/file/${paper._id}` : null
-      });
+      }))
+    };
 
-      if (paper.status === 'approved') grouped.status = 'approved';
-      else if (paper.status === 'rejected') grouped.status = 'rejected';
-    }
+    let grouped = groupedPaper;
+    if (papers.some(paper => paper.status === 'approved')) grouped.status = 'approved';
+    else if (papers.some(paper => paper.status === 'rejected')) grouped.status = 'rejected';
 
     return res.json(grouped);
   } catch (err) {
