@@ -237,6 +237,7 @@ const DepartmentStats = () => {
     return unifiedData;
   };
 
+
   const formatTimestamp = (timestamp) => {
     if (!timestamp) return 'N/A';
     return new Date(timestamp).toLocaleString();

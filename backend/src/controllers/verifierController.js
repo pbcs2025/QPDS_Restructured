@@ -117,12 +117,6 @@ exports.listAll = async (_req, res) => {
   }
 };
 
-<<<<<<< HEAD
-// List grouped papers across all subject_code and semester
-exports.getPapers = async (_req, res) => {
-  try {
-    const papers = await QuestionPaper.find({})
-=======
 // List and group question papers (helper for UI overview)
 exports.getPapers = async (req, res) => {
   try {
@@ -135,7 +129,6 @@ exports.getPapers = async (req, res) => {
     if (semester) filter.semester = parseInt(semester, 10);
 
     const papers = await QuestionPaper.find(filter)
->>>>>>> 9fa3081a90a2849a3a9e74a25d756696ba387d79
       .sort({ subject_code: 1, semester: 1, question_number: 1 })
       .lean();
 
@@ -151,10 +144,7 @@ exports.getPapers = async (req, res) => {
           department: paper.department,
           questions: [],
           status: 'pending',
-<<<<<<< HEAD
-=======
           createdAt: paper.createdAt,
->>>>>>> 9fa3081a90a2849a3a9e74a25d756696ba387d79
         };
       }
 
@@ -190,46 +180,6 @@ exports.getPapers = async (req, res) => {
 };
 
 exports.removeOne = async (req, res) => {
-<<<<<<< HEAD
-  try {
-    const { verifierId } = req.params;
-    if (!verifierId) {
-      return res.status(400).json({ error: 'verifierId is required' });
-    }
-
-    const verifier = await Verifier.findById(verifierId).lean();
-    if (!verifier) {
-      return res.status(404).json({ error: 'Verifier not found' });
-    }
-
-    const delVerifier = await Verifier.deleteOne({ _id: verifierId });
-    let delUser = { deletedCount: 0 };
-    if (verifier.verifierId) {
-      delUser = await User.deleteOne({ _id: verifier.verifierId });
-    }
-
-    return res.json({
-      success: true,
-      verifierDeleted: delVerifier.deletedCount || 0,
-      userDeleted: delUser.deletedCount || 0,
-    });
-  } catch (err) {
-    console.error('Verifier removeOne error:', err);
-    return res.status(500).json({ error: 'Server error' });
-  }
-};
-
-exports.updatePaper = async (req, res) => {
-  try {
-    const { subject_code, semester } = req.params;
-    const { questions, finalStatus } = req.body;
-    
-    if (!questions || !Array.isArray(questions)) {
-      return res.status(400).json({ error: 'Questions array is required' });
-    }
-
-    // Update each question in the paper only (no snapshot here)
-=======
   try {
     const { verifierId } = req.params;
     if (!verifierId) {
@@ -291,7 +241,6 @@ exports.updatePaper = async (req, res) => {
     const normalizedCode = subject_code;
 
     // Update each question in the paper
->>>>>>> 9fa3081a90a2849a3a9e74a25d756696ba387d79
     const updatePromises = questions.map(async (question) => {
       const updateData = {
         approved: !!question.approved,
@@ -401,11 +350,12 @@ exports.getPaperByCodeSemester = async (req, res) => {
         file_name: paper.file_name,
         file_type: paper.file_type,
         file_url: paper.file_name ? `/question-bank/file/${paper._id}` : null
-      });
+      }))
+    };
 
-      if (paper.status === 'approved') grouped.status = 'approved';
-      else if (paper.status === 'rejected') grouped.status = 'rejected';
-    }
+    let grouped = groupedPaper;
+    if (papers.some(paper => paper.status === 'approved')) grouped.status = 'approved';
+    else if (papers.some(paper => paper.status === 'rejected')) grouped.status = 'rejected';
 
     return res.json(grouped);
   } catch (err) {
