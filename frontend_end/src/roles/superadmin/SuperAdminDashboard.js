@@ -11,6 +11,7 @@ import DepartmentStats from "../../components/DepartmentStats";
 import VerifierManagement from "../verifier/VerifierManagement";
 import { io } from "socket.io-client";
 
+const API_BASE = process.env.REACT_APP_API_BASE_URL || 'http://localhost:5001/api';
 
 function SuperAdminDashboard() {
   const navigate = useNavigate();
@@ -32,6 +33,7 @@ function SuperAdminDashboard() {
   const [showSentForPrint, setShowSentForPrint] = useState(false);
 
   const QP_API_BASE = process.env.REACT_APP_QP_API_BASE_URL || process.env.REACT_APP_API_BASE_URL || 'http://localhost:5001/api';
+  
 
   const [departments, setDepartments] = useState([]);
   const [newVerifierName, setNewVerifierName] = useState("");
