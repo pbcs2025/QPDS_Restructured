@@ -169,20 +169,18 @@ exports.getRejectedPapers = async (req, res) => {
           questions: []
         };
       }
-      // Only add unique questions to avoid duplicates
-      const existingQuestion = groupedPapers[key].questions.find(q => q.question_number === r.question_number);
-      if (!existingQuestion) {
-        groupedPapers[key].questions.push({
-          question_number: r.question_number,
-          question_text: r.question_text,
-          marks: r.marks,
-          co: r.co,
-          level: r.level,
-          remarks: r.remarks
-        });
-      }
+      // Add question to the group
+      groupedPapers[key].questions.push({
+        question_number: r.question_number,
+        question_text: r.question_text,
+        marks: r.marks,
+        co: r.co,
+        level: r.level,
+        remarks: r.remarks
+      });
     });
 
+    // Return unique papers (one entry per paper)
     const detailed = Object.values(groupedPapers);
 
     return res.json(detailed);
@@ -219,20 +217,18 @@ exports.getApprovedPapers = async (req, res) => {
           questions: []
         };
       }
-      // Only add unique questions to avoid duplicates
-      const existingQuestion = groupedPapers[key].questions.find(q => q.question_number === a.question_number);
-      if (!existingQuestion) {
-        groupedPapers[key].questions.push({
-          question_number: a.question_number,
-          question_text: a.question_text,
-          marks: a.marks,
-          co: a.co,
-          level: a.level,
-          remarks: a.remarks
-        });
-      }
+      // Add question to the group
+      groupedPapers[key].questions.push({
+        question_number: a.question_number,
+        question_text: a.question_text,
+        marks: a.marks,
+        co: a.co,
+        level: a.level,
+        remarks: a.remarks
+      });
     });
 
+    // Return unique papers (one entry per paper)
     const detailed = Object.values(groupedPapers);
 
     return res.json(detailed);
@@ -764,29 +760,26 @@ exports.approveCorrectedQuestions = async (req, res) => {
         has_l: !!q.l
       })));
 
-      // Create approved paper records for each question
-      const approvedPapers = corrected_questions.map(question => {
-        console.log('Creating ApprovedPaper for question:', question.question_number);
-        return new ApprovedPaper({
-          subject_code,
-          subject_name,
-          semester: parseInt(semester),
-          department,
-          question_number: question.question_number,
-          question_text: question.question_text,
-          marks: question.marks,
-          co: question.co,
-          level: question.l,
-          remarks: question.remarks || '',
-          verified_by,
-          verified_at: new Date(),
-          approved_at: new Date()
-        });
-      });
+  // **FIX: Delete any existing approved papers for this subject/semester first**
+await ApprovedPaper.deleteMany({
+  subject_code,
+  semester: parseInt(semester)
+}, { session });
+console.log('Deleted any existing approved paper records');
 
-      console.log('Attempting to insert approved papers:', approvedPapers.length);
-      await ApprovedPaper.insertMany(approvedPapers, { session });
-      console.log('Successfully inserted approved papers');
+// **FIX: Create only ONE approved paper record (not one per question)**
+const approvedPaper = new ApprovedPaper({
+  subject_code,
+  subject_name,
+  semester: parseInt(semester),
+  department,
+  verified_by,
+  verified_at: new Date(),
+  approved_at: new Date()
+});
+
+await approvedPaper.save({ session });
+console.log('Successfully created single approved paper record');
 
       await session.commitTransaction();
       session.endSession();
@@ -794,7 +787,7 @@ exports.approveCorrectedQuestions = async (req, res) => {
       console.log('Successfully approved and saved corrected questions');
       return res.json({ 
         message: 'Corrected questions approved and saved successfully',
-        approvedPapers: approvedPapers.length
+        approvedPapers: 1
       });
     } catch (error) {
       console.error('Transaction error:', error);
