@@ -8,8 +8,13 @@ router.get('/list', ctrl.list);
 
 // Question paper routes - these must come before /:id route
 router.get('/papers', ctrl.getPapers);
-router.put('/papers/:subject_code/:semester', ctrl.updatePaper);
+router.put('/papers/:id', ctrl.updatePaper);
 router.get('/papers/:subject_code/:semester', ctrl.getPaperByCodeSemester);
+router.get('/papers/:subject_code/:semester.docx', ctrl.getPaperDocx);
+
+// Diagnostics
+router.get('/approved', ctrl.listApprovedPapers);
+router.get('/rejected', ctrl.listRejectedPapers);
 
 router.delete('/:verifierId', ctrl.removeOne);
 

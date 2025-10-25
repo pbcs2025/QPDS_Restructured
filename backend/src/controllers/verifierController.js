@@ -6,6 +6,7 @@ const Verifier = require('../models/Verifier');
 const QuestionPaper = require('../models/QuestionPaper');
 const ApprovedPaper = require('../models/ApprovedPaper');
 const RejectedPaper = require('../models/RejectedPaper');
+const VerifierCorrectedQuestions = require('../models/VerifierCorrectedQuestions');
 
 const Department = require('../models/Department');
 const { Document, Packer, Paragraph, TextRun } = (() => {
@@ -106,17 +107,54 @@ exports.list = async (req, res) => {
   }
 };
 
+exports.listAll = async (_req, res) => {
+  try {
+    const rows = await Verifier.find({}).sort({ department: 1 }).lean();
+    return res.json(rows);
+  } catch (err) {
+    console.error('Verifier listAll error:', err);
+    return res.status(500).json({ error: 'Server error' });
+  }
+};
+
+// List and group question papers (helper for UI overview)
 exports.getPapers = async (req, res) => {
   try {
-    const { subject_code, semester } = req.query;
+    const { department, semester } = req.query;
+    console.log('Verifier getPapers called with:', { department, semester });
 
     const filter = {};
-    if (subject_code) filter.subject_code = { $regex: `^${String(subject_code).trim()}$`, $options: 'i' };
+    if (department) filter.department = String(department).trim();
     if (semester) filter.semester = parseInt(semester, 10);
+    
+    console.log('Filter applied:', filter);
 
-    const papers = await QuestionPaper.find(filter)
-      .sort({ subject_code: 1, semester: 1, question_number: 1 })
-      .lean();
+    // Exclude papers already stored in rejected
+    const rejectedPaperKeys = await RejectedPaper.find({}, { subject_code: 1, semester: 1 }).lean();
+    const rejectedKeys = new Set(rejectedPaperKeys.map(rp => `${rp.subject_code}_${rp.semester}`));
+
+    const allPapers = await QuestionPaper.find({
+      ...filter,
+      $or: [
+        { status: { $exists: false } },
+        { status: null },
+        { status: 'pending' },
+        { status: 'submitted' },
+        { status: 'approved' },
+        { status: 'rejected' },
+      ]
+    }).sort({ subject_code: 1, semester: 1, question_number: 1 }).lean();
+
+    console.log('Found papers:', allPapers.length);
+    console.log('Sample papers:', allPapers.slice(0, 3).map(p => ({
+      subject_code: p.subject_code,
+      semester: p.semester,
+      department: p.department,
+      status: p.status
+    })));
+
+    const papers = allPapers.filter(p => !rejectedKeys.has(`${p.subject_code}_${p.semester}`));
+    console.log('Papers after filtering rejected:', papers.length);
 
     const groupedPapers = {};
     papers.forEach((paper) => {
@@ -127,9 +165,9 @@ exports.getPapers = async (req, res) => {
           subject_code: paper.subject_code,
           subject_name: paper.subject_name,
           semester: paper.semester,
+          department: paper.department,
           questions: [],
-          status: 'pending',
-          createdAt: paper.createdAt,
+          status: 'pending'
         };
       }
 
@@ -142,9 +180,6 @@ exports.getPapers = async (req, res) => {
         level: paper.level,
         approved: paper.approved,
         remarks: paper.remarks,
-        verified_by: paper.verified_by,
-        verified_at: paper.verified_at,
-        status: paper.status,
         file_name: paper.file_name,
         file_type: paper.file_type,
         file_url: paper.file_name ? `/question-bank/file/${paper._id}` : null,
@@ -154,9 +189,11 @@ exports.getPapers = async (req, res) => {
       else if (paper.status === 'rejected') groupedPapers[key].status = 'rejected';
     });
 
-    return res.json(Object.values(groupedPapers));
+    const result = Object.values(groupedPapers).sort((a, b) => a.subject_code.localeCompare(b.subject_code));
+    console.log('Final result for verifier:', result.length, 'grouped papers');
+    return res.json(result);
   } catch (err) {
-    console.error('Verifier getPapers error:', err);
+    console.error('Get papers error:', err);
     return res.status(500).json({ error: 'Server error' });
   }
 };
@@ -176,7 +213,7 @@ exports.removeOne = async (req, res) => {
           { _id: new mongoose.Types.ObjectId(verifierId) },
           { verifierId: new mongoose.Types.ObjectId(verifierId) },
         ],
-      }).lean();
+        }).lean();
     }
     if (!verifier) {
       // Fallback: try direct match on verifierId field (string form)
@@ -209,10 +246,10 @@ exports.updatePaper = async (req, res) => {
   try {
     const { subject_code: pCode, semester: pSem } = req.params;
     const { subject_code: bCode, semester: bSem, questions, finalStatus } = req.body || {};
-
+    
     const subject_code = String(pCode || bCode || '').trim();
     const semester = parseInt(pSem || bSem, 10);
-
+    
     if (!subject_code || Number.isNaN(semester)) {
       return res.status(400).json({ error: 'subject_code and semester are required' });
     }
@@ -221,7 +258,7 @@ exports.updatePaper = async (req, res) => {
     }
 
     const normalizedCode = subject_code;
-
+    
     // Update each question in the paper
     const updatePromises = questions.map(async (question) => {
       const updateData = {
@@ -242,7 +279,7 @@ exports.updatePaper = async (req, res) => {
       if (typeof question.marks === 'number' && !Number.isNaN(question.marks)) {
         updateData.marks = question.marks;
       }
-
+      
       return await QuestionPaper.findOneAndUpdate(
         {
           subject_code: { $regex: `^${normalizedCode}$`, $options: 'i' },
@@ -253,7 +290,7 @@ exports.updatePaper = async (req, res) => {
         { new: true }
       ).lean();
     });
-
+    
     await Promise.all(updatePromises);
 
     // Enforce final status across all questions for this paper if provided
@@ -287,7 +324,7 @@ exports.updatePaper = async (req, res) => {
         { upsert: true }
       );
     }
-
+    
     return res.json({ message: 'Paper updated successfully', finalStatus: finalStatus || null });
   } catch (err) {
     console.error('Verifier updatePaper error:', err);
@@ -331,19 +368,120 @@ exports.getPaperByCodeSemester = async (req, res) => {
         status: paper.status,
         file_name: paper.file_name,
         file_type: paper.file_type,
-        file_url: paper.file_name ? `/question-bank/file/${paper._id}` : null,
-      })),
-      status: 'pending'
-    };
+        file_url: paper.file_name ? `/question-bank/file/${paper._id}` : null
+      });
 
-    // Determine overall status
-    const hasApproved = papers.some(p => p.status === 'approved');
-    const hasRejected = papers.some(p => p.status === 'rejected');
-    
-    if (hasApproved && !hasRejected) {
-      groupedPaper.status = 'approved';
-    } else if (hasRejected && !hasApproved) {
-      groupedPaper.status = 'rejected';
+      if (paper.status === 'approved') grouped.status = 'approved';
+      else if (paper.status === 'rejected') grouped.status = 'rejected';
+    }
+
+    return res.json(grouped);
+  } catch (err) {
+    console.error('Verifier getPaperByCodeSemester error:', err);
+    return res.status(500).json({ error: 'Server error' });
+  }
+};
+
+// Generate a DOCX for a paper
+exports.getPaperDocx = async (req, res) => {
+  try {
+    if (!Packer) return res.status(501).json({ error: 'DOCX generation not available on server' });
+    const { subject_code, semester } = req.params;
+    const sem = parseInt(semester);
+    const papers = await QuestionPaper.find({ subject_code, semester: sem }).sort({ question_number: 1 }).lean();
+    if (!papers || papers.length === 0) return res.status(404).json({ error: 'Paper not found' });
+
+    const header = [
+      new Paragraph({ children: [new TextRun({ text: `Subject: ${papers[0].subject_name} (${subject_code})`, bold: true })] }),
+      new Paragraph({ children: [new TextRun({ text: `Semester: ${sem}`, bold: true })] }),
+      new Paragraph({ children: [new TextRun({ text: ' ' })] }),
+    ];
+
+    const questionParas = papers.flatMap((q) => [
+      new Paragraph({ children: [new TextRun({ text: `${q.question_number}) ${q.question_text}` })] }),
+      new Paragraph({ children: [new TextRun({ text: `CO: ${q.co || ''}   L: ${q.level || ''}   Marks: ${typeof q.marks === 'number' ? q.marks : 0}` })] }),
+      new Paragraph({ children: [new TextRun({ text: `Remarks: ${q.remarks || ''}` })] }),
+      new Paragraph({ children: [new TextRun({ text: ' ' })] }),
+    ]);
+
+    const doc = new Document({ sections: [{ properties: {}, children: [...header, ...questionParas] }] });
+    const buffer = await Packer.toBuffer(doc);
+    const filename = `${subject_code}_${sem}.docx`;
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document');
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    return res.send(Buffer.from(buffer));
+  } catch (err) {
+    console.error('getPaperDocx error:', err);
+    return res.status(500).json({ error: 'Server error' });
+  }
+};
+// Diagnostics: list approved papers
+exports.listApprovedPapers = async (_req, res) => {
+  try {
+    const rows = await ApprovedPaper.find({}).sort({ createdAt: -1 }).limit(100).lean();
+    return res.json(rows);
+  } catch (err) {
+    console.error('Verifier listApprovedPapers error:', err);
+    return res.status(500).json({ error: 'Server error' });
+  }
+};
+
+// Diagnostics: list rejected papers
+exports.listRejectedPapers = async (_req, res) => {
+  try {
+    const rows = await RejectedPaper.find({}).sort({ createdAt: -1 }).limit(100).lean();
+    return res.json(rows);
+  } catch (err) {
+    console.error('Verifier listRejectedPapers error:', err);
+    return res.status(500).json({ error: 'Server error' });
+  }
+};
+
+
+
+
+
+// Normalize all Verifier.department values to match active Department names exactly
+// - Case-insensitive matching against active department names
+// - Only updates when a canonical match is found and value differs by case/spacing
+// - Returns a summary of updates
+exports.normalizeDepartments = async (_req, res) => {
+  try {
+    const activeDepts = await Department.find({ isActive: true }).select('name').lean();
+    const canonicalByLower = new Map(activeDepts.map(d => [String(d.name).toLowerCase().trim(), d.name]));
+
+    const verifiers = await Verifier.find({}).select('_id department').lean();
+
+    const bulkOps = [];
+    let matched = 0;
+    let alreadyCanonical = 0;
+    let skipped = 0;
+
+    for (const v of verifiers) {
+      const current = (v.department || '').trim();
+      const key = current.toLowerCase();
+      const canonical = canonicalByLower.get(key);
+      if (!canonical) {
+        skipped++;
+        continue;
+      }
+      if (current === canonical) {
+        alreadyCanonical++;
+        continue;
+      }
+      matched++;
+      bulkOps.push({
+        updateOne: {
+          filter: { _id: v._id },
+          update: { $set: { department: canonical } },
+        }
+      });
+    }
+
+    let modifiedCount = 0;
+    if (bulkOps.length > 0) {
+      const result = await Verifier.bulkWrite(bulkOps);
+      modifiedCount = result.modifiedCount || 0;
     }
 
     res.json(groupedPaper);

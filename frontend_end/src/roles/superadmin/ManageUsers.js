@@ -18,29 +18,40 @@ function ManageUsers({ userType , userpage }) {
   const [lastSubmittedDate, setLastSubmittedDate] = useState("");
   const [statusMessage, setStatusMessage] = useState(null);
   const [selectedGrouped, setSelectedGrouped] = useState(null);
-  const [searchTerm, setSearchTerm] = useState("");
   const [selectedUsers, setSelectedUsers] = useState([]);
+  const [selectedDepartment, setSelectedDepartment] = useState("");
+  const [selectedSemester, setSelectedSemester] = useState("");
+  const [filteredSubjects, setFilteredSubjects] = useState([]);
+  const [recentAssignments, setRecentAssignments] = useState([]);
   const statusRef = useRef(null);
 
-  // const subjectCodes = [
-  //   "CS101 - Data Structures",
-  //   "CS102 - Algorithms",
-  //   "EC201 - Digital Electronics",
-  //   "ME301 - Thermodynamics",
-  //   "CE401 - Structural Engineering",
-  //   "CSE23401 - Engineering Mathematics"
-  // ];
+  // Semester options
+  const semesters = [
+    { value: "1", label: "Semester 1" },
+    { value: "2", label: "Semester 2" },
+    { value: "3", label: "Semester 3" },
+    { value: "4", label: "Semester 4" },
+    { value: "5", label: "Semester 5" },
+    { value: "6", label: "Semester 6" },
+    { value: "7", label: "Semester 7" },
+    { value: "8", label: "Semester 8" }
+  ];
   useEffect(() => {
   axios
   .get(`${API_BASE}/subjects`)
     .then((res) => {
-    // Normalize to array of { code, name }
+    // Normalize to array of { code, name, department, semester }
     const list = Array.isArray(res.data) ? res.data : [];
     const normalized = list.map(item => {
       if (typeof item === 'string') {
-        return { code: item, name: '' };
+        return { code: item, name: '', department: '', semester: '' };
       }
-      return { code: item.subject_code || item.code || '', name: item.subject_name || item.name || '' };
+      return {
+        code: item.subject_code || item.code || '',
+        name: item.subject_name || item.name || '',
+        department: item.department || '',
+        semester: typeof item.semester === 'number' ? String(item.semester) : (item.semester || '')
+      };
     }).filter(x => x.code);
     setSubjectCodes(normalized);
     })
@@ -54,7 +65,7 @@ useEffect(() => {
       if (Array.isArray(res.data)) {
         // If API returns objects like {department: "CSE"}, map to strings
         const deptNames = res.data.map(d => typeof d === "string" ? d : d.department);
-        setDepartments(deptNames);
+        setDepartments(deptNames.filter(Boolean));
       } else {
         console.error("Unexpected departments response:", res.data);
         setDepartments([]);
@@ -65,6 +76,56 @@ useEffect(() => {
       setDepartments([]);
     });
 }, []);
+
+// Filter subjects based on department and semester (exact match, no regex)
+useEffect(() => {
+  if (selectedDepartment && selectedSemester && subjectCodes.length > 0) {
+    const filtered = subjectCodes.filter(subject => {
+      const dept = typeof subject === 'string' ? '' : (subject.department || '');
+      const sem = typeof subject === 'string' ? '' : (subject.semester || '');
+      return dept === selectedDepartment && sem === selectedSemester;
+    });
+    setFilteredSubjects(filtered);
+  } else {
+    setFilteredSubjects([]);
+  }
+}, [selectedDepartment, selectedSemester, subjectCodes]);
+
+// Fetch recent assignments
+useEffect(() => {
+  if (userType === "superadmin" && userpage === "qp") {
+    fetch(`${API_BASE}/recent-assignments`)
+      .then(res => res.json())
+      .then(data => {
+        setRecentAssignments(data || []);
+      })
+      .catch(err => {
+        console.error("Error fetching recent assignments:", err);
+        setRecentAssignments([]);
+      });
+  }
+}, [userType, userpage]);
+
+// Auto-cleanup: Remove completed assignments older than 5 hours every minute
+useEffect(() => {
+  if (userType === "superadmin" && userpage === "qp") {
+    const interval = setInterval(() => {
+      setRecentAssignments(prevAssignments => {
+        return prevAssignments.filter(assignment => {
+          if (assignment.status === 'Completed') {
+            const assignedDate = new Date(assignment.assignedDate || assignment.completedAt);
+            const now = new Date();
+            const hoursDiff = (now - assignedDate) / (1000 * 60 * 60);
+            return hoursDiff < 5; // Keep if less than 5 hours old
+          }
+          return true; // Keep all pending assignments
+        });
+      });
+    }, 60000); // Run every minute (60000ms)
+
+    return () => clearInterval(interval);
+  }
+}, [userType, userpage]);
 
 
 
@@ -97,20 +158,73 @@ useEffect(() => {
   return found || deptName;
 };
 
+// Filter faculties by selected department
+const getFilteredFaculties = (faculties) => {
+  if (!selectedDepartment) return faculties;
+  return faculties.filter(faculty => 
+    normalizeDeptName(faculty.deptName).toLowerCase() === selectedDepartment.toLowerCase()
+  );
+};
+
+// Handle department change
+const handleDepartmentChange = (dept) => {
+  setSelectedDepartment(dept);
+  setSelectedSemester("");
+  setSubjectCode("");
+  setSelectedEmails([]);
+  setSelectedUsers([]);
+};
+
+// Handle semester change
+const handleSemesterChange = (semester) => {
+  setSelectedSemester(semester);
+  setSubjectCode("");
+};
+
 
 
   useEffect(() => {
-    fetch(`${API_BASE}/users`)
-      .then((res) => res.json())
-      .then((data) => setInternalFaculties(data))
-      .catch((err) => console.error("Fetch error:", err));
+    const fetchFaculties = () => {
+      fetch(`${API_BASE}/users`)
+        .then((res) => res.json())
+        .then((data) => setInternalFaculties(data))
+        .catch((err) => console.error("Fetch error:", err));
+    };
+
+    fetchFaculties();
+
+    // Listen for faculty updates (e.g., from bulk upload)
+    const handler = () => fetchFaculties();
+    if (typeof window !== 'undefined' && window.addEventListener) {
+      window.addEventListener('faculties-updated', handler);
+    }
+    return () => {
+      if (typeof window !== 'undefined' && window.removeEventListener) {
+        window.removeEventListener('faculties-updated', handler);
+      }
+    };
   }, []);
 
   useEffect(() => {
-    fetch(`${API_BASE}/externalusers`)
-      .then((res) => res.json())
-      .then((data) => setOtherFaculties(data))
-      .catch((err) => console.error("Fetch error:", err));
+    const fetchExternalFaculties = () => {
+      fetch(`${API_BASE}/externalusers`)
+        .then((res) => res.json())
+        .then((data) => setOtherFaculties(data))
+        .catch((err) => console.error("Fetch error:", err));
+    };
+
+    fetchExternalFaculties();
+
+    // Listen for faculty updates (e.g., from bulk upload)
+    const handler = () => fetchExternalFaculties();
+    if (typeof window !== 'undefined' && window.addEventListener) {
+      window.addEventListener('faculties-updated', handler);
+    }
+    return () => {
+      if (typeof window !== 'undefined' && window.removeEventListener) {
+        window.removeEventListener('faculties-updated', handler);
+      }
+    };
   }, []);
 
   // const handleSelect = (email) => {
@@ -205,7 +319,7 @@ useEffect(() => {
       return;
     }
 
-    console.log(selectedUsers);
+    
 
     setStatusMessage("Submitting assignment...");
 
@@ -242,12 +356,46 @@ useEffect(() => {
           setLastSubmittedSubjectCode(subjectCode);
           setLastSubmittedDate(submitDate);
 
-          // Clear selections and inputs
+          // Clear selections and inputs to initial state
           setSelectedEmails([]);
+          setSelectedUsers([]);
+          setSelectedGrouped(null);
+          setSelectedDepartment("");
+          setSelectedSemester("");
+          setFilteredSubjects([]);
           setSubjectCode("");
           setSubmitDate("");
 
           setStatusMessage("✅ QP Setters assigned successfully!");
+
+          // Add optimistic assignment and refresh from backend
+          const optimisticAssignment = {
+            facultyNames: selectedUsersList.map((f) => f.name || f.email),
+            subjectCode,
+            department: selectedDepartment,
+            deadline: submitDate,
+            assignedDate: new Date().toISOString().slice(0, 10),
+            status: "Pending"
+          };
+          
+          // First add optimistically
+          setRecentAssignments((prev) => [optimisticAssignment, ...(prev || [])]);
+          
+          // Then refresh from backend after a short delay
+          setTimeout(() => {
+            fetch(`${API_BASE}/recent-assignments`)
+              .then(res => res.json())
+              .then(data => {
+                // Only update if backend has data, otherwise keep optimistic
+                if (data && data.length > 0) {
+                  setRecentAssignments(data);
+                }
+              })
+              .catch(err => {
+                console.error("Error refreshing recent assignments:", err);
+                // Keep optimistic data if backend fails
+              });
+          }, 1000);
 
           setTimeout(() => {
             if (statusRef.current) {
@@ -264,50 +412,496 @@ useEffect(() => {
       });
   };
 
+  // Notifications component
+  const renderNotifications = () => {
+    // Filter out completed assignments older than 5 hours
+    const filteredAssignments = recentAssignments.filter(assignment => {
+      if (assignment.status === 'Completed') {
+        const assignedDate = new Date(assignment.assignedDate || assignment.completedAt);
+        const now = new Date();
+        const hoursDiff = (now - assignedDate) / (1000 * 60 * 60); // Convert ms to hours
+        return hoursDiff < 5; // Only show if less than 5 hours old
+      }
+      return true; // Show all pending/non-completed assignments
+    });
+
+    return (
+    <div className="notifications-container" style={{
+      background: 'linear-gradient(135deg, #f8fafc 0%, #eef2ff 100%)',
+      border: '1px solid #e2e8f0',
+      borderRadius: 16,
+      padding: 20,
+      marginBottom: 20,
+      boxShadow: '0 6px 18px rgba(0,0,0,0.06)'
+    }}>
+      <h2 style={{ margin: '0 0 8px 0', color: '#1e40af', fontSize: 24, fontWeight: 700 }}>
+        📋 Recent QP Setter Assignments
+      </h2>
+      
+      <div style={{
+        background: '#eff6ff',
+        border: '1px solid #bfdbfe',
+        borderRadius: 8,
+        padding: '8px 12px',
+        marginBottom: 12,
+        fontSize: 13,
+        color: '#1e40af'
+      }}>
+        ℹ️ <strong>Note:</strong> Completed assignments are automatically removed after 5 hours.
+      </div>
+      
+      <div style={{
+        background: 'white',
+        borderRadius: 12,
+        border: '1px solid #e2e8f0',
+        height: '180px', // Reduced height to show ~3 entries
+        overflowY: 'auto', // Scrollable
+        padding: '12px'
+      }}>
+        {filteredAssignments.length > 0 ? (
+          filteredAssignments.map((assignment, idx) => (
+            <div 
+              key={idx} 
+              style={{
+                background: '#f8fafc',
+                border: '1px solid #e2e8f0',
+                borderRadius: 8,
+                padding: '12px 16px',
+                marginBottom: '8px',
+                cursor: 'pointer',
+                transition: 'all 0.2s ease',
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center'
+              }}
+              onMouseEnter={(e) => {
+                e.target.style.background = '#eef2ff';
+                e.target.style.borderColor = '#4f46e5';
+              }}
+              onMouseLeave={(e) => {
+                e.target.style.background = '#f8fafc';
+                e.target.style.borderColor = '#e2e8f0';
+              }}
+              onClick={() => {
+                const facultyNames = assignment.facultyNames || [assignment.facultyName];
+                const totalCount = facultyNames.length;
+                
+                // Separate internal and external faculties (mock logic - you may need to adjust based on your data)
+                const internalFaculties = facultyNames.filter(name => 
+                  name.includes('Dr.') || name.includes('Prof.')
+                );
+                const externalFaculties = facultyNames.filter(name => 
+                  !name.includes('Dr.') && !name.includes('Prof.')
+                );
+                
+                let message = `Assignment for ${assignment.subjectCode}\n\n`;
+                if (internalFaculties.length > 0) {
+                  message += `Internal Faculties (${internalFaculties.length}):\n${internalFaculties.join('\n')}\n\n`;
+                }
+                if (externalFaculties.length > 0) {
+                  message += `External Faculties (${externalFaculties.length}):\n${externalFaculties.join('\n')}\n\n`;
+                }
+                message += `Total Count: ${totalCount}\nSubmission Deadline: ${assignment.deadline}`;
+                
+                alert(message);
+              }}
+            >
+              <div style={{ flex: 1 }}>
+                <div style={{ 
+                  fontSize: 16, 
+                  fontWeight: 600, 
+                  color: '#1e40af',
+                  marginBottom: '4px'
+                }}>
+                  Assignment for {assignment.subjectCode}
+                </div>
+                <div style={{ 
+                  fontSize: 14, 
+                  color: '#64748b'
+                }}>
+                  Assigned on {assignment.assignedDate || 'N/A'}
+                </div>
+              </div>
+              
+              <div style={{ textAlign: 'right' }}>
+                <div style={{ 
+                  fontSize: 14, 
+                  color: '#64748b',
+                  fontWeight: 500,
+                  marginBottom: '4px'
+                }}>
+                  Assigned at: {assignment.assignedDate || 'N/A'}
+                </div>
+                <span style={{
+                  padding: '4px 8px',
+                  borderRadius: 6,
+                  fontSize: 12,
+                  fontWeight: 600,
+                  background: assignment.status === 'Completed' ? '#dcfce7' : '#fef3c7',
+                  color: assignment.status === 'Completed' ? '#166534' : '#d97706'
+                }}>
+                  {assignment.status}
+                </span>
+              </div>
+              
+              <div style={{ marginLeft: '12px' }}>
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation(); // Prevent triggering the row click
+                    if (window.confirm('Are you sure you want to delete this assignment?')) {
+                      setRecentAssignments(prev => prev.filter((_, i) => i !== idx));
+                    }
+                  }}
+                  style={{
+                    background: '#dc2626',
+                    color: 'white',
+                    border: 'none',
+                    borderRadius: 4,
+                    padding: '4px 8px',
+                    fontSize: 12,
+                    cursor: 'pointer',
+                    fontWeight: 600
+                  }}
+                  onMouseEnter={(e) => e.target.style.background = '#b91c1c'}
+                  onMouseLeave={(e) => e.target.style.background = '#dc2626'}
+                >
+                  Delete
+                </button>
+              </div>
+            </div>
+          ))
+        ) : (
+          <div style={{
+            padding: '40px 20px',
+            textAlign: 'center',
+            color: '#64748b'
+          }}>
+            <p style={{ margin: 0, fontSize: 16 }}>No recent assignments found. Start by selecting a department above.</p>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+  };
+
   return (
     <div className="manage-users">
       {userType === "superadmin" && userpage==="qp" && (
-        <div
-          style={{ marginBottom: "20px", display: "flex", gap: "10px", alignItems: "center" }}
-        >
-          <select
-            value={subjectCode}
-            onChange={(e) => setSubjectCode(e.target.value)}
-            style={{ padding: "6px", flex: 1 }}
-          >
-            <option value="">Select Subject Code</option>
-            {subjectCodes.map((item, idx) => {
-              const codeVal = typeof item === 'string' ? item : item.code;
-              const nameVal = typeof item === 'string' ? '' : item.name;
-              const label = nameVal ? `${codeVal} - ${nameVal}` : codeVal;
-              return (
-                <option key={idx} value={codeVal}>
-                  {label}
-                </option>
-              );
-            })}
-          </select>
-          <input
-            type="date"
-            value={submitDate}
-            onChange={(e) => setSubmitDate(e.target.value)}
-            style={{ padding: "6px", flex: 1 }}
-          />
-          <button onClick={handleConfirm} style={{ padding: "6px 12px" }}>
-            Confirm
-          </button>
-        </div>
+        <>
+          {/* QP Setter Selection Form */}
+          <div className="qp-selection-form" style={{
+            background: 'white',
+            border: '1px solid #e2e8f0',
+            borderRadius: 16,
+            padding: 20,
+            marginBottom: 20,
+            boxShadow: '0 6px 18px rgba(0,0,0,0.04)'
+          }}>
+            <h2 style={{ margin: '0 0 20px 0', color: '#1e40af', fontSize: 22, fontWeight: 700 }}>
+              🎯 Select Question Paper Setters
+            </h2>
+            
+            <div style={{ 
+              display: "grid", 
+              gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", 
+              gap: "12px", 
+              marginBottom: "20px",
+              alignItems: "end"
+            }}>
+              <div>
+                <label style={{ display: 'block', marginBottom: '6px', fontWeight: 600, color: '#374151' }}>
+                  Department *
+                </label>
+                <select
+                  value={selectedDepartment}
+                  onChange={(e) => handleDepartmentChange(e.target.value)}
+                  style={{ 
+                    padding: "10px 12px", 
+                    width: "100%", 
+                    borderRadius: 8,
+                    border: '1px solid #d1d5db',
+                    fontSize: 14,
+                    background: 'white'
+                  }}
+                >
+                  <option value="">Select Department</option>
+                  {departments.map((dept, idx) => (
+                    <option key={idx} value={dept}>
+                      {dept}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label style={{ display: 'block', marginBottom: '6px', fontWeight: 600, color: '#374151' }}>
+                  Semester *
+                </label>
+                <select
+                  value={selectedSemester}
+                  onChange={(e) => handleSemesterChange(e.target.value)}
+                  disabled={!selectedDepartment}
+                  style={{ 
+                    padding: "10px 12px", 
+                    width: "100%", 
+                    borderRadius: 8,
+                    border: '1px solid #d1d5db',
+                    fontSize: 14,
+                    background: selectedDepartment ? 'white' : '#f9fafb',
+                    color: selectedDepartment ? '#374151' : '#9ca3af'
+                  }}
+                >
+                  <option value="">Select Semester</option>
+                  {semesters.map((sem) => (
+                    <option key={sem.value} value={sem.value}>
+                      {sem.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label style={{ display: 'block', marginBottom: '6px', fontWeight: 600, color: '#374151' }}>
+                  Subject Code *
+                </label>
+                <select
+                  value={subjectCode}
+                  onChange={(e) => setSubjectCode(e.target.value)}
+                  disabled={!selectedDepartment || !selectedSemester}
+                  style={{ 
+                    padding: "10px 12px", 
+                    width: "100%", 
+                    borderRadius: 8,
+                    border: '1px solid #d1d5db',
+                    fontSize: 14,
+                    background: (selectedDepartment && selectedSemester) ? 'white' : '#f9fafb',
+                    color: (selectedDepartment && selectedSemester) ? '#374151' : '#9ca3af'
+                  }}
+                >
+                  <option value="">Select Subject</option>
+                  {filteredSubjects.map((item, idx) => {
+                    const codeVal = typeof item === 'string' ? item : item.code;
+                    const nameVal = typeof item === 'string' ? '' : item.name;
+                    const label = nameVal ? `${codeVal} - ${nameVal}` : codeVal;
+                    return (
+                      <option key={idx} value={codeVal}>
+                        {label}
+                      </option>
+                    );
+                  })}
+                </select>
+              </div>
+
+              <div>
+                <label style={{ display: 'block', marginBottom: '6px', fontWeight: 600, color: '#374151' }}>
+                  Submission Date *
+                </label>
+                <input
+                  type="date"
+                  value={submitDate}
+                  onChange={(e) => setSubmitDate(e.target.value)}
+                  style={{ 
+                    padding: "10px 12px", 
+                    width: "100%", 
+                    borderRadius: 8,
+                    border: '1px solid #d1d5db',
+                    marginLeft: "4px",
+                    fontSize: 14
+                  }}
+                />
+              </div>
+
+              <div>
+                <button 
+                  onClick={handleConfirm} 
+                  disabled={!selectedDepartment || !selectedSemester || !subjectCode || !submitDate}
+                  style={{ 
+                    padding: "10px 20px", 
+                    borderRadius: 8,
+                    border: 'none',
+                    background: (selectedDepartment && selectedSemester && subjectCode && submitDate) ? '#4f46e5' : '#9ca3af',
+                    color: 'white',
+                    fontWeight: 600,
+                    fontSize: 14,
+                    cursor: (selectedDepartment && selectedSemester && subjectCode && submitDate) ? 'pointer' : 'not-allowed',
+                    width: '100%'
+                  }}
+                >
+                  Confirm Assignment
+                </button>
+              </div>
+            </div>
+          </div>
+
+          {/* Show notifications when nothing is selected */}
+          {!selectedDepartment && (
+            renderNotifications()
+          )}
+
+          {/* View Assignees Section */}
+          {/* <div className="view-assignees-section" style={{
+            background: 'white',
+            border: '1px solid #e2e8f0',
+            borderRadius: 16,
+            padding: 20,
+            marginBottom: 20,
+            boxShadow: '0 6px 18px rgba(0,0,0,0.04)'
+          }}>
+            <h2 style={{ margin: '0 0 20px 0', color: '#1e40af', fontSize: 22, fontWeight: 700 }}>
+              👁️ View Assignees
+            </h2>
+            
+            <div style={{ 
+              display: "grid", 
+              gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", 
+              gap: "12px", 
+              marginBottom: "20px",
+              alignItems: "end"
+            }}>
+              <div>
+                <label style={{ display: 'block', marginBottom: '6px', fontWeight: 600, color: '#374151' }}>
+                  Department
+                </label>
+                <select
+                  value={viewDept}
+                  onChange={(e) => setViewDept(e.target.value)}
+                  style={{ 
+                    padding: "10px 12px", 
+                    width: "100%", 
+                    borderRadius: 8,
+                    border: '1px solid #d1d5db',
+                    fontSize: 14,
+                    background: 'white'
+                  }}
+                >
+                  <option value="">Select Department</option>
+                  {departments.map((dept, idx) => (
+                    <option key={idx} value={dept}>
+                      {dept}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label style={{ display: 'block', marginBottom: '6px', fontWeight: 600, color: '#374151' }}>
+                  Semester
+                </label>
+                <select
+                  value={viewSemester}
+                  onChange={(e) => setViewSemester(e.target.value)}
+                  disabled={!viewDept}
+                  style={{ 
+                    padding: "10px 12px", 
+                    width: "100%", 
+                    borderRadius: 8,
+                    border: '1px solid #d1d5db',
+                    fontSize: 14,
+                    background: viewDept ? 'white' : '#f9fafb',
+                    color: viewDept ? '#374151' : '#9ca3af'
+                  }}
+                >
+                  <option value="">Select Semester</option>
+                  {semesters.map((sem) => (
+                    <option key={sem.value} value={sem.value}>
+                      {sem.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <button 
+                  onClick={() => {
+                    // Filter assignments by selected department and semester
+                    const filtered = recentAssignments.filter(assignment => {
+                      const deptMatch = !viewDept || assignment.department === viewDept;
+                      const semMatch = !viewSemester || assignment.subjectCode.includes(viewSemester);
+                      return deptMatch && semMatch;
+                    });
+                    
+                    if (filtered.length === 0) {
+                      alert('No assignments found for the selected criteria.');
+                      return;
+                    }
+                    
+                    let message = `Assignments for ${viewDept || 'All Departments'} - ${viewSemester ? `Semester ${viewSemester}` : 'All Semesters'}:\n\n`;
+                    filtered.forEach((assignment, idx) => {
+                      message += `${idx + 1}. ${assignment.subjectCode} - ${assignment.department}\n`;
+                      message += `   Faculty: ${assignment.facultyNames.join(', ')}\n`;
+                      message += `   Deadline: ${assignment.deadline}\n\n`;
+                    });
+                    
+                    alert(message);
+                  }}
+                  disabled={!viewDept && !viewSemester}
+                  style={{ 
+                    padding: "10px 20px", 
+                    borderRadius: 8,
+                    border: 'none',
+                    background: (viewDept || viewSemester) ? '#10b981' : '#9ca3af',
+                    color: 'white',
+                    fontWeight: 600,
+                    fontSize: 14,
+                    cursor: (viewDept || viewSemester) ? 'pointer' : 'not-allowed',
+                    width: '100%'
+                  }}
+                >
+                  View Assignees
+                </button>
+              </div>
+            </div>
+          </div> */}
+        </>
       )}
 
-      {userType === "superadmin" && (
+      {userType === "superadmin" && selectedDepartment && (
         <>
-          <h2>Internal Faculties List</h2>
-          {renderDepartmentTables(internalFaculties)}
+          <div className="faculty-lists-container" style={{
+            background: 'white',
+            border: '1px solid #e2e8f0',
+            borderRadius: 16,
+            padding: 20,
+            marginBottom: 20,
+            boxShadow: '0 6px 18px rgba(0,0,0,0.04)'
+          }}>
+            <h2 style={{ margin: '0 0 20px 0', color: '#1e40af', fontSize: 22, fontWeight: 700 }}>
+              👥 Available Faculties - {selectedDepartment}
+            </h2>
+            
+            <h3 style={{ color: '#374151', marginBottom: 16 }}>Internal Faculties</h3>
+            {getFilteredFaculties(internalFaculties).length > 0 ? (
+              renderDepartmentTables(getFilteredFaculties(internalFaculties))
+            ) : (
+              <div style={{
+                background: '#f9fafb',
+                borderRadius: 8,
+                padding: 16,
+                textAlign: 'center',
+                color: '#6b7280',
+                marginBottom: 20
+              }}>
+                No internal faculties found for {selectedDepartment}
+              </div>
+            )}
 
-          <hr style={{ margin: "50px 0" }} />
+            <hr style={{ margin: "30px 0", border: '1px solid #e2e8f0' }} />
 
-          <h2>External Faculties List</h2>
-          {renderDepartmentTables(otherFaculties)}
+            <h3 style={{ color: '#374151', marginBottom: 16 }}>External Faculties</h3>
+            {getFilteredFaculties(otherFaculties).length > 0 ? (
+              renderDepartmentTables(getFilteredFaculties(otherFaculties))
+            ) : (
+              <div style={{
+                background: '#f9fafb',
+                borderRadius: 8,
+                padding: 16,
+                textAlign: 'center',
+                color: '#6b7280'
+              }}>
+                No external faculties found for {selectedDepartment}
+              </div>
+            )}
+          </div>
         </>
       )}
 
@@ -315,6 +909,62 @@ useEffect(() => {
         <>
           <h2>External Faculties List</h2>
           {renderDepartmentTables(otherFaculties)}
+        </>
+      )}
+
+      {/* Faculty Management Page - Show all faculties grouped by type */}
+      {userType === "superadmin" && userpage === "managefaculty" && (
+        <>
+          <div style={{
+            background: 'white',
+            border: '1px solid #e2e8f0',
+            borderRadius: 16,
+            padding: 20,
+            marginBottom: 20,
+            boxShadow: '0 6px 18px rgba(0,0,0,0.04)'
+          }}>
+            <h2 style={{ margin: '0 0 20px 0', color: '#1e40af', fontSize: 22, fontWeight: 700 }}>
+              👥 Internal Faculties
+            </h2>
+            {internalFaculties.length > 0 ? (
+              renderDepartmentTables(internalFaculties)
+            ) : (
+              <div style={{
+                background: '#f9fafb',
+                borderRadius: 8,
+                padding: 16,
+                textAlign: 'center',
+                color: '#6b7280'
+              }}>
+                No internal faculties found
+              </div>
+            )}
+          </div>
+
+          <div style={{
+            background: 'white',
+            border: '1px solid #e2e8f0',
+            borderRadius: 16,
+            padding: 20,
+            boxShadow: '0 6px 18px rgba(0,0,0,0.04)'
+          }}>
+            <h2 style={{ margin: '0 0 20px 0', color: '#1e40af', fontSize: 22, fontWeight: 700 }}>
+              🌐 External Faculties
+            </h2>
+            {otherFaculties.length > 0 ? (
+              renderDepartmentTables(otherFaculties)
+            ) : (
+              <div style={{
+                background: '#f9fafb',
+                borderRadius: 8,
+                padding: 16,
+                textAlign: 'center',
+                color: '#6b7280'
+              }}>
+                No external faculties found
+              </div>
+            )}
+          </div>
         </>
       )}
 

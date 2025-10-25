@@ -53,13 +53,36 @@ function SubmittedPaperView() {
                   <div style={{ flex: 1 }}>
                     <div style={{ fontWeight: 600 }}>{q.question_text}</div>
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '12px', marginTop: '10px' }}>
-                      <div><strong>CO:</strong> {q.co || ''}</div>
-                      <div><strong>L:</strong> {q.l || ''}</div>
-                      <div><strong>Marks:</strong> {typeof q.marks === 'number' ? q.marks : 0}</div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <span style={{ color: '#fff', fontWeight: 800, minWidth: '44px', textAlign: 'center', backgroundColor: '#6f42c1', borderRadius: '999px', padding: '4px 10px' }}>CO</span>
+                        <span>{q.co || ''}</span>
+                      </div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <span style={{ color: '#fff', fontWeight: 800, minWidth: '44px', textAlign: 'center', backgroundColor: '#fd7e14', borderRadius: '999px', padding: '4px 10px' }}>L</span>
+                        <span>{q.l || ''}</span>
+                      </div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <span style={{ color: '#084298', fontWeight: 800 }}>Marks</span>
+                        <span style={{ fontWeight: 800, color: '#0b5ed7' }}>{typeof q.marks === 'number' ? q.marks : 0}</span>
+                      </div>
                     </div>
                     {q.file_url && (
                       <div style={{ marginTop: '10px' }}>
                         <img src={`${API_BASE}${q.file_url}`} alt={q.file_name || 'attachment'} style={{ maxWidth: '100%', borderRadius: '8px', border: '1px solid #e9edf3' }} />
+                      </div>
+                    )}
+                    {/* Verifier Remarks Display */}
+                    {q.remarks && q.remarks.trim() && (
+                      <div style={{ 
+                        marginTop: '10px', 
+                        padding: '10px', 
+                        backgroundColor: '#fff3cd', 
+                        border: '1px solid #ffeaa7', 
+                        borderRadius: '6px',
+                        borderLeft: '4px solid #ffc107'
+                      }}>
+                        <div style={{ fontWeight: 600, color: '#856404', marginBottom: '5px' }}>📝 Verifier Remarks:</div>
+                        <div style={{ color: '#856404', fontStyle: 'italic' }}>{q.remarks}</div>
                       </div>
                     )}
                   </div>
