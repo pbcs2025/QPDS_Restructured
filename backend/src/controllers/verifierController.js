@@ -157,15 +157,11 @@ exports.getPapers = async (req, res) => {
         level: paper.level,
         approved: paper.approved,
         remarks: paper.remarks,
-        verified_by: paper.verified_by,
         verified_at: paper.verified_at,
-        status: paper.status,
-        file_name: paper.file_name,
-        file_type: paper.file_type,
-        file_url: paper.file_name ? `/question-bank/file/${paper._id}` : null,
+        file_url: paper.file_name ? `/api/question-bank/file/${paper._id}` : null,
+        file_name: paper.file_name
       });
 
-      // If any paper in the group is 'approved'/'rejected', set the group status so
       if (paper.status === 'approved') groupedPapers[key].status = 'approved';
       else if (paper.status === 'rejected') groupedPapers[key].status = 'rejected';
     });
@@ -466,16 +462,9 @@ exports.normalizeDepartments = async (_req, res) => {
       modifiedCount = result.modifiedCount || 0;
     }
 
-    return res.json({
-      totalVerifiers: verifiers.length,
-      activeDepartments: activeDepts.length,
-      updatesPlanned: matched,
-      updated: modifiedCount,
-      alreadyCanonical,
-      skippedNoMatch: skipped,
-    });
+    res.json(groupedPaper);
   } catch (err) {
-    console.error('Verifier normalizeDepartments error:', err);
-    return res.status(500).json({ error: 'Server error' });
+    console.error('Get paper by code semester error:', err);
+    res.status(500).json({ error: 'Server error' });
   }
 };
