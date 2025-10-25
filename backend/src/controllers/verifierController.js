@@ -153,18 +153,37 @@ exports.getRejectedPapers = async (req, res) => {
 
     const rejected = await RejectedPaper.find(filter).sort({ rejected_at: -1 }).lean();
 
-    const detailed = await Promise.all(rejected.map(async (r) => {
-      const sample = await QuestionPaper.findOne({ subject_code: r.subject_code, semester: r.semester }).lean();
-      return {
-        _id: r._id,
-        subject_code: r.subject_code,
-        subject_name: r.subject_name || sample?.subject_name || 'Unknown',
-        semester: r.semester,
-        department: r.department || sample?.department || 'Unknown',
-        rejected_at: r.rejected_at,
-        status: 'rejected'
-      };
-    }));
+    // Group by subject_code and semester to avoid duplicates
+    const groupedPapers = {};
+    rejected.forEach((r) => {
+      const key = `${r.subject_code}_${r.semester}`;
+      if (!groupedPapers[key]) {
+        groupedPapers[key] = {
+          _id: key,
+          subject_code: r.subject_code,
+          subject_name: r.subject_name || 'Unknown',
+          semester: r.semester,
+          department: r.department || 'Unknown',
+          rejected_at: r.rejected_at,
+          status: 'rejected',
+          questions: []
+        };
+      }
+      // Only add unique questions to avoid duplicates
+      const existingQuestion = groupedPapers[key].questions.find(q => q.question_number === r.question_number);
+      if (!existingQuestion) {
+        groupedPapers[key].questions.push({
+          question_number: r.question_number,
+          question_text: r.question_text,
+          marks: r.marks,
+          co: r.co,
+          level: r.level,
+          remarks: r.remarks
+        });
+      }
+    });
+
+    const detailed = Object.values(groupedPapers);
 
     return res.json(detailed);
   } catch (err) {
@@ -184,18 +203,37 @@ exports.getApprovedPapers = async (req, res) => {
 
     const approved = await ApprovedPaper.find(filter).sort({ approved_at: -1 }).lean();
 
-    const detailed = await Promise.all(approved.map(async (a) => {
-      const sample = await QuestionPaper.findOne({ subject_code: a.subject_code, semester: a.semester }).lean();
-      return {
-        _id: a._id,
-        subject_code: a.subject_code,
-        subject_name: a.subject_name || sample?.subject_name || 'Unknown',
-        semester: a.semester,
-        department: a.department || sample?.department || 'Unknown',
-        approved_at: a.approved_at,
-        status: 'approved'
-      };
-    }));
+    // Group by subject_code and semester to avoid duplicates
+    const groupedPapers = {};
+    approved.forEach((a) => {
+      const key = `${a.subject_code}_${a.semester}`;
+      if (!groupedPapers[key]) {
+        groupedPapers[key] = {
+          _id: key,
+          subject_code: a.subject_code,
+          subject_name: a.subject_name || 'Unknown',
+          semester: a.semester,
+          department: a.department || 'Unknown',
+          approved_at: a.approved_at,
+          status: 'approved',
+          questions: []
+        };
+      }
+      // Only add unique questions to avoid duplicates
+      const existingQuestion = groupedPapers[key].questions.find(q => q.question_number === a.question_number);
+      if (!existingQuestion) {
+        groupedPapers[key].questions.push({
+          question_number: a.question_number,
+          question_text: a.question_text,
+          marks: a.marks,
+          co: a.co,
+          level: a.level,
+          remarks: a.remarks
+        });
+      }
+    });
+
+    const detailed = Object.values(groupedPapers);
 
     return res.json(detailed);
   } catch (err) {
@@ -204,41 +242,52 @@ exports.getApprovedPapers = async (req, res) => {
   }
 };
 
-// Get papers for verifier with optional filtering (department + semester)
+// Get papers for verifier - DISPLAY ALL PAPERS WITHOUT FILTERING
 exports.getPapers = async (req, res) => {
   try {
     const { department, semester } = req.query;
     console.log('Verifier getPapers called with:', { department, semester });
+    console.log('⚠️  FILTERING DISABLED - SHOWING ALL PAPERS');
 
+    // REMOVE ALL FILTERING - SHOW ALL PAPERS
     const filter = {};
-    if (department) filter.department = String(department).trim();
-    if (semester) filter.semester = parseInt(semester, 10);
+    // if (department) filter.department = String(department).trim();
+    // if (semester) filter.semester = parseInt(semester, 10);
     
-    console.log('Filter applied:', filter);
+    console.log('No filter applied - showing all papers');
 
     // Exclude papers already stored in rejected
     const rejectedPaperKeys = await RejectedPaper.find({}, { subject_code: 1, semester: 1 }).lean();
     const rejectedKeys = new Set(rejectedPaperKeys.map(rp => `${rp.subject_code}_${rp.semester}`));
 
+    // GET ALL PAPERS - NO FILTERING
     const allPapers = await QuestionPaper.find({
-      ...filter,
       $or: [
         { status: { $exists: false } },
         { status: null },
         { status: 'pending' },
-        { status: 'submitted' },
-        { status: 'approved' },
-        { status: 'rejected' },
+        { status: 'submitted' }
       ]
     }).sort({ subject_code: 1, semester: 1, question_number: 1 }).lean();
+    
+    console.log('📋 TOTAL PAPERS FOUND:', allPapers.length);
 
-    console.log('Found papers:', allPapers.length);
-    console.log('Sample papers:', allPapers.slice(0, 3).map(p => ({
+    console.log('📄 Sample papers:', allPapers.slice(0, 3).map(p => ({
       subject_code: p.subject_code,
       semester: p.semester,
       department: p.department,
       status: p.status
     })));
+    
+    // Debug: Log all papers with their department values
+    if (allPapers.length > 0) {
+      console.log('All papers department values:', allPapers.map(p => ({
+        subject_code: p.subject_code,
+        department: p.department,
+        departmentType: typeof p.department,
+        departmentLength: p.department ? p.department.length : 0
+      })));
+    }
 
     const papers = allPapers.filter(p => !rejectedKeys.has(`${p.subject_code}_${p.semester}`));
     console.log('Papers after filtering rejected:', papers.length);
@@ -275,8 +324,23 @@ exports.getPapers = async (req, res) => {
       else if (paper.status === 'rejected') groupedPapers[key].status = 'rejected';
     });
 
-    const result = Object.values(groupedPapers).sort((a, b) => a.subject_code.localeCompare(b.subject_code));
-    console.log('Final result for verifier:', result.length, 'grouped papers');
+    // NO ADDITIONAL FILTERING - SHOW ALL PAPERS
+    let result = Object.values(groupedPapers);
+    
+    console.log('🎯 FINAL RESULT - ALL PAPERS:', result.length, 'grouped papers');
+    
+    result = result.sort((a, b) => a.subject_code.localeCompare(b.subject_code));
+    console.log('Final result for verifier (pending papers only):', result.length, 'grouped papers');
+    
+    // Debug: Log final result structure
+    if (result.length > 0) {
+      console.log('Final result sample:', result.slice(0, 2).map(r => ({
+        subject_code: r.subject_code,
+        department: r.department,
+        questionsCount: r.questions ? r.questions.length : 0
+      })));
+    }
+    
     return res.json(result);
   } catch (err) {
     console.error('Get papers error:', err);
@@ -766,6 +830,89 @@ exports.getCorrectedQuestions = async (req, res) => {
     return res.json(corrected);
   } catch (err) {
     console.error('Get corrected questions error:', err);
+    return res.status(500).json({ error: 'Server error' });
+  }
+};
+
+// Reject a paper and store in RejectedPaper collection
+exports.rejectPaper = async (req, res) => {
+  try {
+    const { subject_code, semester } = req.params;
+    const { remarks, verified_by } = req.body;
+
+    if (!subject_code || !semester) {
+      return res.status(400).json({ error: 'subject_code and semester are required' });
+    }
+
+    const session = await mongoose.startSession();
+    session.startTransaction();
+
+    try {
+      // Find all questions for this paper
+      const questions = await QuestionPaper.find({ 
+        subject_code, 
+        semester: parseInt(semester) 
+      }).lean();
+
+      if (!questions || questions.length === 0) {
+        await session.abortTransaction();
+        session.endSession();
+        return res.status(404).json({ error: 'Paper not found' });
+      }
+
+      // Create rejected paper records for each question
+      const rejectedPapers = questions.map(question => {
+        return new RejectedPaper({
+          question_ref: question._id,
+          subject_code: question.subject_code,
+          subject_name: question.subject_name,
+          semester: question.semester,
+          department: question.department,
+          question_number: question.question_number,
+          question_text: question.question_text,
+          marks: question.marks,
+          co: question.co,
+          level: question.level,
+          file_name: question.file_name,
+          file_type: question.file_type,
+          remarks: remarks || '',
+          verified_by: verified_by || '',
+          verified_at: new Date(),
+          rejected_at: new Date()
+        });
+      });
+
+      // Insert all rejected papers
+      await RejectedPaper.insertMany(rejectedPapers, { session });
+
+      // Update original questions status to rejected
+      await QuestionPaper.updateMany(
+        { subject_code, semester: parseInt(semester) },
+        { 
+          $set: { 
+            status: 'rejected',
+            remarks: remarks || '',
+            verified_by: verified_by || '',
+            verified_at: new Date()
+          } 
+        },
+        { session }
+      );
+
+      await session.commitTransaction();
+      session.endSession();
+
+      return res.json({ 
+        message: 'Paper rejected and stored successfully',
+        rejectedCount: rejectedPapers.length
+      });
+    } catch (error) {
+      await session.abortTransaction();
+      session.endSession();
+      throw error;
+    }
+  } catch (err) {
+    console.error('Reject paper error:', err);
     return res.status(500).json({ error: 'Server error' });
   }
 };

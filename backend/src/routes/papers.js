@@ -35,4 +35,9 @@ router.get('/papers/rejected', approvalController.getRejectedPapers);
 // Handled by approvalController.getRejectedPapers
 router.get('/rejectedpapers', approvalController.getRejectedPapers);
 
+// Archive and restore routes
+router.post('/papers/archive', questionPaperController.archivePaper);
+router.post('/papers/restore', questionPaperController.restorePaper);
+router.get('/papers/archived', questionPaperController.getArchivedPapers);
+
 module.exports = router;

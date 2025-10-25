@@ -20,6 +20,7 @@ router.get('/papers/:subject_code/:semester', ctrl.getPaperByCodeSemester);
 // Corrected questions routes
 router.post('/papers/:subject_code/:semester/save-corrected', ctrl.saveCorrectedQuestions);
 router.put('/papers/:subject_code/:semester/approve-corrected', ctrl.approveCorrectedQuestions);
+router.put('/papers/:subject_code/:semester/reject', ctrl.rejectPaper);
 router.get('/papers/:subject_code/:semester/corrected', ctrl.getCorrectedQuestions);
 
 // Diagnostics

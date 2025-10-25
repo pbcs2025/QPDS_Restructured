@@ -27,8 +27,12 @@ function SuperAdminDashboard() {
   const [submittedLoading, setSubmittedLoading] = useState(false);
   const [submittedError, setSubmittedError] = useState(null);
   const [selectedSemester, setSelectedSemester] = useState('');
+  const [selectedDepartment, setSelectedDepartment] = useState('');
+  const [departments, setDepartments] = useState([]);
   const [papersSentForPrint, setPapersSentForPrint] = useState([]);
   const [showSentForPrint, setShowSentForPrint] = useState(false);
+  const [showArchivedPapers, setShowArchivedPapers] = useState(false);
+  const [archivedPapers, setArchivedPapers] = useState([]);
 
   // Load papers sent for print from localStorage on component mount
   useEffect(() => {
@@ -48,7 +52,6 @@ function SuperAdminDashboard() {
   }, [papersSentForPrint]);
   const API_BASE = process.env.REACT_APP_API_BASE_URL || 'http://localhost:5001/api';
 
-  const [departments, setDepartments] = useState([]);
   const [newVerifierName, setNewVerifierName] = useState("");
   const [newVerifierDept, setNewVerifierDept] = useState("");
   const [submitLoading, setSubmitLoading] = useState(false);
@@ -121,14 +124,38 @@ function SuperAdminDashboard() {
   }, [activeTab, manageUsersView, API_BASE]);
 
 
+  // Fetch departments when submitted tab is active
+  useEffect(() => {
+    if (activeTab === "submitted") {
+      fetch(`${API_BASE}/departments/active`)
+        .then((res) => {
+          if (!res.ok) throw new Error(`Status ${res.status}`);
+          return res.json();
+        })
+        .then((data) => {
+          const deptList = Array.isArray(data) ? data : [];
+          setDepartments(deptList);
+        })
+        .catch((err) => {
+          console.error("Fetch departments error:", err);
+          setDepartments([]);
+        });
+    }
+  }, [activeTab, API_BASE]);
+
   // Fetch submitted (approved) papers when tab active
   useEffect(() => {
     if (activeTab === "submitted") {
       setSubmittedLoading(true);
       setSubmittedError(null);
       
-      // Using the new API endpoint for approved papers
-      fetch(`${API_BASE}/approvedpapers`)
+      // Build query parameters
+      const params = new URLSearchParams();
+      if (selectedDepartment) params.append('department', selectedDepartment);
+      if (selectedSemester) params.append('semester', selectedSemester);
+      
+      // Using the new API endpoint for approved papers with filtering
+      fetch(`${API_BASE}/approvedpapers?${params.toString()}`)
         .then((res) => {
           if (!res.ok) throw new Error(`Status ${res.status}`);
           return res.json();
@@ -187,7 +214,78 @@ function SuperAdminDashboard() {
         })
         .finally(() => setSubmittedLoading(false));
     }
-  }, [activeTab, API_BASE]);
+  }, [activeTab, selectedDepartment, selectedSemester, API_BASE]);
+
+  // Fetch archived papers when archived papers view is active
+  useEffect(() => {
+    if (activeTab === "submitted" && showArchivedPapers) {
+      setSubmittedLoading(true);
+      setSubmittedError(null);
+      
+      // Build query parameters
+      const params = new URLSearchParams();
+      if (selectedDepartment) params.append('department', selectedDepartment);
+      if (selectedSemester) params.append('semester', selectedSemester);
+      
+      fetch(`${API_BASE}/papers/archived?${params.toString()}`)
+        .then((res) => {
+          if (!res.ok) throw new Error(`Status ${res.status}`);
+          return res.json();
+        })
+        .then((data) => {
+          console.log('Fetched archived papers:', data);
+          let papers = [];
+          if (data && data.papers && Array.isArray(data.papers)) {
+            papers = data.papers;
+          } else if (Array.isArray(data)) {
+            papers = data;
+          } else {
+            console.error('Unexpected data format:', data);
+            setArchivedPapers([]);
+            return;
+          }
+          
+          // Group papers by subject_code and semester
+          const groupedPapers = {};
+          papers.forEach(paper => {
+            const key = `${paper.subject_code}_${paper.semester}`;
+            if (!groupedPapers[key]) {
+              groupedPapers[key] = {
+                _id: key,
+                subject_code: paper.subject_code,
+                subject_name: paper.subject_name,
+                semester: paper.semester,
+                department: paper.department,
+                archived_at: paper.archived_at,
+                archived_by: paper.archived_by,
+                questions: []
+              };
+            }
+            groupedPapers[key].questions.push({
+              question_number: paper.question_number,
+              question_text: paper.question_text,
+              marks: paper.marks,
+              co: paper.co,
+              level: paper.level,
+              remarks: paper.remarks
+            });
+          });
+          
+          const result = Object.values(groupedPapers).sort((a, b) => 
+            new Date(b.archived_at) - new Date(a.archived_at)
+          );
+          
+          console.log('Grouped archived papers:', result.length);
+          setArchivedPapers(result);
+        })
+        .catch((err) => {
+          console.error("Fetch archived papers error:", err);
+          setSubmittedError("Failed to load archived papers");
+          setArchivedPapers([]);
+        })
+        .finally(() => setSubmittedLoading(false));
+    }
+  }, [activeTab, showArchivedPapers, selectedDepartment, selectedSemester, API_BASE]);
 
   // Socket.io connection for real-time updates
   useEffect(() => {
@@ -829,10 +927,33 @@ function SuperAdminDashboard() {
             {submittedError && <p className="error-msg">{submittedError}</p>}
             {!submittedLoading && !submittedError && (
               <>
-                {/* Semester Filter */}
+                {/* Filter Section */}
                 <div style={{ marginBottom: '20px', padding: '15px', backgroundColor: '#f8f9fa', borderRadius: '8px', border: '1px solid #dee2e6' }}>
                   <h3 style={{ marginBottom: '10px', color: '#495057' }}>Filter Papers</h3>
-                  <div style={{ display: 'flex', gap: '15px', alignItems: 'center' }}>
+                  <div style={{ display: 'flex', gap: '15px', alignItems: 'center', flexWrap: 'wrap' }}>
+                    <div>
+                      <label style={{ display: 'block', marginBottom: '5px', fontWeight: 'bold', color: '#495057' }}>
+                        Department:
+                      </label>
+                      <select
+                        value={selectedDepartment}
+                        onChange={(e) => setSelectedDepartment(e.target.value)}
+                        style={{
+                          padding: '8px 12px',
+                          border: '1px solid #ced4da',
+                          borderRadius: '4px',
+                          fontSize: '14px',
+                          minWidth: '150px'
+                        }}
+                      >
+                        <option value="">All Departments</option>
+                        {departments.map((dept) => (
+                          <option key={dept._id || dept.name} value={dept.name}>
+                            {dept.name}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
                     <div>
                       <label style={{ display: 'block', marginBottom: '5px', fontWeight: 'bold', color: '#495057' }}>
                         Semester:
@@ -871,6 +992,23 @@ function SuperAdminDashboard() {
                         }}
                       >
                         {showSentForPrint ? '← Back to Submitted' : '📄 Papers Sent for Print'}
+                      </button>
+                    </div>
+                    <div>
+                      <button
+                        onClick={() => setShowArchivedPapers(!showArchivedPapers)}
+                        style={{
+                          padding: '8px 16px',
+                          backgroundColor: showArchivedPapers ? '#6c757d' : '#dc3545',
+                          color: 'white',
+                          border: 'none',
+                          borderRadius: '4px',
+                          cursor: 'pointer',
+                          fontSize: '14px',
+                          fontWeight: 'bold'
+                        }}
+                      >
+                        {showArchivedPapers ? '← Back to Submitted' : '📁 Archived Papers'}
                       </button>
                     </div>
                   </div>
@@ -924,6 +1062,128 @@ function SuperAdminDashboard() {
                                 }}>
                                   SENT FOR PRINT
                                 </span>
+                              </td>
+                            </tr>
+                          ))
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                ) : showArchivedPapers ? (
+                  /* Archived Papers Section */
+                  <div className="table-wrapper">
+                    <h3 style={{ marginBottom: '15px', color: '#495057' }}>Archived Papers</h3>
+                    <table className="user-table">
+                      <thead>
+                        <tr>
+                          <th>Subject Code</th>
+                          <th>Subject Name</th>
+                          <th>Semester</th>
+                          <th>Department</th>
+                          <th>Archived At</th>
+                          <th>Status</th>
+                          <th>Action</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {archivedPapers.length === 0 ? (
+                          <tr>
+                            <td colSpan={7} style={{ textAlign: 'center', padding: '20px' }}>
+                              No archived papers found.
+                            </td>
+                          </tr>
+                        ) : (
+                          archivedPapers
+                            .filter(p => !selectedDepartment || p.department === selectedDepartment)
+                            .filter(p => !selectedSemester || p.semester === parseInt(selectedSemester))
+                            .map((paper, index) => (
+                            <tr key={index} style={{ backgroundColor: '#f8d7da', color: '#721c24' }}>
+                              <td style={{ padding: '14px 12px', borderTop: '1px solid #e1e7ef', borderRight: '1px solid #e1e7ef', fontWeight: 600 }}>
+                                {paper.subject_code}
+                              </td>
+                              <td style={{ padding: '14px 12px', borderTop: '1px solid #e1e7ef', borderRight: '1px solid #e1e7ef' }}>
+                                {paper.subject_name || 'Unknown'}
+                              </td>
+                              <td style={{ padding: '14px 12px', borderTop: '1px solid #e1e7ef', borderRight: '1px solid #e1e7ef' }}>
+                                {paper.semester}
+                              </td>
+                              <td style={{ padding: '14px 12px', borderTop: '1px solid #e1e7ef', borderRight: '1px solid #e1e7ef' }}>
+                                {paper.department || 'Unknown'}
+                              </td>
+                              <td style={{ padding: '14px 12px', borderTop: '1px solid #e1e7ef', borderRight: '1px solid #e1e7ef' }}>
+                                {paper.archived_at ? new Date(paper.archived_at).toLocaleString() : '-'}
+                              </td>
+                              <td style={{ padding: '14px 12px', textAlign: 'center', borderTop: '1px solid #e1e7ef', borderRight: '1px solid #e1e7ef' }}>
+                                <span style={{
+                                  display: 'inline-block',
+                                  padding: '4px 10px',
+                                  borderRadius: '999px',
+                                  backgroundColor: '#f8d7da',
+                                  color: '#721c24',
+                                  fontWeight: 700,
+                                  letterSpacing: '0.3px'
+                                }}>
+                                  ARCHIVED
+                                </span>
+                              </td>
+                              <td style={{ padding: '14px 12px', textAlign: 'center', borderTop: '1px solid #e1e7ef' }}>
+                                <div style={{ display: 'flex', gap: '8px', justifyContent: 'center' }}>
+                                  <button
+                                    onClick={async () => {
+                                      try {
+                                        const res = await fetch(`${API_BASE}/verifier/papers/${encodeURIComponent(paper.subject_code)}/${encodeURIComponent(paper.semester)}`);
+                                        const contentType = res.headers.get('content-type') || '';
+                                        if (!contentType.includes('application/json')) {
+                                          const text = await res.text();
+                                          throw new Error(`Unexpected response (not JSON). Check API base URL. First bytes: ${text.slice(0, 60)}`);
+                                        }
+                                        const data = await res.json();
+                                        if (!res.ok) throw new Error(data?.error || `Status ${res.status}`);
+                                        setOpenedPaper(data);
+                                      } catch (err) {
+                                        console.error('Open paper error:', err);
+                                        alert(`Failed to open paper: ${err.message}`);
+                                      }
+                                    }}
+                                    style={{ padding: '6px 12px', backgroundColor: '#0d6efd', color: '#fff', border: 'none', borderRadius: '6px', cursor: 'pointer', fontSize: '12px' }}
+                                  >
+                                    View
+                                  </button>
+                                  <button
+                                    onClick={async () => {
+                                      try {
+                                        if (!window.confirm('Are you sure you want to restore this paper?')) return;
+                                        
+                                        // Restore the paper
+                                        const response = await fetch(`${API_BASE}/papers/restore`, {
+                                          method: 'POST',
+                                          headers: {
+                                            'Content-Type': 'application/json',
+                                          },
+                                          body: JSON.stringify({
+                                            subject_code: paper.subject_code,
+                                            semester: paper.semester
+                                          }),
+                                        });
+                                        
+                                        if (!response.ok) {
+                                          throw new Error(`HTTP error! status: ${response.status}`);
+                                        }
+                                        
+                                        // Remove from archived papers
+                                        setArchivedPapers(prev => prev.filter(p => p._id !== paper._id));
+                                        
+                                        alert('Paper restored successfully!');
+                                      } catch (err) {
+                                        console.error('Restore error:', err);
+                                        alert(`Failed to restore paper: ${err.message}`);
+                                      }
+                                    }}
+                                    style={{ padding: '6px 12px', backgroundColor: '#28a745', color: '#fff', border: 'none', borderRadius: '6px', cursor: 'pointer', fontSize: '12px' }}
+                                  >
+                                    Restore
+                                  </button>
+                                </div>
                               </td>
                             </tr>
                           ))
@@ -1040,6 +1300,41 @@ function SuperAdminDashboard() {
                                   style={{ padding: '6px 12px', backgroundColor: '#28a745', color: '#fff', border: 'none', borderRadius: '6px', cursor: 'pointer', fontSize: '12px' }}
                                 >
                                   Print
+                                </button>
+                                <button
+                                  onClick={async () => {
+                                    try {
+                                      if (!window.confirm('Are you sure you want to archive this paper?')) return;
+                                      
+                                      // Archive the paper
+                                      const response = await fetch(`${API_BASE}/papers/archive`, {
+                                        method: 'POST',
+                                        headers: {
+                                          'Content-Type': 'application/json',
+                                        },
+                                        body: JSON.stringify({
+                                          subject_code: p.subject_code,
+                                          semester: p.semester,
+                                          archived_by: 'Super Admin'
+                                        }),
+                                      });
+                                      
+                                      if (!response.ok) {
+                                        throw new Error(`HTTP error! status: ${response.status}`);
+                                      }
+                                      
+                                      // Remove from submitted papers
+                                      setSubmittedPapers(prev => prev.filter(paper => paper._id !== p._id));
+                                      
+                                      alert('Paper archived successfully!');
+                                    } catch (err) {
+                                      console.error('Archive error:', err);
+                                      alert(`Failed to archive paper: ${err.message}`);
+                                    }
+                                  }}
+                                  style={{ padding: '6px 12px', backgroundColor: '#dc3545', color: '#fff', border: 'none', borderRadius: '6px', cursor: 'pointer', fontSize: '12px' }}
+                                >
+                                  Archive
                                 </button>
                               </div>
                             </td>

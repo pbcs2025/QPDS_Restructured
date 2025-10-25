@@ -33,11 +33,11 @@ const QuestionPapers = () => {
   const fetchPapers = useCallback(async () => {
     try {
       setLoading(true);
-      const params = new URLSearchParams();
-      if (selectedDepartment) params.append('department', selectedDepartment);
-      if (selectedSemester) params.append('semester', selectedSemester);
       
-      // Use the verifier-specific API endpoint for submitted papers
+      console.log('🔄 FETCHING ALL PAPERS - NO FILTERING');
+      console.log('⚠️  FILTERING DISABLED - SHOWING ALL PAPERS');
+      
+      // NO FILTERING - GET ALL PAPERS
       const response = await fetch(`${API_BASE}/verifier/papers`, {
         method: 'GET',
         headers: {
@@ -51,6 +51,13 @@ const QuestionPapers = () => {
       
       const data = await response.json();
       console.log('Fetched submitted papers:', data);
+      console.log('Filtered papers count:', Array.isArray(data) ? data.length : (data.papers ? data.papers.length : 0));
+      
+      // Debug: Log the actual data structure
+      if (Array.isArray(data) && data.length > 0) {
+        console.log('Sample paper structure:', data[0]);
+      }
+      
       // Ensure data is an array - if it's wrapped in an object, extract the papers array
       if (data && data.papers) {
         setPapers(data.papers);
@@ -68,14 +75,13 @@ const QuestionPapers = () => {
     } finally {
       setLoading(false);
     }
-  }, [selectedDepartment, selectedSemester]);
+  }, []); // Remove dependencies - fetch all papers
 
-  // Fetch papers when department changes (semester is optional)
+  // Fetch papers immediately - NO FILTERING
   useEffect(() => {
-    if (selectedDepartment) {
-      fetchPapers();
-    }
-  }, [selectedDepartment, selectedSemester, fetchPapers]);
+    console.log('🚀 FETCHING ALL PAPERS IMMEDIATELY');
+    fetchPapers();
+  }, [fetchPapers]);
 
   const fetchRejectedPapers = useCallback(async () => {
     try {
@@ -283,19 +289,27 @@ const QuestionPapers = () => {
 
     try {
       setUpdating(true);
-      // Use the new API endpoint for rejecting papers
-      const response = await fetch(`${API_BASE}/papers/${selectedPaper._id}/reject`, {
+      
+      // Get verifier info for remarks
+      const verifierInfo = JSON.parse(localStorage.getItem('verifier') || '{}');
+      const verifierName = verifierInfo.username || 'Unknown Verifier';
+      
+      // Use the verifier-specific API endpoint for rejecting papers
+      const response = await fetch(`${API_BASE}/verifier/papers/${selectedPaper.subject_code}/${selectedPaper.semester}/reject`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          remarks: 'Rejected by verifier'
+          remarks: verifierRemarks || 'Rejected by verifier',
+          verified_by: verifierName
         }),
       });
 
       if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
+        const errorText = await response.text();
+        console.error('API Error Response:', errorText);
+        throw new Error(`HTTP error! status: ${response.status} - ${errorText}`);
       }
 
       const result = await response.json();
@@ -308,9 +322,10 @@ const QuestionPapers = () => {
       alert('Paper marked REJECTED and stored in Rejected Papers.');
       setSelectedPaper(null);
       setFinalStatus('');
+      setVerifierRemarks('');
     } catch (err) {
       console.error('Error storing rejected paper:', err);
-      alert('Failed to store rejected paper. Please try again.');
+      alert(`Failed to store rejected paper: ${err.message}. Please try again.`);
     } finally {
       setUpdating(false);
     }
@@ -320,7 +335,7 @@ const QuestionPapers = () => {
     return (
       <div style={{ padding: '20px', textAlign: 'center' }}>
         <h1>Question Papers</h1>
-        <p>Loading question papers for {selectedDepartment}{selectedSemester ? ` - ${selectedSemester}th Semester` : ''}...</p>
+        <p>Loading pending question papers for {selectedDepartment}{selectedSemester ? ` - ${selectedSemester}th Semester` : ''}...</p>
       </div>
     );
   }
@@ -399,7 +414,7 @@ const QuestionPapers = () => {
             Questions
           </h4>
           {(selectedPaper.questions || []).map((question, index) => (
-            <div key={index} style={{
+            <div key={question._id || index} style={{
               border: '1px solid #b6d4fe',
               borderRadius: '12px',
               marginBottom: '18px',
@@ -602,7 +617,7 @@ const QuestionPapers = () => {
                   </tr>
                 ) : (
                   rejectedPapers.map((paper, index) => (
-                    <tr key={index} style={{ backgroundColor: '#f8d7da', color: '#721c24' }}>
+                    <tr key={paper._id || index} style={{ backgroundColor: '#f8d7da', color: '#721c24' }}>
                       <td style={{ padding: '14px 12px', borderTop: '1px solid #e1e7ef', borderRight: '1px solid #e1e7ef', fontWeight: 600 }}>
                         {paper.subject_name}
                       </td>
@@ -708,7 +723,7 @@ const QuestionPapers = () => {
                   </tr>
                 ) : (
                   approvedPapers.map((paper, index) => (
-                    <tr key={index} style={{ backgroundColor: '#d1f4e0', color: '#0f5132' }}>
+                    <tr key={paper._id || index} style={{ backgroundColor: '#d1f4e0', color: '#0f5132' }}>
                       <td style={{ padding: '14px 12px', borderTop: '1px solid #e1e7ef', borderRight: '1px solid #e1e7ef', fontWeight: 600 }}>
                         {paper.subject_name}
                       </td>
@@ -833,20 +848,20 @@ const QuestionPapers = () => {
         </div>
       </div>
 
-      {!selectedDepartment ? (
+      {papers.length === 0 ? (
         <div style={{ textAlign: 'center', padding: '40px', color: '#666' }}>
-          <p>Verifier department not found. Please reload or re-login.</p>
-        </div>
-      ) : papers.length === 0 ? (
-        <div style={{ textAlign: 'center', padding: '40px', color: '#666' }}>
-          <p>No question papers found for {selectedDepartment}{selectedSemester ? ` - ${selectedSemester}th Semester` : ''}.</p>
+          <p>No question papers found in the system.</p>
+          <p>Faculty need to submit papers first.</p>
         </div>
       ) : (
         <>
           <div style={{ marginBottom: '15px' }}>
             <h3 style={{ color: '#495057', margin: '0' }}>
-              Question Papers for {selectedDepartment} - {selectedSemester}th Semester
+              📋 ALL QUESTION PAPERS (NO FILTERING)
             </h3>
+            <p style={{ color: '#666', fontSize: '14px' }}>
+              Showing all submitted papers from all departments and semesters
+            </p>
           </div>
           
         <table style={{ width: '100%', borderCollapse: 'separate', borderSpacing: 0, border: '1px solid #e1e7ef', borderRadius: '10px', overflow: 'hidden' }}>
@@ -862,7 +877,7 @@ const QuestionPapers = () => {
           </thead>
           <tbody>
             {(papers || []).map((paper, index) => (
-              <tr key={index} style={{ backgroundColor: '#5f6f81', color: '#ffffff' }}>
+              <tr key={paper._id || index} style={{ backgroundColor: '#5f6f81', color: '#ffffff' }}>
                 <td style={{ padding: '14px 12px', borderTop: '1px solid #e1e7ef', borderRight: '1px solid #e1e7ef', fontWeight: 600 }}>
                   {paper.subject_name}
                 </td>
