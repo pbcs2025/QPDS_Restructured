@@ -6,7 +6,7 @@ import { jsPDF } from "jspdf";
 import { useLocation } from "react-router-dom";
 
 function QuestionPaperBuilder() {
-  const API_BASE = process.env.REACT_APP_API_BASE_URL;
+  const API_BASE = process.env.REACT_APP_API_BASE_URL || 'http://localhost:5001/api';
   const location = useLocation();
   const [subject, setSubject] = useState("");
   const [subjectCode, setSubjectCode] = useState("");

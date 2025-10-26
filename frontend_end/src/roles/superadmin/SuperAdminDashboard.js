@@ -7,9 +7,11 @@ import ViewAssignees from "./ViewAssignees";
 import SubjectsPage from "./SubjectsPage";
 import DepartmentsPage from "./DepartmentsPage";
 import AdminManageFacultyPage from "./AdminManageFacultyPage";
+import DepartmentStats from "../../components/DepartmentStats";
 import VerifierManagement from "../verifier/VerifierManagement";
 import { io } from "socket.io-client";
 
+const API_BASE = process.env.REACT_APP_API_BASE_URL || 'http://localhost:5001/api';
 
 function SuperAdminDashboard() {
   const navigate = useNavigate();
@@ -34,23 +36,8 @@ function SuperAdminDashboard() {
   const [showArchivedPapers, setShowArchivedPapers] = useState(false);
   const [archivedPapers, setArchivedPapers] = useState([]);
 
-  // Load papers sent for print from localStorage on component mount
-  useEffect(() => {
-    const savedPapers = localStorage.getItem('papersSentForPrint');
-    if (savedPapers) {
-      try {
-        setPapersSentForPrint(JSON.parse(savedPapers));
-      } catch (err) {
-        console.error('Error loading papers sent for print:', err);
-      }
-    }
-  }, []);
-
-  // Save papers sent for print to localStorage whenever it changes
-  useEffect(() => {
-    localStorage.setItem('papersSentForPrint', JSON.stringify(papersSentForPrint));
-  }, [papersSentForPrint]);
-  const API_BASE = process.env.REACT_APP_API_BASE_URL || 'http://localhost:5001/api';
+  const QP_API_BASE = process.env.REACT_APP_QP_API_BASE_URL || process.env.REACT_APP_API_BASE_URL || 'http://localhost:5001/api';
+  
 
   const [newVerifierName, setNewVerifierName] = useState("");
   const [newVerifierDept, setNewVerifierDept] = useState("");
@@ -526,6 +513,11 @@ function SuperAdminDashboard() {
                 ))}
               </ul>
             </div>
+
+            {/* Department Analytics Section */}
+            <div className="section department-analytics">
+              <DepartmentStats />
+            </div>
           </>
         )}
 
@@ -753,7 +745,7 @@ function SuperAdminDashboard() {
                           </div>
                           {q.file_url && (
                             <div style={{ marginTop: '10px' }}>
-                              <img src={`${API_BASE}${q.file_url}`} alt={q.file_name || 'attachment'} style={{ maxWidth: '100%', borderRadius: '8px', border: '1px solid #e9edf3' }} />
+                              <img src={`${QP_API_BASE}${q.file_url}`} alt={q.file_name || 'attachment'} style={{ maxWidth: '100%', borderRadius: '8px', border: '1px solid #e9edf3' }} />
                             </div>
                           )}
                           {/* Verifier Remarks Display */}
@@ -884,7 +876,7 @@ function SuperAdminDashboard() {
                               </div>
                               {q.file_url && (
                                 <div style={{ marginTop: '8px', marginLeft: '46px' }}>
-                                  <img src={`${API_BASE}${q.file_url}`} alt={q.file_name || 'attachment'} style={{ maxWidth: '100%', borderRadius: '8px', border: '1px solid #e9edf3' }} />
+                                  <img src={`${QP_API_BASE}${q.file_url}`} alt={q.file_name || 'attachment'} style={{ maxWidth: '100%', borderRadius: '8px', border: '1px solid #e9edf3' }} />
                                 </div>
                               )}
                             </div>
@@ -911,7 +903,7 @@ function SuperAdminDashboard() {
                               </div>
                               {q.file_url && (
                                 <div style={{ marginTop: '8px', marginLeft: '46px' }}>
-                                  <img src={`${API_BASE}${q.file_url}`} alt={q.file_name || 'attachment'} style={{ maxWidth: '100%', borderRadius: '8px', border: '1px solid #e9edf3' }} />
+                                  <img src={`${QP_API_BASE}${q.file_url}`} alt={q.file_name || 'attachment'} style={{ maxWidth: '100%', borderRadius: '8px', border: '1px solid #e9edf3' }} />
                                 </div>
                               )}
                             </div>
@@ -1344,6 +1336,55 @@ function SuperAdminDashboard() {
                     </table>
                   </div>
                 )}
+                <div className="table-wrapper">
+                <table className="user-table">
+                  <thead>
+                    <tr>
+                      <th>Subject Code</th>
+                      <th>Semester</th>
+                      <th>Submitted At</th>
+                      <th>Action</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {submittedPapers.length === 0 && (
+                      <tr>
+                        <td colSpan={3}>No papers submitted yet.</td>
+                      </tr>
+                    )}
+                    {submittedPapers.map((p) => (
+                      <tr key={p._id}>
+                        <td>{p.subject_code}</td>
+                        <td>{p.semester}</td>
+                        <td>{p.createdAt ? new Date(p.createdAt).toLocaleString() : '-'}</td>
+                        <td>
+                          <button
+                            onClick={async () => {
+                              try {
+                                const res = await fetch(`${QP_API_BASE}/verifier/papers/${encodeURIComponent(p.subject_code)}/${encodeURIComponent(p.semester)}`);
+                                const contentType = res.headers.get('content-type') || '';
+                                if (!contentType.includes('application/json')) {
+                                  const text = await res.text();
+                                  throw new Error(`Unexpected response (not JSON). Check API base URL. First bytes: ${text.slice(0, 60)}`);
+                                }
+                                const data = await res.json();
+                                if (!res.ok) throw new Error(data?.error || `Status ${res.status}`);
+                                setOpenedPaper(data);
+                              } catch (err) {
+                                console.error('Open paper error:', err);
+                                alert(`Failed to open paper: ${err.message}`);
+                              }
+                            }}
+                            style={{ padding: '6px 12px', backgroundColor: '#0d6efd', color: '#fff', border: 'none', borderRadius: '6px', cursor: 'pointer' }}
+                          >
+                            Open
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
               </>
             )}
           </div>
