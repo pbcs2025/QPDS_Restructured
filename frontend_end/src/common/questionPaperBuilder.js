@@ -144,12 +144,13 @@ function QuestionPaperBuilder() {
   }, []);
 
   /** ------------------------
-   * 💾 Auto-save every 2 mins
+   * 💾 Auto-save every 2 mins (Background save, no alert)
    ------------------------- */
   useEffect(() => {
     const autoSaveInterval = setInterval(() => {
       if (!isSubmitted) {
         saveDraftToLocalStorage();
+        console.log("💾 Auto-saved draft (background)");
       }
     }, 2 * 60 * 1000);
     return () => clearInterval(autoSaveInterval);
@@ -280,6 +281,13 @@ function QuestionPaperBuilder() {
     setCieQuestions(cieQuestions.filter(q => q.id !== questionId));
   };
 
+  const deleteModule = (modIndex) => {
+    if (isSubmitted) return;
+    if (window.confirm(`Are you sure you want to delete ${modules[modIndex].title}?`)) {
+      setModules(modules.filter((_, index) => index !== modIndex));
+    }
+  };
+
   /** ------------------------
    * ✅ Validation Function
    ------------------------- */
@@ -341,16 +349,36 @@ function QuestionPaperBuilder() {
   const saveDraftToLocalStorage = () => {
     try {
       const draftKey = `questionPaper_draft_${facultyEmail}`;
+      
+      // Convert File objects to base64 for storage
+      const modulesForStorage = modules.map(mod => ({
+        ...mod,
+        groups: mod.groups.map(group => 
+          group.map(q => ({
+            ...q,
+            image: q.image instanceof File ? URL.createObjectURL(q.image) : q.image
+          }))
+        )
+      }));
+      
+      const cieQuestionsForStorage = cieQuestions.map(q => ({
+        ...q,
+        subQuestions: q.subQuestions.map(sub => ({
+          ...sub,
+          image: sub.image instanceof File ? URL.createObjectURL(sub.image) : sub.image
+        }))
+      }));
+      
       const draftData = {
         subject,
         subjectCode,
         semester,
         instructions,
         cos,
-        modules,
+        modules: modulesForStorage,
         nextGroupNumber,
         examType,
-        cieQuestions,
+        cieQuestions: cieQuestionsForStorage,
         nextCieQuestionId,
         isSubmitted,
         lastSavedAt: new Date().toISOString()
@@ -551,7 +579,7 @@ function QuestionPaperBuilder() {
       </div>
 
       <div className="main-content">
-        <h1>📘 Question Paper Builder</h1>
+        <h1>📘 Question Paper Setter</h1>
 
         {draftLoaded && (
           <div className="draft-notification" style={{
@@ -654,9 +682,9 @@ function QuestionPaperBuilder() {
 
         {examType === "CIE" && (
           <>
-            <h3>📝 CIE Questions</h3>
+            <h3>📝 Questions</h3>
             <div className="cie-info">
-              <p><strong>CIE Exam:</strong> Add questions with dynamic sub-questions and marks distribution</p>
+              
             </div>
             {!isSubmitted && (
               <button onClick={addCieQuestion} className="add-question-btn">
@@ -666,9 +694,20 @@ function QuestionPaperBuilder() {
           </>
         )}
 
-        {modules.map((mod, modIndex) => (
+        {examType === "SEE" && modules.map((mod, modIndex) => (
           <div key={modIndex} className="module-box">
-            <h4>{mod.title}</h4>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <h4>{mod.title}</h4>
+              {!isSubmitted && (
+                <button 
+                  onClick={() => deleteModule(modIndex)}
+                  className="delete-question-btn"
+                  style={{ marginLeft: '10px' }}
+                >
+                  🗑️ Delete Module
+                </button>
+              )}
+            </div>
             {mod.groups.length === 0 ? (
               !isSubmitted && (
                 <>
@@ -708,7 +747,7 @@ function QuestionPaperBuilder() {
                         placeholder="Question text"
                         disabled={isSubmitted}
                       />
-                      <input
+                      <select
                         value={q.co}
                         onChange={(e) =>
                           updateQuestion(
@@ -719,11 +758,17 @@ function QuestionPaperBuilder() {
                             e.target.value
                           )
                         }
-                        placeholder="CO"
                         className="small"
                         disabled={isSubmitted}
-                      />
-                      <input
+                      >
+                        
+                        <option value="CO1">CO1</option>
+                        <option value="CO2">CO2</option>
+                        <option value="CO3">CO3</option>
+                        <option value="CO4">CO4</option>
+                        <option value="CO5">CO5</option>
+                      </select>
+                      <select
                         value={q.level}
                         onChange={(e) =>
                           updateQuestion(
@@ -734,10 +779,16 @@ function QuestionPaperBuilder() {
                             e.target.value
                           )
                         }
-                        placeholder="L"
                         className="small"
                         disabled={isSubmitted}
-                      />
+                      >
+                        
+                        <option value="L1">L1</option>
+                        <option value="L2">L2</option>
+                        <option value="L3">L3</option>
+                        <option value="L4">L4</option>
+                        <option value="L5">L5</option>
+                      </select>
                       <input
                         type="number"
                         value={q.marks}
@@ -764,12 +815,12 @@ function QuestionPaperBuilder() {
                             groupIndex,
                             qIndex,
                             "image",
-                            e.target.files[0]
+                            e.target.files[0] || null
                           )
                         }
                         disabled={isSubmitted}
                       />
-                      {q.image && (
+                      {q.image && q.image instanceof File && (
                         <img
                           src={URL.createObjectURL(q.image)}
                           alt="question"
@@ -881,11 +932,11 @@ function QuestionPaperBuilder() {
                           <input
                             type="file"
                             accept="image/*"
-                            onChange={(e) => updateCieSubQuestion(question.id, subIndex, "image", e.target.files[0])}
+                            onChange={(e) => updateCieSubQuestion(question.id, subIndex, "image", e.target.files[0] || null)}
                             disabled={isSubmitted}
                           />
                           
-                          {sub.image && (
+                          {sub.image && sub.image instanceof File && (
                             <img
                               src={URL.createObjectURL(sub.image)}
                               alt="question"
@@ -915,9 +966,7 @@ function QuestionPaperBuilder() {
           <p>
             <strong>Semester:</strong> {semester || "[Semester]"}
           </p>
-          <p>
-            <strong>Exam Type:</strong> {examType}
-          </p>
+          
           <p>{instructions}</p>
 
           <h4>Course Outcomes:</h4>
@@ -939,7 +988,7 @@ function QuestionPaperBuilder() {
                     {sub.label === "main" ? `${question.id})` : `${question.id}${sub.label})`} {sub.text} <strong>[{sub.marks} marks]</strong>
                     <em> CO: {sub.co || "N/A"}</em>
                     <em> | L: {sub.level || "N/A"}</em>
-                    {sub.image && (
+                    {sub.image && sub.image instanceof File && (
                       <img
                         src={URL.createObjectURL(sub.image)}
                         alt="preview"
@@ -958,7 +1007,7 @@ function QuestionPaperBuilder() {
             </div>
           ))}
 
-          {/* SEE Modules Preview */}
+          {/* SEE Modules Preview - Only for SEE exam type */}
           {examType === "SEE" && modules.map((mod, modIndex) => (
             <div key={modIndex}>
               <h4>{mod.title}</h4>
@@ -971,7 +1020,7 @@ function QuestionPaperBuilder() {
                       {q.label}) {q.text} <strong>[{q.marks} marks]</strong>
                       <em> CO: {q.co || "N/A"}</em>
                       <em> | L: {q.level || "N/A"}</em>
-                      {q.image && (
+                      {q.image && q.image instanceof File && (
                         <img
                           src={URL.createObjectURL(q.image)}
                           alt="preview"
@@ -988,7 +1037,7 @@ function QuestionPaperBuilder() {
                       {q.label}) {q.text} <strong>[{q.marks} marks]</strong>
                       <em> CO: {q.co || "N/A"}</em>
                       <em> | L: {q.level || "N/A"}</em>
-                      {q.image && (
+                      {q.image && q.image instanceof File && (
                         <img
                           src={URL.createObjectURL(q.image)}
                           alt="preview"
@@ -1005,7 +1054,13 @@ function QuestionPaperBuilder() {
 
         <div className="action-buttons">
           {!isSubmitted && (
-            <button className="save-btn" onClick={() => saveDraftToLocalStorage()}>
+            <button 
+              className="save-btn" 
+              onClick={() => {
+                saveDraftToLocalStorage();
+                alert("💾 Draft saved successfully!");
+              }}
+            >
               💾 Save Draft
             </button>
           )}
