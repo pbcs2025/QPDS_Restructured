@@ -151,87 +151,8 @@ const DepartmentStats = () => {
     // Check if all values are zero
     const total = unifiedData.reduce((sum, item) => sum + item.value, 0);
     if (total === 0) {
-      // Return sample data for demonstration purposes - ALL COs and Levels
-      return [
-        {
-          name: 'Papers Sent (Sample)',
-          value: 5,
-          fill: '#3b82f6',
-          category: 'Paper Status'
-        },
-        {
-          name: 'Papers Submitted (Sample)',
-          value: 3,
-          fill: '#10b981',
-          category: 'Paper Status'
-        },
-        {
-          name: 'Papers Pending (Sample)',
-          value: 2,
-          fill: '#f59e0b',
-          category: 'Paper Status'
-        },
-        {
-          name: 'CO1 (Sample)',
-          value: 4,
-          fill: '#ef4444',
-          category: 'Course Outcomes'
-        },
-        {
-          name: 'CO2 (Sample)',
-          value: 3,
-          fill: '#f97316',
-          category: 'Course Outcomes'
-        },
-        {
-          name: 'CO3 (Sample)',
-          value: 2,
-          fill: '#eab308',
-          category: 'Course Outcomes'
-        },
-        {
-          name: 'CO4 (Sample)',
-          value: 1,
-          fill: '#22c55e',
-          category: 'Course Outcomes'
-        },
-        {
-          name: 'CO5 (Sample)',
-          value: 1,
-          fill: '#06b6d4',
-          category: 'Course Outcomes'
-        },
-        {
-          name: 'Level 1 (Sample)',
-          value: 2,
-          fill: '#8b5cf6',
-          category: 'Difficulty Levels'
-        },
-        {
-          name: 'Level 2 (Sample)',
-          value: 3,
-          fill: '#a855f7',
-          category: 'Difficulty Levels'
-        },
-        {
-          name: 'Level 3 (Sample)',
-          value: 2,
-          fill: '#c084fc',
-          category: 'Difficulty Levels'
-        },
-        {
-          name: 'Level 4 (Sample)',
-          value: 1,
-          fill: '#d946ef',
-          category: 'Difficulty Levels'
-        },
-        {
-          name: 'Level 5 (Sample)',
-          value: 1,
-          fill: '#ec4899',
-          category: 'Difficulty Levels'
-        }
-      ];
+      // No sample data: return empty to show "No Data Available"
+      return [];
     }
 
     return unifiedData;
@@ -397,23 +318,8 @@ const DepartmentStats = () => {
                           );
                         }
 
-                        // Check if we're showing sample data
-                        const isSampleData = unifiedData.some(item => item.name.includes('Sample'));
-                        
                         return (
                           <div className="space-y-6">
-                            {/* Sample Data Notice */}
-                            {isSampleData && (
-                              <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
-                                <div className="flex items-center">
-                                  <span className="text-yellow-600 mr-2">⚠️</span>
-                                  <p className="text-yellow-800 text-sm">
-                                    <strong>Sample Data:</strong> No real data found for this department. Displaying sample data for demonstration purposes.
-                                  </p>
-                                </div>
-                              </div>
-                            )}
-                            
                             {/* Main Chart - Larger Size for Better Label Display */}
                             <div className="flex justify-center">
                               <ResponsiveContainer width="100%" height={600}>

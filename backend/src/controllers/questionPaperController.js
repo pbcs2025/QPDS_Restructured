@@ -19,6 +19,11 @@ exports.createPaper = async (req, res) => {
       });
     }
 
+    // Determine department from authenticated user or request body
+    const resolvedDepartment = (req.user && (req.user.department || req.user.dept || req.user.departmentName)) 
+      || req.body.department 
+      || '';
+
     // Create new paper with submitted status
     const newPaper = new QuestionPaper({
       facultyId,
@@ -28,7 +33,7 @@ exports.createPaper = async (req, res) => {
       // Optional fields if provided
       subject_code: req.body.subject_code,
       subject_name: req.body.subject_name,
-      department: req.body.department
+      department: resolvedDepartment
     });
 
     // Save to database

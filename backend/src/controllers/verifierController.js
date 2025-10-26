@@ -415,9 +415,21 @@ exports.listRejectedPapers = async (_req, res) => {
   }
 };
 
+exports.saveCorrectedQuestions = async (_req, res) => {
+  return res.status(501).json({ error: 'saveCorrectedQuestions not implemented' });
+};
 
+exports.approveCorrectedQuestions = async (_req, res) => {
+  return res.status(501).json({ error: 'approveCorrectedQuestions not implemented' });
+};
 
+exports.rejectPaper = async (_req, res) => {
+  return res.status(501).json({ error: 'rejectPaper not implemented' });
+};
 
+exports.getCorrectedQuestions = async (_req, res) => {
+  return res.status(501).json({ error: 'getCorrectedQuestions not implemented' });
+};
 
 // Normalize all Verifier.department values to match active Department names exactly
 // - Case-insensitive matching against active department names
@@ -462,7 +474,7 @@ exports.normalizeDepartments = async (_req, res) => {
       modifiedCount = result.modifiedCount || 0;
     }
 
-    res.json(groupedPaper);
+    res.json({ matched, alreadyCanonical, skipped, modifiedCount });
   } catch (err) {
     console.error('Get paper by code semester error:', err);
     res.status(500).json({ error: 'Server error' });
