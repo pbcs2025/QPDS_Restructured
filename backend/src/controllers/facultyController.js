@@ -15,6 +15,24 @@ function generatePassword() {
   return password;
 }
 
+exports.checkEmailExists = async (req, res) => {
+  try {
+    const { email } = req.body;
+    
+    if (!email) {
+      return res.status(400).json({ error: 'Email is required' });
+    }
+
+    const existingUser = await User.findOne({ $or: [{ username: email }, { email }] });
+    const exists = !!existingUser;
+    
+    res.json({ exists });
+  } catch (error) {
+    console.error('Email check error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+};
+
 exports.registerFaculty = async (req, res) => {
   try {
     const { name, clgName, deptName, email, phone, usertype, departmentId } = req.body;
@@ -26,7 +44,10 @@ exports.registerFaculty = async (req, res) => {
     // Check if user already exists
     const existingUser = await User.findOne({ $or: [{ username }, { email }] });
     if (existingUser) {
-      return res.status(400).json({ error: 'User with this email already exists' });
+      return res.status(400).json({ 
+        success: false,
+        message: 'User with this email already exists' 
+      });
     }
 
     // Create user record for authentication
@@ -62,7 +83,7 @@ exports.registerFaculty = async (req, res) => {
         '',
         `<p>Dear ${name},</p>
         
-        <p>Welcome to Global Academy of Technology! We are pleased to inform you that your faculty registration has been successfully completed.</p>
+        <p>Welcome to Global Academy of Technology - QPDS Portal! We are pleased to inform you that your faculty registration has been successfully completed.</p>
         
         <p>Your account has been created and activated. You can now access the Question Paper Development System (QPDS) using the credentials provided below:</p>
         
