@@ -14,6 +14,8 @@ function ViewAssignees() {
   
   const [selectedDepartment, setSelectedDepartment] = useState("");
   const [departments, setDepartments] = useState([]);
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+  const [subjectToDelete, setSubjectToDelete] = useState(null);
 
   // Fetch departments
   useEffect(() => {
@@ -99,6 +101,37 @@ function ViewAssignees() {
     setError(null);
   };
 
+  // Reset department selection
+  const handleDepartmentBack = () => {
+    setSelectedDepartment("");
+  };
+
+  // Handle delete assignment
+  const handleDeleteClick = (e, subjectCode) => {
+    e.stopPropagation(); // Prevent card click
+    setSubjectToDelete(subjectCode);
+    setShowDeleteDialog(true);
+  };
+
+  // Confirm delete assignment
+  const confirmDelete = () => {
+    if (subjectToDelete) {
+      // Here you would make an API call to delete the assignment
+      // For now, we'll just remove it from the local state
+      setSubjects(prevSubjects => 
+        prevSubjects.filter(subject => subject.subject_code !== subjectToDelete)
+      );
+      setShowDeleteDialog(false);
+      setSubjectToDelete(null);
+    }
+  };
+
+  // Cancel delete
+  const cancelDelete = () => {
+    setShowDeleteDialog(false);
+    setSubjectToDelete(null);
+  };
+
   if (loading) return <p>Loading assigned subjects...</p>;
   if (error && !selectedSubject) return <p>{error}</p>;
 
@@ -149,9 +182,35 @@ function ViewAssignees() {
           marginBottom: 24,
           boxShadow: '0 6px 18px rgba(0,0,0,0.04)'
         }}>
-          <h2 style={{ margin: '0 0 16px 0', color: '#1e40af', fontSize: 22, fontWeight: 700 }}>
-            🔍 Search Assignments by Department
-          </h2>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+            <h2 style={{ margin: 0, color: '#1e40af', fontSize: 22, fontWeight: 700 }}>
+              🔍 Search Assignments by Department
+            </h2>
+            {selectedDepartment && (
+              <button
+                onClick={handleDepartmentBack}
+                style={{
+                  background: '#f3f4f6',
+                  border: '1px solid #d1d5db',
+                  borderRadius: 8,
+                  padding: '8px 16px',
+                  cursor: 'pointer',
+                  fontSize: 14,
+                  fontWeight: 600,
+                  color: '#374151',
+                  transition: 'all 0.2s ease'
+                }}
+                onMouseEnter={(e) => {
+                  e.target.style.background = '#e5e7eb';
+                }}
+                onMouseLeave={(e) => {
+                  e.target.style.background = '#f3f4f6';
+                }}
+              >
+                ← Back to All Assignments
+              </button>
+            )}
+          </div>
           
           <div style={{ maxWidth: '500px' }}>
             <label style={{ display: 'block', marginBottom: '8px', fontWeight: 600, color: '#374151', fontSize: 14 }}>
@@ -256,7 +315,8 @@ function ViewAssignees() {
                   padding: '16px',
                   cursor: 'pointer',
                   transition: 'all 0.2s ease',
-                  boxShadow: '0 4px 6px rgba(79, 70, 229, 0.1)'
+                  boxShadow: '0 4px 6px rgba(79, 70, 229, 0.1)',
+                  position: 'relative'
                 }}
                 onMouseEnter={(e) => {
                   e.currentTarget.style.transform = 'translateY(-4px)';
@@ -267,6 +327,25 @@ function ViewAssignees() {
                   e.currentTarget.style.boxShadow = '0 4px 6px rgba(79, 70, 229, 0.1)';
                 }}
               >
+                <button
+                  type="button"
+                  className="no-bg-btn"
+                  onClick={(e) => handleDeleteClick(e, subject.subject_code)}
+                  style={{
+                    position: 'absolute',
+                    top: '8px',
+                    right: '8px',
+                    color: 'red',
+                    background: 'none',
+                    border: 'none',
+                    cursor: 'pointer',
+                    fontSize: '16px',
+                    zIndex: 10
+                  }}
+                  title="Delete Assignment"
+                >
+                  <i className="fa fa-trash"></i>
+                </button>
                 <div style={{
                   display: 'flex',
                   justifyContent: 'space-between',
@@ -352,7 +431,27 @@ function ViewAssignees() {
                 onKeyDown={(e) => {
                   if (e.key === "Enter") handleCardClick(subject.subject_code);
                 }}
+                style={{ position: 'relative' }}
               >
+                <button
+                  type="button"
+                  className="no-bg-btn"
+                  onClick={(e) => handleDeleteClick(e, subject.subject_code)}
+                  style={{
+                    position: 'absolute',
+                    top: '8px',
+                    right: '8px',
+                    color: 'red',
+                    background: 'none',
+                    border: 'none',
+                    cursor: 'pointer',
+                    fontSize: '16px',
+                    zIndex: 10
+                  }}
+                  title="Delete Assignment"
+                >
+                  <i className="fa fa-trash"></i>
+                </button>
                 <div className="subject-code">{subject.subject_code}</div>
                 <div className="assigned-count">
                   Total Assigned: {subject.assignees ? subject.assignees.length : 0}
@@ -444,6 +543,98 @@ function ViewAssignees() {
           )}
           </div>
         </>
+      )}
+
+      {/* Delete Confirmation Dialog */}
+      {showDeleteDialog && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          background: 'rgba(0, 0, 0, 0.5)',
+          display: 'flex',
+          justifyContent: 'center',
+          alignItems: 'center',
+          zIndex: 1000
+        }}>
+          <div style={{
+            background: 'white',
+            borderRadius: 12,
+            padding: '24px',
+            maxWidth: '400px',
+            width: '90%',
+            boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)'
+          }}>
+            <h3 style={{
+              margin: '0 0 16px 0',
+              color: '#dc2626',
+              fontSize: 18,
+              fontWeight: 700
+            }}>
+              ⚠️ Delete Assignment
+            </h3>
+            <p style={{
+              margin: '0 0 20px 0',
+              color: '#374151',
+              fontSize: 14,
+              lineHeight: 1.5
+            }}>
+              Are you sure you want to delete the assignment for <strong>{subjectToDelete}</strong>? This action cannot be undone and will permanently remove the assignment.
+            </p>
+            <div style={{
+              display: 'flex',
+              gap: '12px',
+              justifyContent: 'flex-end'
+            }}>
+              <button
+                onClick={cancelDelete}
+                style={{
+                  background: '#f3f4f6',
+                  border: '1px solid #d1d5db',
+                  borderRadius: 8,
+                  padding: '8px 16px',
+                  cursor: 'pointer',
+                  fontSize: 14,
+                  fontWeight: 600,
+                  color: '#374151',
+                  transition: 'all 0.2s ease'
+                }}
+                onMouseEnter={(e) => {
+                  e.target.style.background = '#e5e7eb';
+                }}
+                onMouseLeave={(e) => {
+                  e.target.style.background = '#f3f4f6';
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={confirmDelete}
+                style={{
+                  background: '#dc2626',
+                  border: '1px solid #dc2626',
+                  borderRadius: 8,
+                  padding: '8px 16px',
+                  cursor: 'pointer',
+                  fontSize: 14,
+                  fontWeight: 600,
+                  color: 'white',
+                  transition: 'all 0.2s ease'
+                }}
+                onMouseEnter={(e) => {
+                  e.target.style.background = '#b91c1c';
+                }}
+                onMouseLeave={(e) => {
+                  e.target.style.background = '#dc2626';
+                }}
+              >
+                Delete Assignment
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
