@@ -1,6 +1,8 @@
+// controllers/verifier/helpers.js
+
 const crypto = require('crypto');
 const mongoose = require('mongoose');
-const User = require('../../models/User'); // Adjust path as needed
+const User = require('../../models/User');
 const Verifier = require('../../models/Verifier');
 const QuestionPaper = require('../../models/QuestionPaper');
 const ApprovedPaper = require('../../models/ApprovedPaper');
@@ -8,36 +10,59 @@ const RejectedPaper = require('../../models/RejectedPaper');
 const VerifierCorrectedQuestions = require('../../models/VerifierCorrectedQuestions');
 const Department = require('../../models/Department');
 
-// DOCX import with better error handling
-let Document, Packer, Paragraph, TextRun;
+// DOCX: Safe import with fallback
+let Document = null;
+let Packer = null;
+let Paragraph = null;
+let TextRun = null;
+let Table = null;
+let TableRow = null;
+let TableCell = null;
+let WidthType = null;
+let BorderStyle = null;
+let AlignmentType = null;
+
 try {
-  const docxModule = require('docx');
-  Document = docxModule.Document;
-  Packer = docxModule.Packer;
-  Paragraph = docxModule.Paragraph;
-  TextRun = docxModule.TextRun;
+  const docx = require('docx');
+  Document = docx.Document;
+  Packer = docx.Packer;
+  Paragraph = docx.Paragraph;
+  TextRun = docx.TextRun;
+  Table = docx.Table;
+  TableRow = docx.TableRow;
+  TableCell = docx.TableCell;
+  WidthType = docx.WidthType;
+  BorderStyle = docx.BorderStyle;
+  AlignmentType = docx.AlignmentType;
   console.log('DOCX module loaded successfully');
-} catch (e) {
-  console.error('Failed to load DOCX module:', e.message);
-  Document = null;
-  Packer = null;
-  Paragraph = null;
-  TextRun = null;
+} catch (err) {
+  console.error('Failed to load docx module:', err.message);
 }
 
 function generateRandomAlphanumeric(length) {
   const chars = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
   let result = '';
   for (let i = 0; i < length; i++) {
-    const idx = Math.floor(Math.random() * chars.length);
-    result += chars[idx];
+    result += chars[Math.floor(Math.random() * chars.length)];
   }
   return result;
 }
 
+// Export everything
 module.exports = {
-  crypto,
-  mongoose,
+  // DOCX
+  Document,
+  Packer,
+  Paragraph,
+  TextRun,
+  Table,
+  TableRow,
+  TableCell,
+  WidthType,
+  BorderStyle,
+  AlignmentType,
+
+  // Models
   User,
   Verifier,
   QuestionPaper,
@@ -45,9 +70,9 @@ module.exports = {
   RejectedPaper,
   VerifierCorrectedQuestions,
   Department,
-  Document,
-  Packer,
-  Paragraph,
-  TextRun,
-  generateRandomAlphanumeric
+
+  // Utilities
+  crypto,
+  mongoose,
+  generateRandomAlphanumeric,
 };

@@ -1,3 +1,4 @@
+/* eslint-disable no-console */
 const {
     QuestionPaper,
     ApprovedPaper,
@@ -5,317 +6,251 @@ const {
     Document,
     Packer,
     Paragraph,
-    TextRun
+    TextRun,
+    Table,
+    TableRow,
+    TableCell,
+    WidthType,
+    BorderStyle,
+    AlignmentType,
   } = require('./helpers');
   
-  // Test DOCX generation endpoint
+  // THIN BUT VISIBLE BORDERS (for all tables)
+  const BORDER = {
+    top:    { style: BorderStyle.SINGLE, size: 4, color: '000000' },
+    bottom: { style: BorderStyle.SINGLE, size: 4, color: '000000' },
+    left:   { style: BorderStyle.SINGLE, size: 4, color: '000000' },
+    right:  { style: BorderStyle.SINGLE, size: 4, color: '000000' },
+  };
+  
+  // TEST ENDPOINT
   async function testDocxGeneration(req, res) {
     try {
-      console.log('Testing DOCX generation...');
-      
-      if (!Packer) {
-        console.error('Packer not available');
-        return res.status(501).json({ error: 'DOCX generation not available on server' });
-      }
-      
-      // Create a simple test document
+      if (!Packer) return res.status(501).json({ error: 'DOCX not available' });
+  
       const doc = new Document({
-        sections: [
-          {
-            properties: {},
-            children: [
-              new Paragraph({
-                children: [
-                  new TextRun({
-                    text: "Test Document",
-                    bold: true,
-                  }),
-                ],
-              }),
-              new Paragraph({
-                children: [
-                  new TextRun({
-                    text: "This is a test to verify DOCX generation is working.",
-                  }),
-                ],
-              }),
-            ],
-          },
-        ],
+        sections: [{
+          children: [
+            new Paragraph({ children: [new TextRun({ text: 'TEST: Thin borders + USN boxes', bold: true, size: 36 })] }),
+            new Table({
+              rows: [
+                new TableRow({
+                  children: Array.from({ length: 10 }, () =>
+                    new TableCell({
+                      width: { size: 800, type: WidthType.DXA },
+                      borders: BORDER,
+                      children: [new Paragraph({
+                        alignment: AlignmentType.CENTER,
+                        children: [new TextRun({ text: '□', size: 48, bold: true })]
+                      })]
+                    })
+                  )
+                })
+              ],
+              width: { size: 100, type: WidthType.PERCENTAGE }
+            })
+          ]
+        }]
       });
   
-      const buffer = await Packer.toBuffer(doc);
-      const filename = 'test.docx';
-      
+      const buf = await Packer.toBuffer(doc);
       res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document');
-      res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
-      
-      return res.send(Buffer.from(buffer));
-    } catch (err) {
-      console.error('Test DOCX generation error:', err);
-      return res.status(500).json({ 
-        error: 'Server error', 
-        details: err.message,
-        stack: process.env.NODE_ENV === 'development' ? err.stack : undefined
-      });
+      res.setHeader('Content-Disposition', 'attachment; filename="test.docx"');
+      return res.send(Buffer.from(buf));
+    } catch (e) {
+      console.error(e);
+      return res.status(500).json({ error: e.message });
     }
   }
   
-  // Generate a DOCX for a paper
+  // MAIN FUNCTION
   async function getPaperDocx(req, res) {
     try {
-      console.log('getPaperDocx called with params:', req.params);
-      
-      if (!Packer) {
-        console.error('Packer not available - DOCX generation not available on server');
-        return res.status(501).json({ error: 'DOCX generation not available on server' });
-      }
-      
+      if (!Packer) return res.status(501).json({ error: 'DOCX generation not available' });
+  
       const { subject_code, semester } = req.params;
-      const sem = parseInt(semester);
-      
-      console.log('Looking for papers with:', { subject_code, semester: sem });
-      
-      // First try to find papers in QuestionPaper collection
+      const sem = Number(semester);
+      if (!subject_code || Number.isNaN(sem))
+        return res.status(400).json({ error: 'Invalid parameters' });
+  
       let papers = await QuestionPaper.find({ subject_code, semester: sem }).sort({ question_number: 1 }).lean();
-      console.log('Found papers in QuestionPaper:', papers.length);
-      
-      // If not found, try to find in ApprovedPaper collection
-      if (!papers || papers.length === 0) {
-        console.log('No papers found in QuestionPaper, checking ApprovedPaper...');
-        const approvedPapers = await ApprovedPaper.find({ subject_code, semester: sem }).sort({ question_number: 1 }).lean();
-        console.log('Found papers in ApprovedPaper:', approvedPapers.length);
-        if (approvedPapers && approvedPapers.length > 0) {
-          papers = approvedPapers;
-        }
+      if (!papers?.length) {
+        const approved = await ApprovedPaper.find({ subject_code, semester: sem }).sort({ question_number: 1 }).lean();
+        if (approved?.length) papers = approved;
       }
   
-      // Check for corrected questions from verifier
-      if (papers && papers.length > 0) {
-        console.log('Checking for verifier corrected questions...');
-        const correctedQuestions = await VerifierCorrectedQuestions.findOne({
-          subject_code,
-          semester: sem
-        }).lean();
-        
-        if (correctedQuestions && correctedQuestions.corrected_questions) {
-          console.log('Found corrected questions, merging with original papers...');
-          // Merge corrected questions with original papers
-          papers = papers.map(paper => {
-            const corrected = correctedQuestions.corrected_questions.find(
-              cq => cq.question_number === paper.question_number
-            );
-            if (corrected) {
-              return {
-                ...paper,
-                corrected_question_text: corrected.corrected_question_text,
-                corrected_co: corrected.corrected_co,
-                corrected_l: corrected.corrected_l,
-                corrected_marks: corrected.corrected_marks,
-                remarks: corrected.remarks || paper.remarks
-              };
-            }
-            return paper;
+      if (papers?.length) {
+        const corr = await VerifierCorrectedQuestions.findOne({ subject_code, semester: sem }).lean();
+        if (corr?.corrected_questions) {
+          papers = papers.map(p => {
+            const c = corr.corrected_questions.find(q => q.question_number === p.question_number);
+            if (!c) return p;
+            return {
+              ...p,
+              question_text: c.corrected_question_text ?? p.question_text,
+              co: c.corrected_co ?? p.co,
+              level: c.corrected_l ?? p.level,
+              marks: c.corrected_marks ?? p.marks,
+              remarks: c.remarks ?? p.remarks,
+            };
           });
-          console.log('Merged corrected questions with original papers');
-        }
-      }
-      
-      if (!papers || papers.length === 0) {
-        console.log('No papers found in any collection');
-        return res.status(404).json({ error: 'Paper not found' });
-      }
-  
-      console.log('Using papers for DOCX generation:', papers.length, 'questions');
-      console.log('First paper sample:', {
-        subject_code: papers[0].subject_code,
-        subject_name: papers[0].subject_name,
-        semester: papers[0].semester,
-        question_number: papers[0].question_number
-      });
-  
-      // Validate that all required fields are present
-      for (let i = 0; i < papers.length; i++) {
-        const paper = papers[i];
-        if (!paper.question_text || !paper.question_number) {
-          console.error(`Invalid paper data at index ${i}:`, paper);
-          throw new Error(`Invalid paper data: missing question_text or question_number`);
         }
       }
   
-      // Create USN boxes
-      const usnBoxes = [];
-      for (let i = 0; i < 10; i++) {
-        usnBoxes.push(
-          new TextRun({
-            text: "□",
-            size: 36,
+      if (!papers?.length) return res.status(404).json({ error: 'Paper not found' });
+  
+      const dept = papers[0].department || 'N/A';
+  
+      // USN: 10 visible boxes in a single row
+      const usnTable = new Table({
+        rows: [
+          new TableRow({
+            children: Array.from({ length: 10 }, () =>
+              new TableCell({
+                width: { size: 800, type: WidthType.DXA },
+                borders: BORDER,
+                children: [
+                  new Paragraph({
+                    alignment: AlignmentType.CENTER,
+                    children: [
+                      new TextRun({
+                        text: '□',
+                        size: 48,
+                        bold: true,
+                        font: 'Arial'
+                      })
+                    ]
+                  })
+                ]
+              })
+            )
           })
-        );
-      }
-  
-      // Create document sections
-      const header = [
-        // Subject Code - Top Right
-        new Paragraph({
-          alignment: "right",
-          children: [new TextRun({ text: `${subject_code}`, bold: true })]
-        }),
-        
-        // College Header
-        new Paragraph({
-          alignment: "center",
-          children: [new TextRun({ text: "GLOBAL ACADEMY OF TECHNOLOGY, BENGALURU", bold: true })]
-        }),
-        new Paragraph({
-          alignment: "center",
-          children: [new TextRun({ text: "(An Autonomous Institute, affiliated to VTU, Belagavi)" })]
-        }),
-        
-        // USN Section
-        new Paragraph({
-          children: [
-            new TextRun({ text: "USN: ", bold: true }),
-            ...usnBoxes
-          ]
-        }),
-        
-        // Exam Information
-        new Paragraph({
-          alignment: "center",
-          children: [new TextRun({ text: `Semester ${sem} B.E. Degree Second Internal Assessment, April – 2025` })]
-        }),
-        new Paragraph({
-          alignment: "center",
-          children: [new TextRun({ text: `Subject Name: ${papers[0].subject_name}`, bold: true })]
-        }),
-        new Paragraph({
-          children: [
-            new TextRun({ text: "Time: 3 hrs.", bold: true }),
-            new TextRun({ text: "\t\t\t\t\t\t\t\t" }),
-            new TextRun({ text: "Max. Marks: 100", bold: true })
-          ]
-        }),
-        
-        // Department and Semester Info
-        new Paragraph({
-          children: [
-            new TextRun({ text: `Department: ${papers[0].department || 'N/A'}`, bold: true }),
-            new TextRun({ text: "\t\t\t\t\t\t\t\t" }),
-            new TextRun({ text: `Semester: ${sem}`, bold: true })
-          ]
-        }),
-        
-        // Note Section
-        new Paragraph({
-          children: [new TextRun({ text: "Note: Answer any five full questions, choosing ONE full question from each module.", italics: true })]
-        }),
-        
-        // Empty line before table
-        new Paragraph({ children: [new TextRun({ text: " " })] }),
-      ];
-  
-      // Create questions as simple paragraphs instead of table
-      console.log('Creating questions as paragraphs...');
-      const questionParagraphs = [];
-      
-      papers.forEach((q, index) => {
-        console.log(`Creating question ${index + 1}:`, q.question_number);
-        
-        // Use corrected question text if available, otherwise use original
-        const questionText = q.corrected_question_text || q.question_text || '';
-        const questionMarks = q.corrected_marks !== undefined ? q.corrected_marks : q.marks;
-        const questionCO = q.corrected_co || q.co || '';
-        const questionLevel = q.corrected_l || q.l || '';
-        
-        console.log(`Question ${index + 1} details:`, {
-          number: q.question_number,
-          text: questionText.substring(0, 50) + '...',
-          marks: questionMarks,
-          co: questionCO,
-          level: questionLevel
-        });
-        
-        // Create question as paragraph
-        questionParagraphs.push(
-          new Paragraph({
-            children: [
-              new TextRun({ text: `Q${q.question_number}. `, bold: true }),
-              new TextRun({ text: String(questionText) })
-            ]
-          }),
-          new Paragraph({
-            children: [
-              new TextRun({ text: `Marks: ${typeof questionMarks === 'number' ? questionMarks : 0} | `, bold: true }),
-              new TextRun({ text: `${questionCO} | `, bold: true }),
-              new TextRun({ text: `${questionLevel}`, bold: true })
-            ]
-          }),
-          new Paragraph({ children: [new TextRun({ text: " " })] }) // Empty line
-        );
-      });
-  
-      console.log('Questions created successfully:', questionParagraphs.length, 'paragraphs');
-  
-      // Bottom section with asterisks only
-      const footer = [
-        new Paragraph({ children: [new TextRun({ text: " " })] }),
-        new Paragraph({
-          alignment: "center",
-          children: [new TextRun({ text: "* * * * *" })]
-        }),
-      ];
-  
-      // Create the document with simplified structure
-      console.log('Creating DOCX document...');
-      const doc = new Document({
-        sections: [
-          {
-            properties: {
-              page: {
-                margin: {
-                  top: 1440, // 1 inch
-                  right: 1440,
-                  bottom: 1440,
-                  left: 1440,
-                },
-              },
-            },
-            children: [
-              ...header,
-              ...questionParagraphs,
-              ...footer,
-            ],
-          },
         ],
+        width: { size: 100, type: WidthType.PERCENTAGE },
+        alignment: AlignmentType.CENTER,
       });
-      console.log('DOCX document created successfully');
   
-      console.log('Generating DOCX buffer...');
+      const deptSemPara = new Paragraph({
+        children: [
+          new TextRun({ text: `Department: ${dept}`, bold: true }),
+          new TextRun({ text: ' '.repeat(30) }),
+          new TextRun({ text: `Semester: ${sem}`, bold: true }),
+        ]
+      });
+  
+      const header = [
+        new Paragraph({ alignment: AlignmentType.RIGHT, children: [new TextRun({ text: subject_code, bold: true })] }),
+        new Paragraph({
+          alignment: AlignmentType.CENTER,
+          children: [new TextRun({
+            text: 'GLOBAL ACADEMY OF TECHNOLOGY, BENGALURU',
+            bold: true,
+            size: 34
+          })]
+        }),
+        new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: '(An Autonomous Institute, affiliated to VTU, Belagavi)' })] }),
+  
+        new Paragraph({ children: [new TextRun({ text: 'USN: ', bold: true })] }),
+        new Paragraph({ children: [usnTable] }),
+        deptSemPara,
+  
+        new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: `Semester ${sem} B.E. Degree Second Internal Assessment, April – 2025` })] }),
+        new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: `Subject Name: ${papers[0].subject_name}`, bold: true })] }),
+        new Paragraph({ children: [new TextRun({ text: 'Time: 3 hrs.', bold: true }), new TextRun({ text: '\t\t\t\t\t\t\t\t' }), new TextRun({ text: 'Max. Marks: 100', bold: true })] }),
+        new Paragraph({ children: [new TextRun({ text: 'Note: Answer any five full questions, choosing ONE full question from each module.', italics: true })] }),
+        new Paragraph({ children: [new TextRun({ text: ' ' })] }),
+      ];
+  
+      const qRows = [];
+  
+      // Table Header
+      qRows.push(
+        new TableRow({
+          children: [
+            new TableCell({ width: { size: 12, type: WidthType.PERCENTAGE }, borders: BORDER, children: [new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: 'Q. No.', bold: true })] })] }),
+            new TableCell({ width: { size: 68, type: WidthType.PERCENTAGE }, borders: BORDER, children: [new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: 'Question', bold: true })] })] }),
+            new TableCell({ width: { size: 20, type: WidthType.PERCENTAGE }, borders: BORDER, children: [new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: 'Marks / CO / Level', bold: true })] })] }),
+          ]
+        })
+      );
+  
+      // Group questions by main Q number (e.g., 1, 1a, 1b → group under 1)
+      const grouped = {};
+      papers.forEach(q => {
+        const mainQ = String(q.question_number).split(/[a-z]$/i)[0]; // e.g., "1a" → "1"
+        if (!grouped[mainQ]) grouped[mainQ] = [];
+        grouped[mainQ].push(q);
+      });
+  
+      Object.keys(grouped).forEach((mainQ, groupIndex, arr) => {
+        const subQuestions = grouped[mainQ];
+  
+        subQuestions.forEach((q, subIndex) => {
+          const marks = typeof q.marks === 'number' ? q.marks : 0;
+          const co = q.co ?? '';
+          const level = q.level ?? '';
+          const info = `${marks} / ${co} / ${level}`;
+  
+          qRows.push(
+            new TableRow({
+              children: [
+                new TableCell({ borders: BORDER, children: [new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: String(q.question_number) })] })] }),
+                new TableCell({ borders: BORDER, children: [new Paragraph({ children: [new TextRun({ text: String(q.question_text) })] })] }),
+                new TableCell({ borders: BORDER, children: [new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: info })] })] }),
+              ]
+            })
+          );
+        });
+  
+        // EMPTY ROW ONLY AFTER FULL QUESTION (last sub‑question)
+        if (groupIndex < arr.length - 1) {
+          qRows.push(
+            new TableRow({
+              height: { value: 400, rule: 'atLeast' },
+              children: [
+                new TableCell({ borders: BORDER, children: [new Paragraph({ children: [new TextRun({ text: '' })] })] }),
+                new TableCell({ borders: BORDER, children: [new Paragraph({ children: [new TextRun({ text: '' })] })] }),
+                new TableCell({ borders: BORDER, children: [new Paragraph({ children: [new TextRun({ text: '' })] })] }),
+              ]
+            })
+          );
+        }
+      });
+  
+      const questionTable = new Table({
+        rows: qRows,
+        width: { size: 100, type: WidthType.PERCENTAGE },
+        borders: {
+          top: { style: BorderStyle.SINGLE, size: 4 },
+          bottom: { style: BorderStyle.SINGLE, size: 4 },
+          left: { style: BorderStyle.SINGLE, size: 4 },
+          right: { style: BorderStyle.SINGLE, size: 4 },
+          insideHorizontal: { style: BorderStyle.SINGLE, size: 4 },
+          insideVertical: { style: BorderStyle.SINGLE, size: 4 }
+        },
+      });
+  
+      const footer = [
+        new Paragraph({ children: [new TextRun({ text: ' ' })] }),
+        new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: '* * * * *' })] }),
+      ];
+  
+      const doc = new Document({
+        sections: [{
+          properties: { page: { margin: { top: 1440, right: 1440, bottom: 1440, left: 1440 } } },
+          children: [...header, questionTable, ...footer],
+        }]
+      });
+  
       const buffer = await Packer.toBuffer(doc);
-      console.log('DOCX buffer generated successfully, size:', buffer.length);
-      
       const filename = `${subject_code}_${sem}.docx`;
-      console.log('Setting headers for download:', filename);
-      
       res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document');
       res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
-      
-      console.log('Sending DOCX file to client...');
       return res.send(Buffer.from(buffer));
     } catch (err) {
       console.error('getPaperDocx error:', err);
-      console.error('Error details:', err.message);
-      console.error('Stack trace:', err.stack);
-      return res.status(500).json({ 
-        error: 'Server error', 
-        details: err.message,
-        stack: process.env.NODE_ENV === 'development' ? err.stack : undefined
-      });
+      return res.status(500).json({ error: err.message });
     }
   }
   
-  module.exports = {
-    testDocxGeneration,
-    getPaperDocx
-  };
+  module.exports = { testDocxGeneration, getPaperDocx };
