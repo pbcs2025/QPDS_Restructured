@@ -1,3 +1,4 @@
+
 const crypto = require('crypto');
 const mongoose = require('mongoose');
 const User = require('../models/User');
@@ -9,13 +10,23 @@ const RejectedPaper = require('../models/RejectedPaper');
 const VerifierCorrectedQuestions = require('../models/VerifierCorrectedQuestions');
 
 const Department = require('../models/Department');
-const { Document, Packer, Paragraph, TextRun } = (() => {
-  try {
-    return require('docx');
-  } catch (e) {
-    return {};
-  }
-})();
+
+// DOCX import with better error handling
+let Document, Packer, Paragraph, TextRun;
+try {
+  const docxModule = require('docx');
+  Document = docxModule.Document;
+  Packer = docxModule.Packer;
+  Paragraph = docxModule.Paragraph;
+  TextRun = docxModule.TextRun;
+  console.log('DOCX module loaded successfully');
+} catch (e) {
+  console.error('Failed to load DOCX module:', e.message);
+  Document = null;
+  Packer = null;
+  Paragraph = null;
+  TextRun = null;
+}
 
 function generateRandomAlphanumeric(length) {
   const chars = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
@@ -541,37 +552,310 @@ exports.getPaperByCodeSemester = async (req, res) => {
   }
 };
 
+// Test DOCX generation endpoint
+exports.testDocxGeneration = async (req, res) => {
+  try {
+    console.log('Testing DOCX generation...');
+    
+    if (!Packer) {
+      console.error('Packer not available');
+      return res.status(501).json({ error: 'DOCX generation not available on server' });
+    }
+    
+    // Create a simple test document
+    const doc = new Document({
+      sections: [
+        {
+          properties: {},
+          children: [
+            new Paragraph({
+              children: [
+                new TextRun({
+                  text: "Test Document",
+                  bold: true,
+                }),
+              ],
+            }),
+            new Paragraph({
+              children: [
+                new TextRun({
+                  text: "This is a test to verify DOCX generation is working.",
+                }),
+              ],
+            }),
+          ],
+        },
+      ],
+    });
+
+    const buffer = await Packer.toBuffer(doc);
+    const filename = 'test.docx';
+    
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document');
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    
+    return res.send(Buffer.from(buffer));
+  } catch (err) {
+    console.error('Test DOCX generation error:', err);
+    return res.status(500).json({ 
+      error: 'Server error', 
+      details: err.message,
+      stack: process.env.NODE_ENV === 'development' ? err.stack : undefined
+    });
+  }
+};
+
 // Generate a DOCX for a paper
 exports.getPaperDocx = async (req, res) => {
   try {
-    if (!Packer) return res.status(501).json({ error: 'DOCX generation not available on server' });
+    console.log('getPaperDocx called with params:', req.params);
+    
+    if (!Packer) {
+      console.error('Packer not available - DOCX generation not available on server');
+      return res.status(501).json({ error: 'DOCX generation not available on server' });
+    }
+    
     const { subject_code, semester } = req.params;
     const sem = parseInt(semester);
-    const papers = await QuestionPaper.find({ subject_code, semester: sem }).sort({ question_number: 1 }).lean();
-    if (!papers || papers.length === 0) return res.status(404).json({ error: 'Paper not found' });
+    
+    console.log('Looking for papers with:', { subject_code, semester: sem });
+    
+    // First try to find papers in QuestionPaper collection
+    let papers = await QuestionPaper.find({ subject_code, semester: sem }).sort({ question_number: 1 }).lean();
+    console.log('Found papers in QuestionPaper:', papers.length);
+    
+    // If not found, try to find in ApprovedPaper collection
+    if (!papers || papers.length === 0) {
+      console.log('No papers found in QuestionPaper, checking ApprovedPaper...');
+      const approvedPapers = await ApprovedPaper.find({ subject_code, semester: sem }).sort({ question_number: 1 }).lean();
+      console.log('Found papers in ApprovedPaper:', approvedPapers.length);
+      if (approvedPapers && approvedPapers.length > 0) {
+        papers = approvedPapers;
+      }
+    }
 
+    // Check for corrected questions from verifier
+    if (papers && papers.length > 0) {
+      console.log('Checking for verifier corrected questions...');
+      const correctedQuestions = await VerifierCorrectedQuestions.findOne({
+        subject_code,
+        semester: sem
+      }).lean();
+      
+      if (correctedQuestions && correctedQuestions.corrected_questions) {
+        console.log('Found corrected questions, merging with original papers...');
+        // Merge corrected questions with original papers
+        papers = papers.map(paper => {
+          const corrected = correctedQuestions.corrected_questions.find(
+            cq => cq.question_number === paper.question_number
+          );
+          if (corrected) {
+            return {
+              ...paper,
+              corrected_question_text: corrected.corrected_question_text,
+              corrected_co: corrected.corrected_co,
+              corrected_l: corrected.corrected_l,
+              corrected_marks: corrected.corrected_marks,
+              remarks: corrected.remarks || paper.remarks
+            };
+          }
+          return paper;
+        });
+        console.log('Merged corrected questions with original papers');
+      }
+    }
+    
+    if (!papers || papers.length === 0) {
+      console.log('No papers found in any collection');
+      return res.status(404).json({ error: 'Paper not found' });
+    }
+
+    console.log('Using papers for DOCX generation:', papers.length, 'questions');
+    console.log('First paper sample:', {
+      subject_code: papers[0].subject_code,
+      subject_name: papers[0].subject_name,
+      semester: papers[0].semester,
+      question_number: papers[0].question_number
+    });
+
+    // Validate that all required fields are present
+    for (let i = 0; i < papers.length; i++) {
+      const paper = papers[i];
+      if (!paper.question_text || !paper.question_number) {
+        console.error(`Invalid paper data at index ${i}:`, paper);
+        throw new Error(`Invalid paper data: missing question_text or question_number`);
+      }
+    }
+
+    // Create USN boxes
+    const usnBoxes = [];
+    for (let i = 0; i < 10; i++) {
+      usnBoxes.push(
+        new TextRun({
+          text: "□",
+          size: 36,
+        })
+      );
+    }
+
+    // Create document sections
     const header = [
-      new Paragraph({ children: [new TextRun({ text: `Subject: ${papers[0].subject_name} (${subject_code})`, bold: true })] }),
-      new Paragraph({ children: [new TextRun({ text: `Semester: ${sem}`, bold: true })] }),
-      new Paragraph({ children: [new TextRun({ text: ' ' })] }),
+      // Subject Code - Top Right
+      new Paragraph({
+        alignment: "right",
+        children: [new TextRun({ text: `${subject_code}`, bold: true })]
+      }),
+      
+      // College Header
+      new Paragraph({
+        alignment: "center",
+        children: [new TextRun({ text: "GLOBAL ACADEMY OF TECHNOLOGY, BENGALURU", bold: true })]
+      }),
+      new Paragraph({
+        alignment: "center",
+        children: [new TextRun({ text: "(An Autonomous Institute, affiliated to VTU, Belagavi)" })]
+      }),
+      
+      // USN Section
+      new Paragraph({
+        children: [
+          new TextRun({ text: "USN: ", bold: true }),
+          ...usnBoxes
+        ]
+      }),
+      
+      // Exam Information
+      new Paragraph({
+        alignment: "center",
+        children: [new TextRun({ text: `Semester ${sem} B.E. Degree Second Internal Assessment, April – 2025` })]
+      }),
+      new Paragraph({
+        alignment: "center",
+        children: [new TextRun({ text: `Subject Name: ${papers[0].subject_name}`, bold: true })]
+      }),
+      new Paragraph({
+        children: [
+          new TextRun({ text: "Time: 3 hrs.", bold: true }),
+          new TextRun({ text: "\t\t\t\t\t\t\t\t" }),
+          new TextRun({ text: "Max. Marks: 100", bold: true })
+        ]
+      }),
+      
+      // Department and Semester Info
+      new Paragraph({
+        children: [
+          new TextRun({ text: `Department: ${papers[0].department || 'N/A'}`, bold: true }),
+          new TextRun({ text: "\t\t\t\t\t\t\t\t" }),
+          new TextRun({ text: `Semester: ${sem}`, bold: true })
+        ]
+      }),
+      
+      // Note Section
+      new Paragraph({
+        children: [new TextRun({ text: "Note: Answer any five full questions, choosing ONE full question from each module.", italics: true })]
+      }),
+      
+      // Empty line before table
+      new Paragraph({ children: [new TextRun({ text: " " })] }),
     ];
 
-    const questionParas = papers.flatMap((q) => [
-      new Paragraph({ children: [new TextRun({ text: `${q.question_number}) ${q.question_text}` })] }),
-      new Paragraph({ children: [new TextRun({ text: `CO: ${q.co || ''}   L: ${q.level || ''}   Marks: ${typeof q.marks === 'number' ? q.marks : 0}` })] }),
-      new Paragraph({ children: [new TextRun({ text: `Remarks: ${q.remarks || ''}` })] }),
-      new Paragraph({ children: [new TextRun({ text: ' ' })] }),
-    ]);
+    // Create questions as simple paragraphs instead of table
+    console.log('Creating questions as paragraphs...');
+    const questionParagraphs = [];
+    
+    papers.forEach((q, index) => {
+      console.log(`Creating question ${index + 1}:`, q.question_number);
+      
+      // Use corrected question text if available, otherwise use original
+      const questionText = q.corrected_question_text || q.question_text || '';
+      const questionMarks = q.corrected_marks !== undefined ? q.corrected_marks : q.marks;
+      const questionCO = q.corrected_co || q.co || '';
+      const questionLevel = q.corrected_l || q.l || '';
+      
+      console.log(`Question ${index + 1} details:`, {
+        number: q.question_number,
+        text: questionText.substring(0, 50) + '...',
+        marks: questionMarks,
+        co: questionCO,
+        level: questionLevel
+      });
+      
+      // Create question as paragraph
+      questionParagraphs.push(
+        new Paragraph({
+          children: [
+            new TextRun({ text: `Q${q.question_number}. `, bold: true }),
+            new TextRun({ text: String(questionText) })
+          ]
+        }),
+        new Paragraph({
+          children: [
+            new TextRun({ text: `Marks: ${typeof questionMarks === 'number' ? questionMarks : 0} | `, bold: true }),
+            new TextRun({ text: `${questionCO} | `, bold: true }),
+            new TextRun({ text: `${questionLevel}`, bold: true })
+          ]
+        }),
+        new Paragraph({ children: [new TextRun({ text: " " })] }) // Empty line
+      );
+    });
 
-    const doc = new Document({ sections: [{ properties: {}, children: [...header, ...questionParas] }] });
+    console.log('Questions created successfully:', questionParagraphs.length, 'paragraphs');
+
+    // Bottom section with asterisks only
+    const footer = [
+      new Paragraph({ children: [new TextRun({ text: " " })] }),
+      new Paragraph({
+        alignment: "center",
+        children: [new TextRun({ text: "* * * * *" })]
+      }),
+    ];
+
+    // Create the document with simplified structure
+    console.log('Creating DOCX document...');
+    const doc = new Document({
+      sections: [
+        {
+          properties: {
+            page: {
+              margin: {
+                top: 1440, // 1 inch
+                right: 1440,
+                bottom: 1440,
+                left: 1440,
+              },
+            },
+          },
+          children: [
+            ...header,
+            ...questionParagraphs,
+            ...footer,
+          ],
+        },
+      ],
+    });
+    console.log('DOCX document created successfully');
+
+    console.log('Generating DOCX buffer...');
     const buffer = await Packer.toBuffer(doc);
+    console.log('DOCX buffer generated successfully, size:', buffer.length);
+    
     const filename = `${subject_code}_${sem}.docx`;
+    console.log('Setting headers for download:', filename);
+    
     res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document');
     res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    
+    console.log('Sending DOCX file to client...');
     return res.send(Buffer.from(buffer));
   } catch (err) {
     console.error('getPaperDocx error:', err);
-    return res.status(500).json({ error: 'Server error' });
+    console.error('Error details:', err.message);
+    console.error('Stack trace:', err.stack);
+    return res.status(500).json({ 
+      error: 'Server error', 
+      details: err.message,
+      stack: process.env.NODE_ENV === 'development' ? err.stack : undefined
+    });
   }
 };
 // Diagnostics: list approved papers
@@ -760,26 +1044,29 @@ exports.approveCorrectedQuestions = async (req, res) => {
         has_l: !!q.l
       })));
 
-  // **FIX: Delete any existing approved papers for this subject/semester first**
-await ApprovedPaper.deleteMany({
-  subject_code,
-  semester: parseInt(semester)
-}, { session });
-console.log('Deleted any existing approved paper records');
+      // Create approved paper records for each question
+      const approvedPapers = corrected_questions.map(question => {
+        console.log('Creating ApprovedPaper for question:', question.question_number);
+        return new ApprovedPaper({
+          subject_code,
+          subject_name,
+          semester: parseInt(semester),
+          department,
+          question_number: question.question_number,
+          question_text: question.question_text,
+          marks: question.marks,
+          co: question.co,
+          level: question.l,
+          remarks: question.remarks || '',
+          verified_by,
+          verified_at: new Date(),
+          approved_at: new Date()
+        });
+      });
 
-// **FIX: Create only ONE approved paper record (not one per question)**
-const approvedPaper = new ApprovedPaper({
-  subject_code,
-  subject_name,
-  semester: parseInt(semester),
-  department,
-  verified_by,
-  verified_at: new Date(),
-  approved_at: new Date()
-});
-
-await approvedPaper.save({ session });
-console.log('Successfully created single approved paper record');
+      console.log('Attempting to insert approved papers:', approvedPapers.length);
+      await ApprovedPaper.insertMany(approvedPapers, { session });
+      console.log('Successfully inserted approved papers');
 
       await session.commitTransaction();
       session.endSession();
@@ -787,7 +1074,7 @@ console.log('Successfully created single approved paper record');
       console.log('Successfully approved and saved corrected questions');
       return res.json({ 
         message: 'Corrected questions approved and saved successfully',
-        approvedPapers: 1
+        approvedPapers: approvedPapers.length
       });
     } catch (error) {
       console.error('Transaction error:', error);
@@ -906,6 +1193,113 @@ exports.rejectPaper = async (req, res) => {
     }
   } catch (err) {
     console.error('Reject paper error:', err);
+    return res.status(500).json({ error: 'Server error' });
+  }
+};
+
+// Get verifier corrected papers with remarks for superadmin
+exports.getVerifierCorrectedPapers = async (req, res) => {
+  try {
+    const { department, semester } = req.query;
+    
+    const filter = {};
+    if (department) filter.department = department;
+    if (semester) filter.semester = parseInt(semester, 10);
+    
+    // Get corrected papers from VerifierCorrectedQuestions
+    const correctedPapers = await VerifierCorrectedQuestions.find(filter)
+      .sort({ verified_at: -1 })
+      .lean();
+    
+    // Get approved papers from ApprovedPaper collection
+    const approvedPapers = await ApprovedPaper.find(filter)
+      .sort({ approved_at: -1 })
+      .lean();
+    
+    // Group corrected papers by subject_code and semester
+    const groupedCorrected = {};
+    correctedPapers.forEach(paper => {
+      const key = `${paper.subject_code}_${paper.semester}`;
+      if (!groupedCorrected[key]) {
+        groupedCorrected[key] = {
+          _id: key,
+          subject_code: paper.subject_code,
+          subject_name: paper.subject_name,
+          semester: paper.semester,
+          department: paper.department,
+          verifier_remarks: paper.verifier_remarks,
+          verified_by: paper.verified_by,
+          verified_at: paper.verified_at,
+          status: paper.status,
+          questions: [],
+          corrected_at: paper.createdAt
+        };
+      }
+      
+      // Add corrected questions
+      paper.corrected_questions.forEach(corrected => {
+        groupedCorrected[key].questions.push({
+          question_number: corrected.question_number,
+          original_question_text: corrected.original_question_text,
+          corrected_question_text: corrected.corrected_question_text,
+          original_co: corrected.original_co,
+          corrected_co: corrected.corrected_co,
+          original_l: corrected.original_l,
+          corrected_l: corrected.corrected_l,
+          original_marks: corrected.original_marks,
+          corrected_marks: corrected.corrected_marks,
+          remarks: corrected.remarks,
+          corrected_at: corrected.corrected_at
+        });
+      });
+    });
+    
+    // Group approved papers by subject_code and semester
+    const groupedApproved = {};
+    approvedPapers.forEach(paper => {
+      const key = `${paper.subject_code}_${paper.semester}`;
+      if (!groupedApproved[key]) {
+        groupedApproved[key] = {
+          _id: key,
+          subject_code: paper.subject_code,
+          subject_name: paper.subject_name,
+          semester: paper.semester,
+          department: paper.department,
+          verified_by: paper.verified_by,
+          verified_at: paper.verified_at,
+          approved_at: paper.approved_at,
+          status: 'approved',
+          questions: []
+        };
+      }
+      
+      groupedApproved[key].questions.push({
+        question_number: paper.question_number,
+        question_text: paper.question_text,
+        marks: paper.marks,
+        co: paper.co,
+        level: paper.level,
+        remarks: paper.remarks
+      });
+    });
+    
+    // Combine corrected and approved papers
+    const allPapers = {
+      ...groupedCorrected,
+      ...groupedApproved
+    };
+    
+    const result = Object.values(allPapers).sort((a, b) => 
+      new Date(b.verified_at || b.approved_at) - new Date(a.verified_at || a.approved_at)
+    );
+    
+    return res.json({
+      success: true,
+      count: result.length,
+      papers: result
+    });
+  } catch (err) {
+    console.error('Get verifier corrected papers error:', err);
     return res.status(500).json({ error: 'Server error' });
   }
 };

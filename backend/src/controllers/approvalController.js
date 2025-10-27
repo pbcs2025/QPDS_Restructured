@@ -181,18 +181,53 @@ exports.getApprovedPapers = async (req, res) => {
       .sort({ approved_at: -1 })
       .lean();
 
-    console.log(`Retrieved ${approvedPapers.length} approved papers`);
-    console.log('Sample approved papers:', approvedPapers.slice(0, 3).map(p => ({
+    console.log(`Retrieved ${approvedPapers.length} approved paper records`);
+
+    // Group papers by subject_code and semester to avoid duplicates
+    const groupedPapers = {};
+    approvedPapers.forEach(paper => {
+      const key = `${paper.subject_code}_${paper.semester}`;
+      if (!groupedPapers[key]) {
+        groupedPapers[key] = {
+          _id: key,
+          subject_code: paper.subject_code,
+          subject_name: paper.subject_name,
+          semester: paper.semester,
+          department: paper.department,
+          approved_at: paper.approved_at,
+          verified_by: paper.verified_by,
+          verified_at: paper.verified_at,
+          questions: []
+        };
+      }
+      
+      // Add question to the grouped paper
+      groupedPapers[key].questions.push({
+        question_number: paper.question_number,
+        question_text: paper.question_text,
+        marks: paper.marks,
+        co: paper.co,
+        level: paper.level,
+        remarks: paper.remarks
+      });
+    });
+
+    const result = Object.values(groupedPapers).sort((a, b) => 
+      new Date(b.approved_at) - new Date(a.approved_at)
+    );
+
+    console.log(`Grouped into ${result.length} unique papers`);
+    console.log('Sample grouped papers:', result.slice(0, 3).map(p => ({
       subject_code: p.subject_code,
       semester: p.semester,
-      question_number: p.question_number,
+      question_count: p.questions.length,
       approved_at: p.approved_at
     })));
 
     return res.status(200).json({
       success: true,
-      count: approvedPapers.length,
-      papers: approvedPapers
+      count: result.length,
+      papers: result
     });
   } catch (error) {
     console.error('Error fetching approved papers:', error);

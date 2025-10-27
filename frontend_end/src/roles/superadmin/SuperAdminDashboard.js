@@ -154,14 +154,14 @@ function SuperAdminDashboard() {
       if (selectedDepartment) params.append('department', selectedDepartment);
       if (selectedSemester) params.append('semester', selectedSemester);
       
-      // Using the new API endpoint for approved papers with filtering
-      fetch(`${API_BASE}/approvedpapers?${params.toString()}`)
+      // Using the new API endpoint for verifier corrected papers with filtering
+      fetch(`${API_BASE}/verifier/corrected-papers?${params.toString()}`)
         .then((res) => {
           if (!res.ok) throw new Error(`Status ${res.status}`);
           return res.json();
         })
         .then((data) => {
-          console.log('Fetched approved papers:', data);
+          console.log('Fetched verifier corrected papers:', data);
           // Handle the API response format: { success: true, count: X, papers: [...] }
           let papers = [];
           if (data && data.papers && Array.isArray(data.papers)) {
@@ -174,38 +174,8 @@ function SuperAdminDashboard() {
             return;
           }
           
-          // Group papers by subject_code and semester since we have individual question records
-          const groupedPapers = {};
-          papers.forEach(paper => {
-            const key = `${paper.subject_code}_${paper.semester}`;
-            if (!groupedPapers[key]) {
-              groupedPapers[key] = {
-                _id: key,
-                subject_code: paper.subject_code,
-                subject_name: paper.subject_name,
-                semester: paper.semester,
-                department: paper.department,
-                createdAt: paper.approved_at || paper.createdAt,
-                verified_by: paper.verified_by,
-                questions: []
-              };
-            }
-            groupedPapers[key].questions.push({
-              question_number: paper.question_number,
-              question_text: paper.question_text,
-              marks: paper.marks,
-              co: paper.co,
-              level: paper.level,
-              remarks: paper.remarks
-            });
-          });
-          
-          const result = Object.values(groupedPapers).sort((a, b) => 
-            new Date(b.createdAt) - new Date(a.createdAt)
-          );
-          
-          console.log('Grouped papers for Super Admin:', result.length);
-          setSubmittedPapers(result);
+          console.log('Verifier corrected papers for Super Admin:', papers.length);
+          setSubmittedPapers(papers);
         })
         .catch((err) => {
           console.error("Fetch submitted papers error:", err);
@@ -736,19 +706,39 @@ function SuperAdminDashboard() {
                       <div style={{ display: 'flex', gap: '12px', padding: '12px', background: '#f8f9fa' }}>
                         <div style={{ color: '#ffffff', minWidth: '44px', fontWeight: 800, backgroundColor: '#0d6efd', borderRadius: '999px', textAlign: 'center', padding: '4px 0' }}>{q.question_number}</div>
                         <div style={{ flex: 1 }}>
-                          <div style={{ fontWeight: 600 }}>{q.question_text}</div>
+                          {/* Show corrected question text if available, otherwise original */}
+                          <div style={{ fontWeight: 600 }}>
+                            {q.corrected_question_text || q.question_text}
+                          </div>
+                          
+                          {/* Show original question text if it was corrected */}
+                          {q.corrected_question_text && q.corrected_question_text !== q.question_text && (
+                            <div style={{ 
+                              marginTop: '8px', 
+                              padding: '8px', 
+                              backgroundColor: '#f8f9fa', 
+                              border: '1px solid #dee2e6', 
+                              borderRadius: '4px',
+                              fontSize: '13px',
+                              color: '#6c757d'
+                            }}>
+                              <div style={{ fontWeight: 600, marginBottom: '4px' }}>Original:</div>
+                              <div style={{ fontStyle: 'italic' }}>{q.question_text}</div>
+                            </div>
+                          )}
+                          
                           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '12px', marginTop: '10px' }}>
                             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                               <span style={{ color: '#fff', fontWeight: 800, minWidth: '44px', textAlign: 'center', backgroundColor: '#6f42c1', borderRadius: '999px', padding: '4px 10px' }}>CO</span>
-                              <span>{q.co || ''}</span>
+                              <span>{q.corrected_co || q.co || ''}</span>
                             </div>
                             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                               <span style={{ color: '#fff', fontWeight: 800, minWidth: '44px', textAlign: 'center', backgroundColor: '#fd7e14', borderRadius: '999px', padding: '4px 10px' }}>L</span>
-                              <span>{q.l || ''}</span>
+                              <span>{q.corrected_l || q.l || ''}</span>
                             </div>
                             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                               <span style={{ color: '#084298', fontWeight: 800 }}>Marks</span>
-                              <span style={{ fontWeight: 800, color: '#0b5ed7' }}>{typeof q.marks === 'number' ? q.marks : 0}</span>
+                              <span style={{ fontWeight: 800, color: '#0b5ed7' }}>{typeof (q.corrected_marks || q.marks) === 'number' ? (q.corrected_marks || q.marks) : 0}</span>
                             </div>
                           </div>
                           {q.file_url && (
@@ -1228,7 +1218,7 @@ function SuperAdminDashboard() {
                               {p.semester}
                             </td>
                             <td style={{ padding: '14px 12px', borderTop: '1px solid #e1e7ef', borderRight: '1px solid #e1e7ef' }}>
-                              {p.createdAt ? new Date(p.createdAt).toLocaleString() : '-'}
+                              {p.verified_at ? new Date(p.verified_at).toLocaleString() : p.approved_at ? new Date(p.approved_at).toLocaleString() : '-'}
                             </td>
                             <td style={{ padding: '14px 12px', textAlign: 'center', borderTop: '1px solid #e1e7ef' }}>
                               <div style={{ display: 'flex', gap: '8px', justifyContent: 'center' }}>

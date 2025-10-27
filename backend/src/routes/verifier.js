@@ -23,6 +23,12 @@ router.put('/papers/:subject_code/:semester/approve-corrected', ctrl.approveCorr
 router.put('/papers/:subject_code/:semester/reject', ctrl.rejectPaper);
 router.get('/papers/:subject_code/:semester/corrected', ctrl.getCorrectedQuestions);
 
+// Superadmin routes for verifier corrected papers
+router.get('/corrected-papers', ctrl.getVerifierCorrectedPapers);
+
+// Test DOCX generation
+router.get('/test-docx', ctrl.testDocxGeneration);
+
 // Diagnostics
 router.get('/approved-list', ctrl.listApprovedPapers);
 router.get('/rejected-list', ctrl.listRejectedPapers);
