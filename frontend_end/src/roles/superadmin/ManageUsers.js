@@ -97,7 +97,18 @@ useEffect(() => {
     fetch(`${API_BASE}/recent-assignments`)
       .then(res => res.json())
       .then(data => {
-        setRecentAssignments(data || []);
+        // Process assignments to ensure completed ones have proper timestamps
+        const processedData = (data || []).map(assignment => {
+          if (assignment.status === 'Completed' && !assignment.completedAt) {
+            // If it's completed but doesn't have completedAt, use assignedDate as fallback
+            return {
+              ...assignment,
+              completedAt: assignment.assignedDate
+            };
+          }
+          return assignment;
+        });
+        setRecentAssignments(processedData);
       })
       .catch(err => {
         console.error("Error fetching recent assignments:", err);
@@ -113,9 +124,10 @@ useEffect(() => {
       setRecentAssignments(prevAssignments => {
         return prevAssignments.filter(assignment => {
           if (assignment.status === 'Completed') {
-            const assignedDate = new Date(assignment.assignedDate || assignment.completedAt);
+            // Use completedAt if available, otherwise use assignedDate
+            const completedDate = new Date(assignment.completedAt || assignment.assignedDate);
             const now = new Date();
-            const hoursDiff = (now - assignedDate) / (1000 * 60 * 60);
+            const hoursDiff = (now - completedDate) / (1000 * 60 * 60);
             return hoursDiff < 5; // Keep if less than 5 hours old
           }
           return true; // Keep all pending assignments
@@ -375,7 +387,8 @@ const handleSemesterChange = (semester) => {
             department: selectedDepartment,
             deadline: submitDate,
             assignedDate: new Date().toISOString().slice(0, 10),
-            status: "Pending"
+            status: "Pending",
+            completedAt: null // Explicitly set to null for pending assignments
           };
           
           // First add optimistically
@@ -386,9 +399,21 @@ const handleSemesterChange = (semester) => {
             fetch(`${API_BASE}/recent-assignments`)
               .then(res => res.json())
               .then(data => {
+                // Process assignments to ensure completed ones have proper timestamps
+                const processedData = (data || []).map(assignment => {
+                  if (assignment.status === 'Completed' && !assignment.completedAt) {
+                    // If it's completed but doesn't have completedAt, use assignedDate as fallback
+                    return {
+                      ...assignment,
+                      completedAt: assignment.assignedDate
+                    };
+                  }
+                  return assignment;
+                });
+                
                 // Only update if backend has data, otherwise keep optimistic
-                if (data && data.length > 0) {
-                  setRecentAssignments(data);
+                if (processedData && processedData.length > 0) {
+                  setRecentAssignments(processedData);
                 }
               })
               .catch(err => {
@@ -417,9 +442,10 @@ const handleSemesterChange = (semester) => {
     // Filter out completed assignments older than 5 hours
     const filteredAssignments = recentAssignments.filter(assignment => {
       if (assignment.status === 'Completed') {
-        const assignedDate = new Date(assignment.assignedDate || assignment.completedAt);
+        // Use completedAt if available, otherwise use assignedDate
+        const completedDate = new Date(assignment.completedAt || assignment.assignedDate);
         const now = new Date();
-        const hoursDiff = (now - assignedDate) / (1000 * 60 * 60); // Convert ms to hours
+        const hoursDiff = (now - completedDate) / (1000 * 60 * 60); // Convert ms to hours
         return hoursDiff < 5; // Only show if less than 5 hours old
       }
       return true; // Show all pending/non-completed assignments
@@ -447,7 +473,7 @@ const handleSemesterChange = (semester) => {
         fontSize: 13,
         color: '#1e40af'
       }}>
-        ℹ️ <strong>Note:</strong> Completed assignments are automatically removed after 5 hours.
+        ℹ️ <strong>Note:</strong> Completed assignments are automatically removed after page is refreshed.
       </div>
       
       <div style={{

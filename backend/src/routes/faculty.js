@@ -23,5 +23,8 @@ router.get('/department/:department', facultyController.getFacultiesByDepartment
 // Bulk upload
 router.post('/bulk-upload', upload.single('file'), facultyController.bulkUploadFaculties);
 
+// Send message to faculty
+router.post('/send-message', facultyController.sendMessageToFaculty);
+
 module.exports = router;
 
