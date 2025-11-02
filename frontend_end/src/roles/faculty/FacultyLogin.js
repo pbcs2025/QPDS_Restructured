@@ -587,7 +587,7 @@ function FacultyLogin() {
             }}>
               <i className="fa fa-info-circle" style={{ color: '#856404', fontSize: '18px', marginRight: '8px' }}></i>
               <span style={{ color: '#856404', fontWeight: '500', fontSize: '14px' }}>
-                Enter your registered email address to receive a new password
+                Enter your registered email address to know your password
               </span>
             </div>
 

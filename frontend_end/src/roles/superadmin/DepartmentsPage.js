@@ -83,7 +83,7 @@ function DepartmentsPage() {
 
       <div className="form-inline" style={{ margin: "10px" }}>
         <input
-          style={{ marginRight: "10px" }}
+          style={{ marginRight: "10px",width: "600px", borderRadius: "10px" }}
           type="text"
           placeholder="Enter department name"
           value={newDept}

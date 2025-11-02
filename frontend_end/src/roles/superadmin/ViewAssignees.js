@@ -17,8 +17,26 @@ function ViewAssignees() {
   
   const [selectedDepartment, setSelectedDepartment] = useState("");
   const [departments, setDepartments] = useState([]);
+  const [selectedSemester, setSelectedSemester] = useState("");
+  const [selectedSubjectCode, setSelectedSubjectCode] = useState("");
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [subjectToDelete, setSubjectToDelete] = useState(null);
+  const [showMessageModal, setShowMessageModal] = useState(false);
+  const [selectedFaculty, setSelectedFaculty] = useState(null);
+  const [sendingMessage, setSendingMessage] = useState(false);
+  
+  // For searchable dropdowns
+  const [deptSearchTerm, setDeptSearchTerm] = useState("");
+  const [semesterSearchTerm, setSemesterSearchTerm] = useState("");
+  const [subjectSearchTerm, setSubjectSearchTerm] = useState("");
+  const [showDeptDropdown, setShowDeptDropdown] = useState(false);
+  const [showSemesterDropdown, setShowSemesterDropdown] = useState(false);
+  const [showSubjectDropdown, setShowSubjectDropdown] = useState(false);
+  
+  // Keyboard navigation - highlighted index for each dropdown
+  const [highlightedDeptIndex, setHighlightedDeptIndex] = useState(-1);
+  const [highlightedSemesterIndex, setHighlightedSemesterIndex] = useState(-1);
+  const [highlightedSubjectIndex, setHighlightedSubjectIndex] = useState(-1);
 
   // Fetch departments
   useEffect(() => {
@@ -31,6 +49,22 @@ function ViewAssignees() {
         }
       })
       .catch((err) => console.error("Error fetching departments:", err));
+  }, []);
+  
+  // Close dropdowns when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (!event.target.closest('[data-dropdown]')) {
+        setShowDeptDropdown(false);
+        setShowSemesterDropdown(false);
+        setShowSubjectDropdown(false);
+      }
+    };
+    
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
   }, []);
 
   // Fetch all assigned subjects on mount
@@ -107,7 +141,230 @@ function ViewAssignees() {
   // Reset department selection
   const handleDepartmentBack = () => {
     setSelectedDepartment("");
+    setSelectedSemester("");
+    setSelectedSubjectCode("");
+    setDeptSearchTerm("");
+    setSemesterSearchTerm("");
+    setSubjectSearchTerm("");
   };
+  
+  // Fixed semesters list (Semester 1 to Semester 8)
+  const fixedSemesters = [1, 2, 3, 4, 5, 6, 7, 8];
+  
+  // Filter departments based on search term
+  const filteredDepartments = departments.filter(dept => 
+    dept.toLowerCase().includes(deptSearchTerm.toLowerCase())
+  );
+  
+  // Filter semesters based on search term (from fixed list)
+  const filteredSemesters = fixedSemesters.filter(sem => 
+    String(sem).toLowerCase().includes(semesterSearchTerm.toLowerCase()) ||
+    `semester ${sem}`.toLowerCase().includes(semesterSearchTerm.toLowerCase())
+  );
+  
+  // Handle keyboard navigation for Department dropdown
+  const handleDeptKeyDown = (e) => {
+    if (!showDeptDropdown || filteredDepartments.length === 0) {
+      if (e.key === 'ArrowDown' && filteredDepartments.length > 0) {
+        setShowDeptDropdown(true);
+        setHighlightedDeptIndex(0);
+      }
+      return;
+    }
+    
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      setHighlightedDeptIndex(prev => {
+        const next = prev < filteredDepartments.length - 1 ? prev + 1 : (prev === -1 ? 0 : prev);
+        // Scroll to highlighted item
+        setTimeout(() => {
+          const dropdownEl = document.querySelector('[data-dept-dropdown-list]');
+          const itemEl = dropdownEl?.children[next];
+          if (itemEl) {
+            itemEl.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+          }
+        }, 0);
+        return next;
+      });
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      setHighlightedDeptIndex(prev => {
+        const next = prev > 0 ? prev - 1 : 0;
+        setTimeout(() => {
+          const dropdownEl = document.querySelector('[data-dept-dropdown-list]');
+          const itemEl = dropdownEl?.children[next];
+          if (itemEl) {
+            itemEl.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+          }
+        }, 0);
+        return next;
+      });
+    } else if (e.key === 'Enter') {
+      e.preventDefault();
+      if (highlightedDeptIndex >= 0 && highlightedDeptIndex < filteredDepartments.length) {
+        const selectedDept = filteredDepartments[highlightedDeptIndex];
+        setSelectedDepartment(selectedDept);
+        setDeptSearchTerm(selectedDept);
+        setShowDeptDropdown(false);
+        setHighlightedDeptIndex(-1);
+        // Clear semester and subject code when department is selected
+        setSelectedSemester("");
+        setSemesterSearchTerm("");
+        setSelectedSubjectCode("");
+        setSubjectSearchTerm("");
+      }
+    } else if (e.key === 'Escape') {
+      setShowDeptDropdown(false);
+      setHighlightedDeptIndex(-1);
+    }
+  };
+  
+  // Handle keyboard navigation for Semester dropdown
+  const handleSemesterKeyDown = (e) => {
+    if (!selectedDepartment) return;
+    
+    if (!showSemesterDropdown || filteredSemesters.length === 0) {
+      if (e.key === 'ArrowDown' && filteredSemesters.length > 0) {
+        setShowSemesterDropdown(true);
+        setHighlightedSemesterIndex(0);
+      }
+      return;
+    }
+    
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      setHighlightedSemesterIndex(prev => {
+        const next = prev < filteredSemesters.length - 1 ? prev + 1 : (prev === -1 ? 0 : prev);
+        setTimeout(() => {
+          const dropdownEl = document.querySelector('[data-semester-dropdown-list]');
+          const itemEl = dropdownEl?.children[next];
+          if (itemEl) {
+            itemEl.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+          }
+        }, 0);
+        return next;
+      });
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      setHighlightedSemesterIndex(prev => {
+        const next = prev > 0 ? prev - 1 : 0;
+        setTimeout(() => {
+          const dropdownEl = document.querySelector('[data-semester-dropdown-list]');
+          const itemEl = dropdownEl?.children[next];
+          if (itemEl) {
+            itemEl.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+          }
+        }, 0);
+        return next;
+      });
+    } else if (e.key === 'Enter') {
+      e.preventDefault();
+      if (highlightedSemesterIndex >= 0 && highlightedSemesterIndex < filteredSemesters.length) {
+        const selectedSem = String(filteredSemesters[highlightedSemesterIndex]);
+        setSelectedSemester(selectedSem);
+        setSemesterSearchTerm(`Semester ${selectedSem}`);
+        setShowSemesterDropdown(false);
+        setHighlightedSemesterIndex(-1);
+        // Clear subject code when semester changes
+        setSelectedSubjectCode("");
+        setSubjectSearchTerm("");
+      }
+    } else if (e.key === 'Escape') {
+      setShowSemesterDropdown(false);
+      setHighlightedSemesterIndex(-1);
+    }
+  };
+  
+  // Handle keyboard navigation for Subject Code dropdown
+  const handleSubjectKeyDown = (e) => {
+    if (!selectedDepartment) return;
+    
+    if (!showSubjectDropdown || filteredSubjectCodes.length === 0) {
+      if (e.key === 'ArrowDown' && filteredSubjectCodes.length > 0 && selectedDepartment) {
+        setShowSubjectDropdown(true);
+        setHighlightedSubjectIndex(0);
+      }
+      return;
+    }
+    
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      setHighlightedSubjectIndex(prev => {
+        const next = prev < filteredSubjectCodes.length - 1 ? prev + 1 : (prev === -1 ? 0 : prev);
+        setTimeout(() => {
+          const dropdownEl = document.querySelector('[data-subject-dropdown-list]');
+          const itemEl = dropdownEl?.children[next];
+          if (itemEl) {
+            itemEl.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+          }
+        }, 0);
+        return next;
+      });
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      setHighlightedSubjectIndex(prev => {
+        const next = prev > 0 ? prev - 1 : 0;
+        setTimeout(() => {
+          const dropdownEl = document.querySelector('[data-subject-dropdown-list]');
+          const itemEl = dropdownEl?.children[next];
+          if (itemEl) {
+            itemEl.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+          }
+        }, 0);
+        return next;
+      });
+    } else if (e.key === 'Enter') {
+      e.preventDefault();
+      if (highlightedSubjectIndex >= 0 && highlightedSubjectIndex < filteredSubjectCodes.length) {
+        const selectedCode = filteredSubjectCodes[highlightedSubjectIndex];
+        setSelectedSubjectCode(selectedCode);
+        setSubjectSearchTerm(selectedCode);
+        setShowSubjectDropdown(false);
+        setHighlightedSubjectIndex(-1);
+      }
+    } else if (e.key === 'Escape') {
+      setShowSubjectDropdown(false);
+      setHighlightedSubjectIndex(-1);
+    }
+  };
+  
+  // Get subject codes filtered by department and semester
+  const getFilteredSubjectCodes = () => {
+    if (!selectedDepartment) return [];
+    
+    let filtered = subjects.filter(subject => {
+      // Check if subject department matches OR any assignee belongs to the selected department
+      const subjectDept = subject.department || '';
+      const matchesSubjectDept = subjectDept.toLowerCase() === selectedDepartment.toLowerCase();
+      const matchesAssigneeDept = subject.assignees && subject.assignees.some(assignee => 
+        assignee.deptName && assignee.deptName.toLowerCase() === selectedDepartment.toLowerCase()
+      );
+      return matchesSubjectDept || matchesAssigneeDept;
+    });
+    
+    // Further filter by semester if selected
+    if (selectedSemester) {
+      filtered = filtered.filter(subject => {
+        return subject.semester && String(subject.semester) === String(selectedSemester);
+      });
+    }
+    
+    // Extract unique subject codes
+    const codes = new Set();
+    filtered.forEach(subject => {
+      if (subject.subject_code) {
+        codes.add(subject.subject_code);
+      }
+    });
+    
+    // Then filter by search term
+    const subjectCodes = Array.from(codes).sort();
+    return subjectCodes.filter(code => 
+      code.toLowerCase().includes(subjectSearchTerm.toLowerCase())
+    );
+  };
+  
+  const filteredSubjectCodes = getFilteredSubjectCodes();
 
   // Handle delete assignment
   const handleDeleteClick = (e, subjectCode) => {
@@ -135,24 +392,6 @@ function ViewAssignees() {
     setSubjectToDelete(null);
   };
 
-  // Deep link support: if navigated with ?tab=viewAssignees&subject=...&department=...
-  useEffect(() => {
-    const params = new URLSearchParams(location.search || "");
-    const tab = params.get('tab');
-    if (tab === 'viewAssignees') {
-      const dep = params.get('department');
-      const subj = params.get('subject');
-      if (dep) setSelectedDepartment(dep);
-      if (subj) {
-        // Avoid duplicate fetch if already selected
-        if (selectedSubject !== subj) {
-          handleCardClick(subj);
-        }
-      }
-    }
-    // We intentionally depend on location.search and selectedSubject
-  }, [location.search, selectedSubject]);
-
   if (loading) return <p>Loading assigned subjects...</p>;
   if (error && !selectedSubject) return <p>{error}</p>;
 
@@ -174,16 +413,36 @@ function ViewAssignees() {
     }).slice(0, 6); // Limit to 6 most recent for better UI
   };
 
-  // Filter subjects by selected department
+  // Filter subjects by selected department, semester, and subject code
+  // Department is REQUIRED first
   const getFilteredSubjects = () => {
     if (!selectedDepartment) return [];
     
-    return subjects.filter(subject => {
-      // Check if any assignee belongs to the selected department
-      return subject.assignees && subject.assignees.some(assignee => 
+    let filtered = subjects.filter(subject => {
+      // Check if subject department matches OR any assignee belongs to the selected department
+      const subjectDept = subject.department || '';
+      const matchesSubjectDept = subjectDept.toLowerCase() === selectedDepartment.toLowerCase();
+      const matchesAssigneeDept = subject.assignees && subject.assignees.some(assignee => 
         assignee.deptName && assignee.deptName.toLowerCase() === selectedDepartment.toLowerCase()
       );
+      return matchesSubjectDept || matchesAssigneeDept;
     });
+    
+    // Filter by semester if selected
+    if (selectedSemester) {
+      filtered = filtered.filter(subject => {
+        return subject.semester && String(subject.semester) === String(selectedSemester);
+      });
+    }
+    
+    // Filter by subject code if selected
+    if (selectedSubjectCode) {
+      filtered = filtered.filter(subject => {
+        return subject.subject_code && subject.subject_code.toLowerCase() === selectedSubjectCode.toLowerCase();
+      });
+    }
+    
+    return filtered;
   };
 
   const recentAssignments = getRecentAssignments();
@@ -193,7 +452,7 @@ function ViewAssignees() {
     <div className="view-assignees-container">
       <h1 className="view-assignees-title">View Assignees</h1>
 
-      {/* Department Search Bar */}
+      {/* Search Filters */}
       {!selectedSubject && (
         <div style={{
           background: 'white',
@@ -205,9 +464,9 @@ function ViewAssignees() {
         }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
             <h2 style={{ margin: 0, color: '#1e40af', fontSize: 22, fontWeight: 700 }}>
-              🔍 Search Assignments by Department
+              🔍 Search Assignments
             </h2>
-            {selectedDepartment && (
+            {(selectedDepartment || selectedSemester || selectedSubjectCode) && (
               <button
                 onClick={handleDepartmentBack}
                 style={{
@@ -228,53 +487,357 @@ function ViewAssignees() {
                   e.target.style.background = '#f3f4f6';
                 }}
               >
-                ← Back to All Assignments
+                ← Clear All Filters
               </button>
             )}
           </div>
           
-          <div style={{ maxWidth: '500px' }}>
-            <label style={{ display: 'block', marginBottom: '8px', fontWeight: 600, color: '#374151', fontSize: 14 }}>
-              Select Department *
-            </label>
-            <select
-              value={selectedDepartment}
-              onChange={(e) => setSelectedDepartment(e.target.value)}
-              style={{
-                padding: '12px 16px',
-                width: '100%',
-                borderRadius: 8,
-                border: '2px solid #d1d5db',
-                fontSize: 15,
-                background: 'white',
-                cursor: 'pointer',
-                transition: 'all 0.2s ease'
-              }}
-              onFocus={(e) => e.target.style.borderColor = '#4f46e5'}
-              onBlur={(e) => e.target.style.borderColor = '#d1d5db'}
-            >
-              <option value="">-- Select a Department --</option>
-              {departments.map((dept, idx) => (
-                <option key={idx} value={dept}>
-                  {dept}
-                </option>
-              ))}
-            </select>
-            
-            {selectedDepartment && (
-              <div style={{
-                marginTop: 12,
-                padding: '10px 12px',
-                background: '#f0f9ff',
-                border: '1px solid #bae6fd',
-                borderRadius: 6,
-                fontSize: 13,
-                color: '#0369a1'
-              }}>
-                ✓ Showing assignments for <strong>{selectedDepartment}</strong> department
+          <div style={{ 
+            display: 'grid', 
+            gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', 
+            gap: '16px',
+            marginBottom: 16
+          }}>
+            {/* Department Searchable Dropdown */}
+            <div style={{ position: 'relative' }} data-dropdown>
+              <label style={{ display: 'block', marginBottom: '8px', fontWeight: 600, color: '#374151', fontSize: 14 }}>
+                Department <span style={{ color: '#dc2626' }}>*</span>
+              </label>
+              <div style={{ position: 'relative' }}>
+                <input
+                  type="text"
+                  value={selectedDepartment ? selectedDepartment : deptSearchTerm}
+                  onChange={(e) => {
+                    const value = e.target.value;
+                    setDeptSearchTerm(value);
+                    setSelectedDepartment("");
+                    setHighlightedDeptIndex(-1); // Reset highlight when typing
+                    // Clear semester and subject code when department changes
+                    setSelectedSemester("");
+                    setSemesterSearchTerm("");
+                    setSelectedSubjectCode("");
+                    setSubjectSearchTerm("");
+                    if (value) {
+                      setShowDeptDropdown(true);
+                    } else {
+                      setShowDeptDropdown(false);
+                    }
+                  }}
+                  onFocus={() => {
+                    setShowDeptDropdown(true);
+                    if (selectedDepartment) {
+                      setDeptSearchTerm(selectedDepartment);
+                      setSelectedDepartment("");
+                    }
+                    setHighlightedDeptIndex(-1);
+                  }}
+                  onClick={() => {
+                    setShowDeptDropdown(true);
+                    if (selectedDepartment) {
+                      setDeptSearchTerm(selectedDepartment);
+                      setSelectedDepartment("");
+                    }
+                    setHighlightedDeptIndex(-1);
+                  }}
+                  onKeyDown={handleDeptKeyDown}
+                  placeholder="Type to search department..."
+                  style={{
+                    marginLeft: '1px',
+                    padding: '12px 16px',
+                    width: '100%',
+                    borderRadius: 8,
+                    border: '2px solid #d1d5db',
+                    fontSize: 15,
+                    background: 'white',
+                    transition: 'all 0.2s ease'
+                  }}
+                />
+                {showDeptDropdown && filteredDepartments.length > 0 && (
+                  <div 
+                    data-dept-dropdown-list
+                    style={{
+                      marginLeft: '1px',
+                      position: 'absolute',
+                      top: '100%',
+                      left: 0,
+                      right: 0,
+                      marginTop: '4px',
+                      background: 'white',
+                      border: '2px solid #d1d5db',
+                      borderRadius: 8,
+                      maxHeight: '200px',
+                      overflowY: 'auto',
+                      zIndex: 1000,
+                      boxShadow: '0 4px 6px rgba(0,0,0,0.1)'
+                    }}
+                  >
+                    {filteredDepartments.map((dept, idx) => (
+                      <div
+                        key={idx}
+                        onClick={() => {
+                          setSelectedDepartment(dept);
+                          setDeptSearchTerm(dept);
+                          setShowDeptDropdown(false);
+                          setHighlightedDeptIndex(-1);
+                          // Clear semester and subject code when department is selected
+                          setSelectedSemester("");
+                          setSemesterSearchTerm("");
+                          setSelectedSubjectCode("");
+                          setSubjectSearchTerm("");
+                        }}
+                        style={{
+                          marginLeft: '1px',
+                          padding: '12px 16px',
+                          cursor: 'pointer',
+                          fontSize: 14,
+                          borderBottom: idx < filteredDepartments.length - 1 ? '1px solid #e5e7eb' : 'none',
+                          background: highlightedDeptIndex === idx ? '#4f46e5' : (selectedDepartment === dept ? '#eff6ff' : 'white'),
+                          color: highlightedDeptIndex === idx ? 'white' : (selectedDepartment === dept ? '#1e40af' : '#374151')
+                        }}
+                        onMouseEnter={() => {
+                          setHighlightedDeptIndex(idx);
+                        }}
+                        onMouseLeave={() => {
+                          // Don't reset on mouse leave to keep keyboard navigation working
+                        }}
+                      >
+                        {dept}
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
-            )}
+            </div>
+
+            {/* Semester Searchable Dropdown - Only enabled if department is selected */}
+            <div style={{ position: 'relative' }} data-dropdown>
+              <label style={{ display: 'block', marginBottom: '8px', fontWeight: 600, color: '#374151', fontSize: 14 }}>
+                Semester {!selectedDepartment && <span style={{ color: '#dc2626' }}>*</span>}
+              </label>
+              <div style={{ position: 'relative' }}>
+                <input
+                  type="text"
+                  value={selectedSemester ? `Semester ${selectedSemester}` : semesterSearchTerm}
+                  onChange={(e) => {
+                    const value = e.target.value;
+                    setSemesterSearchTerm(value);
+                    setSelectedSemester("");
+                    setHighlightedSemesterIndex(-1); // Reset highlight when typing
+                    if (value) {
+                      setShowSemesterDropdown(true);
+                    } else {
+                      setShowSemesterDropdown(false);
+                    }
+                  }}
+                  onFocus={() => {
+                    if (selectedDepartment) {
+                      setShowSemesterDropdown(true);
+                      if (selectedSemester) {
+                        setSemesterSearchTerm(`Semester ${selectedSemester}`);
+                        setSelectedSemester("");
+                      }
+                      setHighlightedSemesterIndex(-1);
+                    }
+                  }}
+                  onClick={() => {
+                    if (selectedDepartment) {
+                      setShowSemesterDropdown(true);
+                      if (selectedSemester) {
+                        setSemesterSearchTerm(`Semester ${selectedSemester}`);
+                        setSelectedSemester("");
+                      }
+                      setHighlightedSemesterIndex(-1);
+                    }
+                  }}
+                  onKeyDown={handleSemesterKeyDown}
+                  placeholder={selectedDepartment ? "Type to search semester..." : "Select department first"}
+                  disabled={!selectedDepartment}
+                  style={{
+                    marginLeft: '1px',
+                    padding: '12px 16px',
+                    width: '100%',
+                    borderRadius: 8,
+                    border: '2px solid #d1d5db',
+                    fontSize: 15,
+                    background: selectedDepartment ? 'white' : '#f3f4f6',
+                    transition: 'all 0.2s ease',
+                    cursor: selectedDepartment ? 'text' : 'not-allowed',
+                    opacity: selectedDepartment ? 1 : 0.6
+                  }}
+                />
+                {showSemesterDropdown && filteredSemesters.length > 0 && selectedDepartment && (
+                  <div 
+                    data-semester-dropdown-list
+                    style={{
+                      marginLeft: '1px',
+                      position: 'absolute',
+                      top: '100%',
+                      left: 0,
+                      right: 0,
+                      marginTop: '4px',
+                      background: 'white',
+                      border: '2px solid #d1d5db',
+                      borderRadius: 8,
+                      maxHeight: '200px',
+                      overflowY: 'auto',
+                      zIndex: 1000,
+                      boxShadow: '0 4px 6px rgba(0,0,0,0.1)'
+                    }}
+                  >
+                    {filteredSemesters.map((sem, idx) => (
+                      <div
+                        key={idx}
+                        onClick={() => {
+                          setSelectedSemester(String(sem));
+                          setSemesterSearchTerm(`Semester ${sem}`);
+                          setShowSemesterDropdown(false);
+                          setHighlightedSemesterIndex(-1);
+                          // Clear subject code when semester changes
+                          setSelectedSubjectCode("");
+                          setSubjectSearchTerm("");
+                        }}
+                        style={{
+                          marginLeft: '1px',
+                          padding: '12px 16px',
+                          cursor: 'pointer',
+                          fontSize: 14,
+                          borderBottom: idx < filteredSemesters.length - 1 ? '1px solid #e5e7eb' : 'none',
+                          background: highlightedSemesterIndex === idx ? '#4f46e5' : (selectedSemester === String(sem) ? '#eff6ff' : 'white'),
+                          color: highlightedSemesterIndex === idx ? 'white' : (selectedSemester === String(sem) ? '#1e40af' : '#374151')
+                        }}
+                        onMouseEnter={() => {
+                          setHighlightedSemesterIndex(idx);
+                        }}
+                      >
+                        Semester {sem}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Subject Code Searchable Dropdown - Only enabled if department is selected */}
+            <div style={{ position: 'relative', marginLeft: '1px' }} data-dropdown>
+              <label style={{ display: 'block', marginBottom: '8px', fontWeight: 600, color: '#374151', fontSize: 14, marginLeft: '1px' }}>
+                Subject Code
+              </label>
+              <div style={{ position: 'relative', marginLeft:'1px' }}>
+                <input
+                  type="text"
+                  value={selectedSubjectCode ? selectedSubjectCode : subjectSearchTerm}
+                  onChange={(e) => {
+                    const value = e.target.value;
+                    setSubjectSearchTerm(value);
+                    setSelectedSubjectCode("");
+                    setHighlightedSubjectIndex(-1); // Reset highlight when typing
+                    if (value) {
+                      setShowSubjectDropdown(true);
+                    } else {
+                      setShowSubjectDropdown(false);
+                    }
+                  }}
+                  onFocus={() => {
+                    if (selectedDepartment) {
+                      setShowSubjectDropdown(true);
+                      if (selectedSubjectCode) {
+                        setSubjectSearchTerm(selectedSubjectCode);
+                        setSelectedSubjectCode("");
+                      }
+                      setHighlightedSubjectIndex(-1);
+                    }
+                  }}
+                  onClick={() => {
+                    if (selectedDepartment) {
+                      setShowSubjectDropdown(true);
+                      if (selectedSubjectCode) {
+                        setSubjectSearchTerm(selectedSubjectCode);
+                        setSelectedSubjectCode("");
+                      }
+                      setHighlightedSubjectIndex(-1);
+                    }
+                  }}
+                  onKeyDown={handleSubjectKeyDown}
+                  placeholder={selectedDepartment ? "Type to search subject code..." : "Select department first"}
+                  disabled={!selectedDepartment}
+                  style={{
+                    marginLeft: '1px',
+                    padding: '12px 16px',
+                    width: '100%',
+                    borderRadius: 8,
+                    border: '2px solid #d1d5db',
+                    fontSize: 15,
+                    background: selectedDepartment ? 'white' : '#f3f4f6',
+                    transition: 'all 0.2s ease',
+                    cursor: selectedDepartment ? 'text' : 'not-allowed',
+                    opacity: selectedDepartment ? 1 : 0.6
+                  }}
+                />
+                {showSubjectDropdown && filteredSubjectCodes.length > 0 && selectedDepartment && (
+                  <div 
+                    data-subject-dropdown-list
+                    style={{
+                      marginLeft: '1px',
+                      position: 'absolute',
+                      top: '100%',
+                      left: 0,
+                      right: 0,
+                      marginTop: '4px',
+                      background: 'white',
+                      border: '2px solid #d1d5db',
+                      borderRadius: 8,
+                      maxHeight: '200px',
+                      overflowY: 'auto',
+                      zIndex: 1000,
+                      boxShadow: '0 4px 6px rgba(0,0,0,0.1)'
+                    }}
+                  >
+                    {filteredSubjectCodes.map((code, idx) => (
+                      <div
+                        key={idx}
+                        onClick={() => {
+                          setSelectedSubjectCode(code);
+                          setSubjectSearchTerm(code);
+                          setShowSubjectDropdown(false);
+                          setHighlightedSubjectIndex(-1);
+                        }}
+                        style={{
+                          marginLeft: '1px',
+                          padding: '12px 16px',
+                          cursor: 'pointer',
+                          fontSize: 14,
+                          borderBottom: idx < filteredSubjectCodes.length - 1 ? '1px solid #e5e7eb' : 'none',
+                          background: highlightedSubjectIndex === idx ? '#4f46e5' : (selectedSubjectCode === code ? '#eff6ff' : 'white'),
+                          color: highlightedSubjectIndex === idx ? 'white' : (selectedSubjectCode === code ? '#1e40af' : '#374151')
+                        }}
+                        onMouseEnter={() => {
+                          setHighlightedSubjectIndex(idx);
+                        }}
+                      >
+                        {code}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
           </div>
+          
+          {selectedDepartment && (
+            <div style={{
+              marginTop: 12,
+              padding: '10px 12px',
+              background: '#f0f9ff',
+              border: '1px solid #bae6fd',
+              borderRadius: 6,
+              fontSize: 13,
+              color: '#0369a1'
+            }}>
+              ✓ Showing assignments for <strong>{selectedDepartment}</strong>
+              {selectedSemester && ` - Semester ${selectedSemester}`}
+              {selectedSubjectCode && ` - ${selectedSubjectCode}`}
+            </div>
+          )}
         </div>
       )}
 
@@ -354,14 +917,14 @@ function ViewAssignees() {
                   onClick={(e) => handleDeleteClick(e, subject.subject_code)}
                   style={{
                     position: 'absolute',
-                    top: '8px',
+                    top: '100px',
                     right: '8px',
                     color: 'red',
                     background: 'none',
                     border: 'none',
                     cursor: 'pointer',
                     fontSize: '16px',
-                    zIndex: 10
+                    zIndex: 10,
                   }}
                   title="Delete Assignment"
                 >
@@ -424,7 +987,7 @@ function ViewAssignees() {
         </div>
       )}
 
-      {/* Department Assignments Section */}
+      {/* Filtered Assignments Section - Only show if department is selected */}
       {!selectedSubject && selectedDepartment && filteredSubjects.length > 0 && (
         <div style={{
           background: 'white',
@@ -439,7 +1002,7 @@ function ViewAssignees() {
             fontSize: 20, 
             fontWeight: 700 
           }}>
-            📚 Assignments for {selectedDepartment}
+            📚 Filtered Assignments
           </h2>
           <div className="assignees-grid">
             {filteredSubjects.map((subject) => (
@@ -499,7 +1062,9 @@ function ViewAssignees() {
           boxShadow: '0 6px 18px rgba(0,0,0,0.04)'
         }}>
           <p style={{ margin: 0, fontSize: 16, color: '#64748b' }}>
-            No assignments found for <strong>{selectedDepartment}</strong> department.
+            No assignments found for <strong>{selectedDepartment}</strong>
+            {selectedSemester && ` - Semester ${selectedSemester}`}
+            {selectedSubjectCode && ` - ${selectedSubjectCode}`}
           </p>
         </div>
       )}
@@ -567,7 +1132,7 @@ function ViewAssignees() {
                           <td>
                             <button
                               className="message-btn"
-                              onClick={() => alert(`Messaging ${fac.facultyName}`)}
+                              onClick={() => handleMessageClick(fac)}
                             >
                               Message
                             </button>
@@ -580,6 +1145,169 @@ function ViewAssignees() {
           )}
           </div>
         </>
+      )}
+
+      {/* Message Modal */}
+      {showMessageModal && selectedFaculty && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          background: 'rgba(0, 0, 0, 0.5)',
+          display: 'flex',
+          justifyContent: 'center',
+          alignItems: 'center',
+          zIndex: 1000
+        }}>
+          <div style={{
+            background: 'white',
+            borderRadius: 12,
+            padding: '24px',
+            maxWidth: '500px',
+            width: '90%',
+            boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)'
+          }}>
+            <h3 style={{
+              margin: '0 0 16px 0',
+              color: '#1e40af',
+              fontSize: 20,
+              fontWeight: 700
+            }}>
+              📧 Send Message to {selectedFaculty.facultyName}
+            </h3>
+            <p style={{
+              margin: '0 0 20px 0',
+              color: '#64748b',
+              fontSize: 14,
+              lineHeight: 1.5
+            }}>
+              Select the type of message you want to send:
+            </p>
+            
+            <div style={{
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '12px',
+              marginBottom: '20px'
+            }}>
+              <button
+                onClick={() => sendMessage('reminder')}
+                disabled={sendingMessage}
+                style={{
+                  background: sendingMessage ? '#e5e7eb' : '#fff3cd',
+                  border: '2px solid #ffc107',
+                  borderRadius: 8,
+                  padding: '16px',
+                  cursor: sendingMessage ? 'not-allowed' : 'pointer',
+                  fontSize: 15,
+                  fontWeight: 600,
+                  color: '#856404',
+                  transition: 'all 0.2s ease',
+                  textAlign: 'left',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '12px'
+                }}
+                onMouseEnter={(e) => {
+                  if (!sendingMessage) {
+                    e.target.style.background = '#ffe69c';
+                    e.target.style.transform = 'translateX(4px)';
+                  }
+                }}
+                onMouseLeave={(e) => {
+                  if (!sendingMessage) {
+                    e.target.style.background = '#fff3cd';
+                    e.target.style.transform = 'translateX(0)';
+                  }
+                }}
+              >
+                <span style={{ fontSize: '20px' }}>⏰</span>
+                <div>
+                  <div style={{ fontWeight: 700, marginBottom: '4px' }}>Reminder (Deadline Reminder)</div>
+                  <div style={{ fontSize: 13, fontWeight: 400, opacity: 0.8 }}>
+                    Send a reminder about the submission deadline
+                  </div>
+                </div>
+              </button>
+
+              <button
+                onClick={() => sendMessage('earlySubmission')}
+                disabled={sendingMessage}
+                style={{
+                  background: sendingMessage ? '#e5e7eb' : '#d1ecf1',
+                  border: '2px solid #0c5460',
+                  borderRadius: 8,
+                  padding: '16px',
+                  cursor: sendingMessage ? 'not-allowed' : 'pointer',
+                  fontSize: 15,
+                  fontWeight: 600,
+                  color: '#0c5460',
+                  transition: 'all 0.2s ease',
+                  textAlign: 'left',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '12px'
+                }}
+                onMouseEnter={(e) => {
+                  if (!sendingMessage) {
+                    e.target.style.background = '#b8dce8';
+                    e.target.style.transform = 'translateX(4px)';
+                  }
+                }}
+                onMouseLeave={(e) => {
+                  if (!sendingMessage) {
+                    e.target.style.background = '#d1ecf1';
+                    e.target.style.transform = 'translateX(0)';
+                  }
+                }}
+              >
+                <span style={{ fontSize: '20px' }}>📝</span>
+                <div>
+                  <div style={{ fontWeight: 700, marginBottom: '4px' }}>Request for Early Submission</div>
+                  <div style={{ fontSize: 13, fontWeight: 400, opacity: 0.8 }}>
+                    Request to submit as early as possible
+                  </div>
+                </div>
+              </button>
+            </div>
+
+            <div style={{
+              display: 'flex',
+              gap: '12px',
+              justifyContent: 'flex-end'
+            }}>
+              <button
+                onClick={closeMessageModal}
+                disabled={sendingMessage}
+                style={{
+                  background: '#f3f4f6',
+                  border: '1px solid #d1d5db',
+                  borderRadius: 8,
+                  padding: '8px 16px',
+                  cursor: sendingMessage ? 'not-allowed' : 'pointer',
+                  fontSize: 14,
+                  fontWeight: 600,
+                  color: '#374151',
+                  transition: 'all 0.2s ease'
+                }}
+                onMouseEnter={(e) => {
+                  if (!sendingMessage) {
+                    e.target.style.background = '#e5e7eb';
+                  }
+                }}
+                onMouseLeave={(e) => {
+                  if (!sendingMessage) {
+                    e.target.style.background = '#f3f4f6';
+                  }
+                }}
+              >
+                {sendingMessage ? 'Sending...' : 'Cancel'}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
       {/* Delete Confirmation Dialog */}
