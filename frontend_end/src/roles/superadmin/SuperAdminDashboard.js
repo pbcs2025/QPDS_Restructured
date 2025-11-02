@@ -1,13 +1,13 @@
 import React, { useEffect, useState } from "react";
 import axios from "axios";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useLocation } from "react-router-dom";
 import "../../common/dashboard.css";
 import ManageUsers from "./ManageUsers";
 import ViewAssignees from "./ViewAssignees";
 import SubjectsPage from "./SubjectsPage";
 import DepartmentsPage from "./DepartmentsPage";
 import AdminManageFacultyPage from "./AdminManageFacultyPage";
-import DepartmentStats from "../../components/DepartmentStats";
+import ViewAnalytics from "./ViewAnalytics";
 import VerifierManagement from "../verifier/VerifierManagement";
 import { io } from "socket.io-client";
 
@@ -15,6 +15,7 @@ const API_BASE = process.env.REACT_APP_API_BASE_URL || 'http://localhost:5001/ap
 
 function SuperAdminDashboard() {
   const navigate = useNavigate();
+  const location = useLocation();
   const [activeTab, setActiveTab] = useState("dashboard");
   const [showConfirm, setShowConfirm] = useState(false);
   const [manageUsersView, setManageUsersView] = useState("cards"); // cards | faculty | verifiers
@@ -56,6 +57,28 @@ function SuperAdminDashboard() {
     navigate("/");
   };
   const cancelLogout = () => setShowConfirm(false);
+
+  // Read tab from URL query (?tab=...) and switch accordingly
+  useEffect(() => {
+    const params = new URLSearchParams(location.search || "");
+    const tab = params.get('tab');
+    if (tab && typeof tab === 'string') {
+      const allowed = new Set([
+        'dashboard',
+        'manageFaculty',
+        'manageUsers',
+        'departments',
+        'subjects',
+        'viewAssignees',
+        'submitted',
+        'settings',
+        'viewAnalytics'
+      ]);
+      if (allowed.has(tab)) {
+        setActiveTab(tab);
+      }
+    }
+  }, [location.search]);
 
   // Fetch counts when Manage Users cards are visible
   useEffect(() => {
@@ -449,6 +472,14 @@ function SuperAdminDashboard() {
 
             <a
               href="#"
+              className={activeTab === "viewAnalytics" ? "active-tab" : ""}
+              onClick={(e) => { e.preventDefault(); setActiveTab("viewAnalytics"); }}
+            >
+              📊 View Analytics
+            </a>
+
+            <a
+              href="#"
               className={activeTab === "settings" ? "active-tab" : ""}
               onClick={(e) => { e.preventDefault(); setActiveTab("settings"); }}
             >
@@ -514,10 +545,6 @@ function SuperAdminDashboard() {
               </ul>
             </div>
 
-            {/* Department Analytics Section */}
-            <div className="section department-analytics">
-              <DepartmentStats />
-            </div>
           </>
         )}
 
@@ -681,6 +708,8 @@ function SuperAdminDashboard() {
         {activeTab === "departments" && <DepartmentsPage />}
 
 
+
+        {activeTab === "viewAnalytics" && <ViewAnalytics />}
 
         {activeTab === "submitted" && (
           <div>
@@ -1336,55 +1365,6 @@ function SuperAdminDashboard() {
                     </table>
                   </div>
                 )}
-                <div className="table-wrapper">
-                <table className="user-table">
-                  <thead>
-                    <tr>
-                      <th>Subject Code</th>
-                      <th>Semester</th>
-                      <th>Submitted At</th>
-                      <th>Action</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {submittedPapers.length === 0 && (
-                      <tr>
-                        <td colSpan={3}>No papers submitted yet.</td>
-                      </tr>
-                    )}
-                    {submittedPapers.map((p) => (
-                      <tr key={p._id}>
-                        <td>{p.subject_code}</td>
-                        <td>{p.semester}</td>
-                        <td>{p.createdAt ? new Date(p.createdAt).toLocaleString() : '-'}</td>
-                        <td>
-                          <button
-                            onClick={async () => {
-                              try {
-                                const res = await fetch(`${QP_API_BASE}/verifier/papers/${encodeURIComponent(p.subject_code)}/${encodeURIComponent(p.semester)}`);
-                                const contentType = res.headers.get('content-type') || '';
-                                if (!contentType.includes('application/json')) {
-                                  const text = await res.text();
-                                  throw new Error(`Unexpected response (not JSON). Check API base URL. First bytes: ${text.slice(0, 60)}`);
-                                }
-                                const data = await res.json();
-                                if (!res.ok) throw new Error(data?.error || `Status ${res.status}`);
-                                setOpenedPaper(data);
-                              } catch (err) {
-                                console.error('Open paper error:', err);
-                                alert(`Failed to open paper: ${err.message}`);
-                              }
-                            }}
-                            style={{ padding: '6px 12px', backgroundColor: '#0d6efd', color: '#fff', border: 'none', borderRadius: '6px', cursor: 'pointer' }}
-                          >
-                            Open
-                          </button>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
               </>
             )}
           </div>

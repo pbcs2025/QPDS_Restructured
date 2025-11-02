@@ -1,9 +1,12 @@
 import React, { useEffect, useState } from "react";
+import { useLocation, useNavigate } from "react-router-dom";
 import "./viewAssignees.css";
 
 const API_BASE = process.env.REACT_APP_API_BASE_URL || 'http://localhost:5001/api';
 
 function ViewAssignees() {
+  const location = useLocation();
+  const navigate = useNavigate();
   const [subjects, setSubjects] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -131,6 +134,24 @@ function ViewAssignees() {
     setShowDeleteDialog(false);
     setSubjectToDelete(null);
   };
+
+  // Deep link support: if navigated with ?tab=viewAssignees&subject=...&department=...
+  useEffect(() => {
+    const params = new URLSearchParams(location.search || "");
+    const tab = params.get('tab');
+    if (tab === 'viewAssignees') {
+      const dep = params.get('department');
+      const subj = params.get('subject');
+      if (dep) setSelectedDepartment(dep);
+      if (subj) {
+        // Avoid duplicate fetch if already selected
+        if (selectedSubject !== subj) {
+          handleCardClick(subj);
+        }
+      }
+    }
+    // We intentionally depend on location.search and selectedSubject
+  }, [location.search, selectedSubject]);
 
   if (loading) return <p>Loading assigned subjects...</p>;
   if (error && !selectedSubject) return <p>{error}</p>;
@@ -486,9 +507,17 @@ function ViewAssignees() {
       {/* Assignees Table View */}
       {selectedSubject && (
         <>
-          <button className="back-btn" onClick={handleBack}>
-            ← Back to Subjects
-          </button>
+          <div style={{ display: 'flex', gap: 8, marginBottom: 10 }}>
+            <button className="back-btn" onClick={handleBack}>
+              ← Back to Subjects
+            </button>
+            <button
+              className="back-btn"
+              onClick={() => navigate('/super-admin-dashboard?tab=viewAnalytics')}
+            >
+              ← Back to View Analytics
+            </button>
+          </div>
           <div className="assignees-table-section">
             <h2>Assignees for {selectedSubject}</h2>
 
@@ -511,7 +540,15 @@ function ViewAssignees() {
                     </thead>
                     <tbody>
                       {assigneesData.map((fac, idx) => (
-                        <tr key={idx}>
+                        <tr
+                          key={idx}
+                          style={{
+                            backgroundColor:
+                              (fac.status === 'submitted' || fac.status === 'completed')
+                                ? 'transparent'
+                                : '#fff1f2' // light red for pending
+                          }}
+                        >
                           <td>{fac.facultyName}</td>
                           <td>{fac.email}</td>
                           <td>{fac.assignedAt ? new Date(fac.assignedAt).toLocaleDateString() : "-"}</td>
