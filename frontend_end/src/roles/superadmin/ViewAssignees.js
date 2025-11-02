@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
+import { io } from "socket.io-client";
 import "./viewAssignees.css";
 
 const API_BASE = process.env.REACT_APP_API_BASE_URL || 'http://localhost:5001/api';
@@ -391,6 +392,96 @@ function ViewAssignees() {
     setShowDeleteDialog(false);
     setSubjectToDelete(null);
   };
+
+  // Messaging handlers
+  const handleMessageClick = (fac) => {
+    // Original behavior: simple in-app alert
+    if (fac && fac.facultyName) {
+      alert(`Messaging ${fac.facultyName}`);
+    } else {
+      alert('Messaging');
+    }
+  };
+
+  const closeMessageModal = () => {
+    setShowMessageModal(false);
+    setSelectedFaculty(null);
+    setSendingMessage(false);
+  };
+
+  const sendMessage = (type) => {
+    // Keep behavior consistent with original request: alert and close
+    const name = selectedFaculty?.facultyName || '';
+    alert(`Messaging ${name}`);
+    closeMessageModal();
+  };
+
+  // Deep link support from ViewAnalytics: ?tab=viewAssignees&subject=...&department=...&semester=...
+  useEffect(() => {
+    const params = new URLSearchParams(location.search || "");
+    const tab = params.get('tab');
+    if (tab === 'viewAssignees') {
+      const dep = params.get('department');
+      const subj = params.get('subject');
+      const sem = params.get('semester');
+      if (dep) setSelectedDepartment(dep);
+      if (sem) setSelectedSemester(String(sem));
+      if (subj && selectedSubject !== subj) {
+        handleCardClick(subj);
+      }
+    }
+    // Depend on location.search and selectedSubject to avoid duplicate fetches
+  }, [location.search, selectedSubject]);
+
+  useEffect(() => {
+    const reloadSubjects = async () => {
+      try {
+        const res = await fetch(`${API_BASE}/assignedSubjects`);
+        if (!res.ok) throw new Error(`Status ${res.status}`);
+        const data = await res.json();
+        setSubjects(data || []);
+      } catch (err) {
+        console.error("Socket refresh subjects error:", err);
+      }
+    };
+
+    const reloadCurrentAssignees = async () => {
+      if (!selectedSubject) return;
+      try {
+        const res = await fetch(`${API_BASE}/assignments/${encodeURIComponent(selectedSubject)}`);
+        if (!res.ok) throw new Error(`Status ${res.status}`);
+        const data = await res.json();
+        setAssigneesData(data);
+      } catch (err) {
+        console.error("Socket refresh assignees error:", err);
+      }
+    };
+
+    const socketURL = process.env.REACT_APP_API_BASE_URL || 'http://localhost:5001';
+    const socket = io(socketURL);
+
+    const onAnyAssignmentChange = () => {
+      reloadSubjects();
+      reloadCurrentAssignees();
+    };
+
+    socket.on('assignment_created', onAnyAssignmentChange);
+    socket.on('assignment_updated', onAnyAssignmentChange);
+    socket.on('assignment_deleted', onAnyAssignmentChange);
+    socket.on('paper_approved', onAnyAssignmentChange);
+
+    socket.on('connect_error', (error) => {
+      console.error('Socket connection error (ViewAssignees):', error);
+    });
+
+    return () => {
+      socket.off('assignment_created', onAnyAssignmentChange);
+      socket.off('assignment_updated', onAnyAssignmentChange);
+      socket.off('assignment_deleted', onAnyAssignmentChange);
+      socket.off('paper_approved', onAnyAssignmentChange);
+      socket.disconnect();
+    };
+  }, [selectedSubject]);
 
   if (loading) return <p>Loading assigned subjects...</p>;
   if (error && !selectedSubject) return <p>{error}</p>;
