@@ -3,6 +3,7 @@ const mongoose = require('mongoose');
 const User = require('../models/User');
 const Verifier = require('../models/Verifier');
 
+const Faculty = require('../models/Faculty');
 const QuestionPaper = require('../models/QuestionPaper');
 const ApprovedPaper = require('../models/ApprovedPaper');
 const RejectedPaper = require('../models/RejectedPaper');
@@ -973,3 +974,87 @@ exports.normalizeDepartments = async (_req, res) => {
     return res.status(500).json({ error: 'Server error' });
   }
 };
+// Get faculties by department with verifier status for verifier management
+exports.getFacultiesByDepartment = async (req, res) => {
+  try {
+    const { department } = req.params;
+    if (!department) {
+      return res.status(400).json({ error: 'Department is required' });
+    }
+
+    const faculties = await Faculty.find({
+      department,
+      isActive: true
+    })
+    .select('name email type verifierExpiresAt')
+    .sort({ name: 1 })
+    .lean();
+
+    res.json(faculties);
+  } catch (err) {
+    console.error('Error fetching faculties by department:', err);
+    res.status(500).json({ error: 'Failed to fetch faculties' });
+  }
+};
+
+// Assign temporary verifier role to a faculty
+exports.assignTemporaryVerifier = async (req, res) => {
+  try {
+    const { facultyId } = req.params;
+    const { expiresIn } = req.body; // duration in milliseconds
+
+    if (!facultyId) {
+      return res.status(400).json({ error: 'Faculty ID is required' });
+    }
+
+    // Default to 8 hours if not specified
+    const duration = expiresIn || (8 * 60 * 60 * 1000);
+    const expiresAt = new Date(Date.now() + duration);
+
+    const faculty = await Faculty.findByIdAndUpdate(
+      facultyId,
+      { verifierExpiresAt: expiresAt },
+      { new: true }
+    );
+
+    if (!faculty) {
+      return res.status(404).json({ error: 'Faculty not found' });
+    }
+
+    res.json({
+      message: 'Verifier role assigned successfully',
+      faculty: {
+        _id: faculty._id,
+        name: faculty.name,
+        email: faculty.email,
+        verifierExpiresAt: faculty.verifierExpiresAt
+      }
+    });
+  } catch (err) {
+    console.error('Error assigning temporary verifier:', err);
+    res.status(500).json({ error: 'Failed to assign verifier role' });
+  }
+};
+
+// Clean up expired verifier roles (can be called periodically)
+exports.cleanupExpiredVerifiers = async () => {
+  try {
+    const result = await Faculty.updateMany(
+      {
+        verifierExpiresAt: { $lt: new Date() },
+        verifierExpiresAt: { $ne: null }
+      },
+      { $unset: { verifierExpiresAt: 1 } }
+    );
+
+    console.log(`Cleaned up ${result.modifiedCount} expired verifier roles`);
+    return result;
+  } catch (err) {
+    console.error('Error cleaning up expired verifiers:', err);
+  }
+};
+
+// Run cleanup every 30 minutes
+setInterval(() => {
+  exports.cleanupExpiredVerifiers();
+}, 30 * 60 * 1000);

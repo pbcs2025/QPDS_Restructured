@@ -15,6 +15,7 @@ const FacultySchema = new mongoose.Schema(
     contactNumber: { type: String },
     type: { type: String, enum: ['internal', 'external'], required: true },
     role: { type: String, default: "faculty" },
+    verifierExpiresAt: { type: Date }, // For temporary verifier role assignment
     verificationCode: { type: String },
     isActive: { type: Boolean, default: true }
   },
