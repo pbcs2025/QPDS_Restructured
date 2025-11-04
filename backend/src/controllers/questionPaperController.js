@@ -1,5 +1,6 @@
 const QuestionPaper = require('../models/QuestionPaper');
 const ArchivedPaper = require('../models/ArchivedPaper');
+const Assignment = require('../models/Assignment');
 const mongoose = require('mongoose');
 
 /**
@@ -8,14 +9,36 @@ const mongoose = require('mongoose');
  * Saves paper with facultyId, title, content, status='submitted'
  */
 exports.createPaper = async (req, res) => {
+  const session = await mongoose.startSession();
+  session.startTransaction();
+  
   try {
-    const { facultyId, title, content } = req.body;
+    const { facultyId, title, content, subject_code, department } = req.body;
 
     // Validate required fields
-    if (!facultyId || !title || !content) {
+    if (!facultyId || !title || !content || !subject_code || !department) {
+      await session.abortTransaction();
+      session.endSession();
       return res.status(400).json({ 
         success: false, 
-        message: 'Missing required fields: facultyId, title, and content are required' 
+        message: 'Missing required fields: facultyId, title, content, subject_code, and department are required' 
+      });
+    }
+
+    // Check if faculty has an active assignment for this subject
+    const assignment = await Assignment.findOne({
+      email: facultyId,
+      subject_code: subject_code,
+      status: 'pending'
+    }).session(session);
+
+    if (!assignment) {
+      await session.abortTransaction();
+      session.endSession();
+      return res.status(403).json({
+        success: false,
+        message: 'No active assignment found for this subject',
+        details: 'You must be assigned this subject before submitting a paper'
       });
     }
 
@@ -31,17 +54,31 @@ exports.createPaper = async (req, res) => {
       department: req.body.department
     });
 
-    // Save to database
-    const savedPaper = await newPaper.save();
-    console.log(`New question paper created: ${savedPaper._id} by faculty ${facultyId}`);
+    // Save to database within the transaction
+    const savedPaper = await newPaper.save({ session });
+    
+    // Update assignment status to submitted
+    assignment.status = 'submitted';
+    assignment.submitted_at = new Date();
+    await assignment.save({ session });
+
+    // Commit the transaction
+    await session.commitTransaction();
+    session.endSession();
+
+    console.log(`New question paper created: ${savedPaper._id} by faculty ${facultyId} for subject ${subject_code}`);
 
     // Return saved paper with 201 Created status
     return res.status(201).json({
       success: true,
-      message: 'Question paper created successfully',
+      message: 'Question paper created and submitted successfully',
       paper: savedPaper
     });
   } catch (error) {
+    // If anything fails, abort the transaction
+    await session.abortTransaction();
+    session.endSession();
+    
     console.error('Error creating question paper:', error);
     return res.status(500).json({
       success: false,

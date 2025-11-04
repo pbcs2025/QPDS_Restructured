@@ -1,0 +1,114 @@
+.view-analytics-container {
+  background: #ffffff;
+  padding: 24px;
+  border-radius: 12px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+  width: 100%;
+  font-family: "Inter", sans-serif;
+  box-sizing: border-box;
+}
+
+.view-analytics-header {
+  display: flex;
+  align-items: center;
+  margin-bottom: 24px;
+}
+
+.view-analytics-icon {
+  color: #2563eb;
+  font-size: 22px;
+  margin-right: 10px;
+}
+
+.view-analytics-header h2 {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 700;
+  color: #1e3a8a;
+}
+
+.view-analytics-form-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 16px;
+  margin-bottom: 8px;
+}
+
+.view-analytics-field {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 240px;
+}
+
+.view-analytics-label {
+  font-weight: 600;
+  color: #334155;
+  margin-bottom: 6px;
+  font-size: 14px;
+}
+
+.view-analytics-select {
+  height: 42px;
+  border-radius: 8px;
+  border: 1px solid #cbd5e1;
+  padding: 8px 12px;
+  font-size: 15px;
+  color: #0f172a;
+  background-color: #f8fafc;
+  transition: all 0.2s ease;
+}
+
+.view-analytics-select:focus {
+  outline: none;
+  border-color: #2563eb;
+  box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.25);
+}
+
+.view-analytics-button {
+  background-color: #16a34a;
+  color: white;
+  border: none;
+  border-radius: 8px;
+  padding: 10px 18px;
+  font-weight: 600;
+  font-size: 15px;
+  cursor: pointer;
+  transition: background-color 0.2s ease;
+  height: 42px;
+  align-self: flex-end;
+}
+
+.view-analytics-button:hover {
+  background-color: #15803d;
+}
+
+.error-message {
+  color: #dc2626;
+  font-weight: 500;
+  margin-top: 12px;
+  font-size: 14px;
+}
+
+.chart-container {
+  margin-top: 40px;
+  display: flex;
+  justify-content: center;
+  width: 100%;
+  background: #f9fafb;
+  border-radius: 12px;
+  padding: 24px;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.08);
+}
+
+@media (max-width: 768px) {
+  .view-analytics-form-row {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .view-analytics-button {
+    width: 100%;
+  }
+}
