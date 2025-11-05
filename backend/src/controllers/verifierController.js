@@ -1,5 +1,6 @@
 const crypto = require('crypto');
 const mongoose = require('mongoose');
+const sendEmail = require('../utils/mailer');
 const User = require('../models/User');
 const Verifier = require('../models/Verifier');
 
@@ -1021,6 +1022,112 @@ exports.assignTemporaryVerifier = async (req, res) => {
       return res.status(404).json({ error: 'Faculty not found' });
     }
 
+    // Check if user account exists for this faculty
+    let userAccount = await User.findOne({ email: faculty.email });
+    let username, password;
+
+    if (!userAccount) {
+      // Create a new user account for the faculty
+      const randomSuffix = generateRandomAlphanumeric(4);
+      username = `${faculty.name.replace(/\s+/g, '').toLowerCase()}_${randomSuffix}`;
+      password = generateRandomAlphanumeric(8);
+
+      // Get department info
+      const department = await Department.findById(faculty.department);
+
+      userAccount = await User.create({
+        name: faculty.name,
+        username,
+        clgName: faculty.college || 'GAT',
+        deptName: department?.name || faculty.department,
+        department: faculty.department,
+        email: faculty.email,
+        phoneNo: faculty.phoneNo || '',
+        password,
+        usertype: faculty.type,
+        role: 'Faculty',
+      });
+    } else {
+      // Use existing credentials
+      username = userAccount.username;
+      password = userAccount.password;
+    }
+
+    // Get verifier details from the request to include in email
+    const verifierDepartment = req.user?.department || 'BOE Department';
+
+    // Send formal email notification to the assigned faculty
+    const emailSubject = 'Assignment Notification: Temporary Verifier Role for Question Paper Review';
+
+    const emailHtml = `
+      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+        <div style="background-color: #f8f9fa; padding: 20px; border-radius: 8px; margin-bottom: 20px;">
+          <h2 style="color: #2c3e50; margin: 0 0 10px 0;">Board of Examiners (BOE)</h2>
+          <h3 style="color: #34495e; margin: 0;">GAT - Question Paper Review System</h3>
+        </div>
+
+        <div style="margin: 20px 0;">
+          <p>Dear <strong>${faculty.name}</strong>,</p>
+
+          <p>This is a formal notification from the <strong>Board of Examiners (BOE)</strong> regarding your assignment to the temporary verifier role.</p>
+
+          <div style="background-color: #e8f4fd; padding: 15px; border-left: 4px solid #3498db; margin: 20px 0;">
+            <h4 style="color: #2c3e50; margin: 0 0 10px 0;">Assignment Details:</h4>
+            <ul style="margin: 0; padding-left: 20px;">
+              <li><strong>Role:</strong> Temporary Verifier</li>
+              <li><strong>Department:</strong> ${verifierDepartment}</li>
+              <li><strong>Assignment Duration:</strong> ${Math.floor(duration / (1000 * 60 * 60))} hours</li>
+              <li><strong>Expires On:</strong> ${expiresAt.toLocaleString('en-IN', {
+                timeZone: 'Asia/Kolkata',
+                year: 'numeric',
+                month: 'long',
+                day: 'numeric',
+                hour: '2-digit',
+                minute: '2-digit'
+              })}</li>
+            </ul>
+          </div>
+
+          <div style="background-color: #d4edda; padding: 15px; border-left: 4px solid #28a745; margin: 20px 0;">
+            <h4 style="color: #155724; margin: 0 0 10px 0;">Login Credentials:</h4>
+            <p style="margin: 0; color: #155724;"><strong>Username:</strong> ${username}</p>
+            <p style="margin: 5px 0 0 0; color: #155724;"><strong>Password:</strong> ${password}</p>
+            <p style="margin: 10px 0 0 0; font-size: 14px; color: #155724;">Please keep these credentials secure and do not share them with others.</p>
+          </div>
+
+          <p>As a temporary verifier, you are authorized to review and verify question papers submitted for your department. This role provides you with temporary access to the verification system for the specified duration.</p>
+
+          <div style="background-color: #fff3cd; padding: 15px; border-left: 4px solid #ffc107; margin: 20px 0;">
+            <h4 style="color: #856404; margin: 0 0 10px 0;">Important Notes:</h4>
+            <ul style="margin: 0; padding-left: 20px; color: #856404;">
+              <li>Your verifier privileges will automatically expire after the specified duration</li>
+              <li>Your login access will be disabled after the expiry time</li>
+              <li>Please ensure all assigned papers are reviewed within the given timeframe</li>
+              <li>Contact your department coordinator if you encounter any issues</li>
+            </ul>
+          </div>
+
+          <p>Thank you for your cooperation and commitment to maintaining the quality of our academic assessments.</p>
+
+          <p>Best regards,<br>
+          <strong>Board of Examiners (BOE)</strong><br>
+          GAT - Question Paper Review System<br>
+          Academic Administration</p>
+        </div>
+
+        <div style="border-top: 1px solid #dee2e6; padding-top: 20px; margin-top: 20px; font-size: 12px; color: #6c757d;">
+          <p>This is an automated notification from the Question Paper Review System. Please do not reply to this email.</p>
+          <p>For any inquiries, please contact your department administrator.</p>
+        </div>
+      </div>
+    `;
+
+    // Send email asynchronously (don't block the response)
+    sendEmail(faculty.email, emailSubject, '', emailHtml).catch(err => {
+      console.error('Failed to send assignment email:', err);
+      // Don't fail the assignment if email fails
+    });
+
     res.json({
       message: 'Verifier role assigned successfully',
       faculty: {
@@ -1033,6 +1140,40 @@ exports.assignTemporaryVerifier = async (req, res) => {
   } catch (err) {
     console.error('Error assigning temporary verifier:', err);
     res.status(500).json({ error: 'Failed to assign verifier role' });
+  }
+};
+
+// Remove temporary verifier role from a faculty
+exports.removeTemporaryVerifier = async (req, res) => {
+  try {
+    const { facultyId } = req.params;
+
+    if (!facultyId) {
+      return res.status(400).json({ error: 'Faculty ID is required' });
+    }
+
+    const faculty = await Faculty.findByIdAndUpdate(
+      facultyId,
+      { $unset: { verifierExpiresAt: 1 } },
+      { new: true }
+    );
+
+    if (!faculty) {
+      return res.status(404).json({ error: 'Faculty not found' });
+    }
+
+    res.json({
+      message: 'Verifier role removed successfully',
+      faculty: {
+        _id: faculty._id,
+        name: faculty.name,
+        email: faculty.email,
+        verifierExpiresAt: null
+      }
+    });
+  } catch (err) {
+    console.error('Error removing temporary verifier:', err);
+    res.status(500).json({ error: 'Failed to remove verifier role' });
   }
 };
 
@@ -1054,7 +1195,41 @@ exports.cleanupExpiredVerifiers = async () => {
   }
 };
 
+// Cleanup expired user accounts (disable login for expired verifiers)
+// This function disables user accounts that have expired verifier roles
+exports.cleanupExpiredUserAccounts = async () => {
+  try {
+    // Find all users with expired verifier roles
+    const expiredFaculties = await Faculty.find({
+      verifierExpiresAt: { $lt: new Date(), $ne: null }
+    }).select('_id email');
+
+    if (expiredFaculties.length > 0) {
+      const emails = expiredFaculties.map(f => f.email);
+
+      // Disable user accounts by setting a flag or changing password
+      // Since we can't delete passwords easily, we'll set them to a disabled state
+      const result = await User.updateMany(
+        { email: { $in: emails }, role: 'Faculty' },
+        {
+          $set: {
+            password: 'EXPIRED_' + generateRandomAlphanumeric(16),
+            role: 'Faculty' // Ensure they remain Faculty role
+          }
+        }
+      );
+
+      console.log(`Disabled ${result.modifiedCount} expired verifier user accounts`);
+    }
+
+    return expiredFaculties.length;
+  } catch (err) {
+    console.error('Error cleaning up expired user accounts:', err);
+  }
+};
+
 // Run cleanup every 30 minutes
 setInterval(() => {
   exports.cleanupExpiredVerifiers();
+  exports.cleanupExpiredUserAccounts();
 }, 30 * 60 * 1000);

@@ -9,6 +9,10 @@ function ManageFaculties() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [verifier, setVerifier] = useState(null);
+  const [showSuccessModal, setShowSuccessModal] = useState(false);
+  const [successMessage, setSuccessMessage] = useState("");
+  const [showRemoveModal, setShowRemoveModal] = useState(false);
+  const [removeMessage, setRemoveMessage] = useState("");
 
   // Get verifier info from localStorage
   useEffect(() => {
@@ -75,7 +79,8 @@ function ManageFaculties() {
       }
 
       const result = await response.json();
-      alert(`Successfully assigned verifier role to ${result.faculty.name} for 8 hours`);
+      setSuccessMessage(`Successfully assigned verifier role to ${result.faculty.name} for 8 hours.\n\nAn email with login credentials has been sent to ${result.faculty.email}.`);
+      setShowSuccessModal(true);
 
       // Update the faculty in the local state immediately for real-time UI update
       setFaculties(prevFaculties =>
@@ -88,6 +93,38 @@ function ManageFaculties() {
     } catch (err) {
       console.error('Error assigning verifier role:', err);
       alert('Failed to assign verifier role: ' + err.message);
+    }
+  };
+
+  const removeTemporaryVerifier = async (facultyId) => {
+    try {
+      const response = await fetch(`${API_BASE}/verifier/remove-temporary/${facultyId}`, {
+        method: 'DELETE',
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('verifierToken') || ''}`,
+          'Content-Type': 'application/json'
+        }
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to remove verifier role');
+      }
+
+      const result = await response.json();
+      setRemoveMessage(`Successfully removed verifier role from ${result.faculty.name}`);
+      setShowRemoveModal(true);
+
+      // Update the faculty in the local state immediately for real-time UI update
+      setFaculties(prevFaculties =>
+        prevFaculties.map(faculty =>
+          faculty._id === facultyId
+            ? { ...faculty, verifierExpiresAt: null }
+            : faculty
+        )
+      );
+    } catch (err) {
+      console.error('Error removing verifier role:', err);
+      alert('Failed to remove verifier role: ' + err.message);
     }
   };
 
@@ -164,7 +201,7 @@ function ManageFaculties() {
                   )}
                 </div>
 
-                <div>
+                <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
                   <button
                     onClick={() => assignTemporaryVerifier(faculty._id)}
                     disabled={!!faculty.verifierExpiresAt}
@@ -180,9 +217,151 @@ function ManageFaculties() {
                   >
                     {faculty.verifierExpiresAt ? 'Already Verifier' : 'Make Verifier'}
                   </button>
+                  {faculty.verifierExpiresAt && (
+                    <button
+                      onClick={() => removeTemporaryVerifier(faculty._id)}
+                      style={{
+                        padding: '8px 16px',
+                        backgroundColor: '#dc3545',
+                        color: 'white',
+                        border: 'none',
+                        borderRadius: '4px',
+                        cursor: 'pointer',
+                        fontSize: '14px'
+                      }}
+                      title="Remove verifier role"
+                    >
+                      Undo
+                    </button>
+                  )}
                 </div>
               </div>
             ))}
+          </div>
+        </div>
+      )}
+
+      {/* Success Modal */}
+      {showSuccessModal && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          backgroundColor: 'rgba(0, 0, 0, 0.5)',
+          display: 'flex',
+          justifyContent: 'center',
+          alignItems: 'center',
+          zIndex: 1000
+        }}>
+          <div style={{
+            backgroundColor: 'white',
+            borderRadius: '8px',
+            padding: '20px',
+            maxWidth: '400px',
+            width: '90%',
+            boxShadow: '0 4px 6px rgba(0, 0, 0, 0.1)',
+            textAlign: 'center'
+          }}>
+            <div style={{
+              color: '#28a745',
+              fontSize: '48px',
+              marginBottom: '15px'
+            }}>
+              ✓
+            </div>
+            <h3 style={{
+              color: '#2c3e50',
+              margin: '0 0 15px 0',
+              fontSize: '18px'
+            }}>
+              Assignment Successful!
+            </h3>
+            <p style={{
+              color: '#666',
+              margin: '0 0 20px 0',
+              lineHeight: '1.5',
+              whiteSpace: 'pre-line'
+            }}>
+              {successMessage}
+            </p>
+            <button
+              onClick={() => setShowSuccessModal(false)}
+              style={{
+                backgroundColor: '#007bff',
+                color: 'white',
+                border: 'none',
+                padding: '10px 20px',
+                borderRadius: '4px',
+                cursor: 'pointer',
+                fontSize: '14px'
+              }}
+            >
+              OK
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Remove Modal */}
+      {showRemoveModal && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          backgroundColor: 'rgba(0, 0, 0, 0.5)',
+          display: 'flex',
+          justifyContent: 'center',
+          alignItems: 'center',
+          zIndex: 1000
+        }}>
+          <div style={{
+            backgroundColor: 'white',
+            borderRadius: '8px',
+            padding: '20px',
+            maxWidth: '400px',
+            width: '90%',
+            boxShadow: '0 4px 6px rgba(0, 0, 0, 0.1)',
+            textAlign: 'center'
+          }}>
+            <div style={{
+              color: '#dc3545',
+              fontSize: '48px',
+              marginBottom: '15px'
+            }}>
+              ✓
+            </div>
+            <h3 style={{
+              color: '#2c3e50',
+              margin: '0 0 15px 0',
+              fontSize: '18px'
+            }}>
+              Role Removed Successfully!
+            </h3>
+            <p style={{
+              color: '#666',
+              margin: '0 0 20px 0',
+              lineHeight: '1.5'
+            }}>
+              {removeMessage}
+            </p>
+            <button
+              onClick={() => setShowRemoveModal(false)}
+              style={{
+                backgroundColor: '#dc3545',
+                color: 'white',
+                border: 'none',
+                padding: '10px 20px',
+                borderRadius: '4px',
+                cursor: 'pointer',
+                fontSize: '14px'
+              }}
+            >
+              OK
+            </button>
           </div>
         </div>
       )}
