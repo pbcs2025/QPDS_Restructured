@@ -2,6 +2,8 @@ import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import "../../common/dashboard.css";
 import QuestionPapers from "./QuestionPapers";
+import ManageFaculties from "./ManageFaculties";
+
 
 const API_BASE = process.env.REACT_APP_API_BASE_URL;
 
@@ -65,10 +67,7 @@ function VerifierDashboard() {
         )}
 
         {activeTab === "faculties" && (
-          <div>
-            <h1>Manage Faculties</h1>
-            <p>List faculties in department, assign QP Setter (placeholder).</p>
-          </div>
+          <ManageFaculties />
         )}
 
         {activeTab === "papers" && (

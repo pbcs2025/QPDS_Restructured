@@ -29,6 +29,10 @@ router.get('/rejected-list', ctrl.listRejectedPapers);
 
 router.delete('/:verifierId', ctrl.removeOne);
 
+// Faculty management routes for verifiers
+router.get('/faculties/department/:department', ctrl.getFacultiesByDepartment);
+router.post('/assign-temporary/:facultyId', ctrl.assignTemporaryVerifier);
+
 
 // Admin-only: normalize Verifier.department to active Departments canonical names
 router.post('/normalize-departments', ctrl.normalizeDepartments);

@@ -1,18 +1,21 @@
 import React, { useEffect, useState } from "react";
 import axios from "axios";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useLocation } from "react-router-dom";
 import "../../common/dashboard.css";
 import ManageUsers from "./ManageUsers";
 import ViewAssignees from "./ViewAssignees";
 import SubjectsPage from "./SubjectsPage";
 import DepartmentsPage from "./DepartmentsPage";
 import AdminManageFacultyPage from "./AdminManageFacultyPage";
+import ViewAnalytics from "./ViewAnalytics";
 import VerifierManagement from "../verifier/VerifierManagement";
 import { io } from "socket.io-client";
 
+const API_BASE = process.env.REACT_APP_API_BASE_URL || 'http://localhost:5001/api';
 
 function SuperAdminDashboard() {
   const navigate = useNavigate();
+  const location = useLocation();
   const [activeTab, setActiveTab] = useState("dashboard");
   const [showConfirm, setShowConfirm] = useState(false);
   const [manageUsersView, setManageUsersView] = useState("cards"); // cards | faculty | verifiers
@@ -34,23 +37,8 @@ function SuperAdminDashboard() {
   const [showArchivedPapers, setShowArchivedPapers] = useState(false);
   const [archivedPapers, setArchivedPapers] = useState([]);
 
-  // Load papers sent for print from localStorage on component mount
-  useEffect(() => {
-    const savedPapers = localStorage.getItem('papersSentForPrint');
-    if (savedPapers) {
-      try {
-        setPapersSentForPrint(JSON.parse(savedPapers));
-      } catch (err) {
-        console.error('Error loading papers sent for print:', err);
-      }
-    }
-  }, []);
-
-  // Save papers sent for print to localStorage whenever it changes
-  useEffect(() => {
-    localStorage.setItem('papersSentForPrint', JSON.stringify(papersSentForPrint));
-  }, [papersSentForPrint]);
-  const API_BASE = process.env.REACT_APP_API_BASE_URL || 'http://localhost:5001/api';
+  const QP_API_BASE = process.env.REACT_APP_QP_API_BASE_URL || process.env.REACT_APP_API_BASE_URL || 'http://localhost:5001/api';
+  
 
   const [newVerifierName, setNewVerifierName] = useState("");
   const [newVerifierDept, setNewVerifierDept] = useState("");
@@ -69,6 +57,28 @@ function SuperAdminDashboard() {
     navigate("/");
   };
   const cancelLogout = () => setShowConfirm(false);
+
+  // Read tab from URL query (?tab=...) and switch accordingly
+  useEffect(() => {
+    const params = new URLSearchParams(location.search || "");
+    const tab = params.get('tab');
+    if (tab && typeof tab === 'string') {
+      const allowed = new Set([
+        'dashboard',
+        'manageFaculty',
+        'manageUsers',
+        'departments',
+        'subjects',
+        'viewAssignees',
+        'submitted',
+        'settings',
+        'viewAnalytics'
+      ]);
+      if (allowed.has(tab)) {
+        setActiveTab(tab);
+      }
+    }
+  }, [location.search]);
 
   // Fetch counts when Manage Users cards are visible
   useEffect(() => {
@@ -462,6 +472,14 @@ function SuperAdminDashboard() {
 
             <a
               href="#"
+              className={activeTab === "viewAnalytics" ? "active-tab" : ""}
+              onClick={(e) => { e.preventDefault(); setActiveTab("viewAnalytics"); }}
+            >
+              📊 View Analytics
+            </a>
+
+            <a
+              href="#"
               className={activeTab === "settings" ? "active-tab" : ""}
               onClick={(e) => { e.preventDefault(); setActiveTab("settings"); }}
             >
@@ -526,6 +544,7 @@ function SuperAdminDashboard() {
                 ))}
               </ul>
             </div>
+
           </>
         )}
 
@@ -682,13 +701,20 @@ function SuperAdminDashboard() {
         )}
 
 
-        {activeTab === "viewAssignees" && <ViewAssignees />}
+        {activeTab === "viewAssignees" && (
+          <ViewAssignees 
+            key={location.search} // Force re-render when URL params change
+            status={new URLSearchParams(location.search).get('status')}
+          />
+        )}
 
         {activeTab === "subjects" && <SubjectsPage />}
 
         {activeTab === "departments" && <DepartmentsPage />}
 
 
+
+        {activeTab === "viewAnalytics" && <ViewAnalytics />}
 
         {activeTab === "submitted" && (
           <div>
@@ -753,7 +779,7 @@ function SuperAdminDashboard() {
                           </div>
                           {q.file_url && (
                             <div style={{ marginTop: '10px' }}>
-                              <img src={`${API_BASE}${q.file_url}`} alt={q.file_name || 'attachment'} style={{ maxWidth: '100%', borderRadius: '8px', border: '1px solid #e9edf3' }} />
+                              <img src={`${QP_API_BASE}${q.file_url}`} alt={q.file_name || 'attachment'} style={{ maxWidth: '100%', borderRadius: '8px', border: '1px solid #e9edf3' }} />
                             </div>
                           )}
                           {/* Verifier Remarks Display */}
@@ -884,7 +910,7 @@ function SuperAdminDashboard() {
                               </div>
                               {q.file_url && (
                                 <div style={{ marginTop: '8px', marginLeft: '46px' }}>
-                                  <img src={`${API_BASE}${q.file_url}`} alt={q.file_name || 'attachment'} style={{ maxWidth: '100%', borderRadius: '8px', border: '1px solid #e9edf3' }} />
+                                  <img src={`${QP_API_BASE}${q.file_url}`} alt={q.file_name || 'attachment'} style={{ maxWidth: '100%', borderRadius: '8px', border: '1px solid #e9edf3' }} />
                                 </div>
                               )}
                             </div>
@@ -911,7 +937,7 @@ function SuperAdminDashboard() {
                               </div>
                               {q.file_url && (
                                 <div style={{ marginTop: '8px', marginLeft: '46px' }}>
-                                  <img src={`${API_BASE}${q.file_url}`} alt={q.file_name || 'attachment'} style={{ maxWidth: '100%', borderRadius: '8px', border: '1px solid #e9edf3' }} />
+                                  <img src={`${QP_API_BASE}${q.file_url}`} alt={q.file_name || 'attachment'} style={{ maxWidth: '100%', borderRadius: '8px', border: '1px solid #e9edf3' }} />
                                 </div>
                               )}
                             </div>

@@ -1,14 +1,21 @@
 import React, { useEffect, useState } from "react";
+import { useLocation, useNavigate } from "react-router-dom";
 import "./viewAssignees.css";
 
 const API_BASE = process.env.REACT_APP_API_BASE_URL;
 
-function ViewAssignees() {
+function ViewAssignees({ status: initialStatus = null }) {
+  const location = useLocation();
+  const navigate = useNavigate();
+  const searchParams = new URLSearchParams(location.search);
+  const fromAnalytics = searchParams.get('fromAnalytics') === 'true';
   const [subjects, setSubjects] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
-  const [selectedSubject, setSelectedSubject] = useState(null);
+  const [selectedSubject, setSelectedSubject] = useState(
+    initialStatus ? new URLSearchParams(window.location.search).get('subject') : null
+  );
   const [assigneesData, setAssigneesData] = useState(null);
   const [tableLoading, setTableLoading] = useState(false);
   
@@ -74,6 +81,21 @@ function ViewAssignees() {
       })
       .then((data) => {
         setSubjects(data || []);
+        
+        // If we have a status and subject in URL, auto-select the subject
+        const urlParams = new URLSearchParams(window.location.search);
+        const subjectFromUrl = urlParams.get('subject');
+        const statusFromUrl = urlParams.get('status');
+        
+        if (statusFromUrl && subjectFromUrl) {
+          // Find the subject in the fetched data
+          const subjectExists = data.some(subj => subj.subject_code === subjectFromUrl);
+          if (subjectExists) {
+            setSelectedSubject(subjectFromUrl);
+            handleCardClick(subjectFromUrl, statusFromUrl);
+          }
+        }
+        
         setLoading(false);
       })
       .catch((err) => {
@@ -106,19 +128,35 @@ function ViewAssignees() {
     return () => clearInterval(interval);
   }, []);
 
-  // Fetch assignees when subject is clicked
-  const handleCardClick = (subjectCode) => {
+  // Fetch assignees when subject is clicked or when status changes
+  const handleCardClick = (subjectCode, statusFilter = initialStatus) => {
     setSelectedSubject(subjectCode);
     setTableLoading(true);
+    
+    // Get the status from URL params if not provided
+    const urlParams = new URLSearchParams(window.location.search);
+    const status = statusFilter || urlParams.get('status');
+    
     fetch(`${API_BASE}/assignments/${encodeURIComponent(subjectCode)}`)
       .then((res) => {
-       // console.log(res.json());
         if (!res.ok) throw new Error(`Status ${res.status}`);
         return res.json();
       })
       .then((data) => {
-        console.log(data);
-        setAssigneesData(data);
+        let filteredData = data || [];
+        
+        // Filter by status if status parameter is provided
+        if (status) {
+          filteredData = filteredData.filter(assignment => {
+            const assignmentStatus = assignment.status || 'pending';
+            return status === 'pending' 
+              ? assignmentStatus !== 'submitted' && assignmentStatus !== 'completed'
+              : assignmentStatus === status;
+          });
+        }
+        
+        console.log('Filtered assignments:', filteredData);
+        setAssigneesData(filteredData);
         setTableLoading(false);
       })
       .catch((err) => {
@@ -128,11 +166,30 @@ function ViewAssignees() {
       });
   };
 
-  // Reset to subject list view
+  // Handle back navigation
   const handleBack = () => {
-    setSelectedSubject(null);
-    setAssigneesData(null);
-    setError(null);
+    if (fromAnalytics) {
+      // Restore the analytics state from session storage
+      const savedState = sessionStorage.getItem('analyticsState');
+      if (savedState) {
+        const { subject, dept, sem, tab } = JSON.parse(savedState);
+        const params = new URLSearchParams();
+        params.set('tab', tab);
+        if (subject) params.set('subject', subject);
+        if (dept) params.set('department', dept);
+        if (sem) params.set('semester', sem);
+        navigate(`/super-admin-dashboard?${params.toString()}`);
+      } else {
+        navigate(-1); // Fallback to browser back
+      }
+      // Clear the saved state
+      sessionStorage.removeItem('analyticsState');
+    } else {
+      // Default behavior for non-analytics navigation
+      setSelectedSubject(null);
+      setAssigneesData(null);
+      setError(null);
+    }
   };
 
   // Reset department selection
@@ -1117,9 +1174,19 @@ function ViewAssignees() {
       {/* Assignees Table View */}
       {selectedSubject && (
         <>
-          <button className="back-btn" onClick={handleBack}>
-            ← Back to Subjects
-          </button>
+          <div style={{ marginBottom: '15px' }}>
+            <button 
+              className="back-btn" 
+              onClick={handleBack}
+              style={{
+                backgroundColor: fromAnalytics ? '#f0f9ff' : 'transparent',
+                color: fromAnalytics ? '#0369a1' : 'inherit',
+                border: fromAnalytics ? '1px solid #bae6fd' : '1px solid #e5e7eb'
+              }}
+            >
+              ← {fromAnalytics ? 'Back to Analytics' : 'Back to Subjects'}
+            </button>
+          </div>
           <div className="assignees-table-section">
             <h2>Assignees for {selectedSubject}</h2>
 
