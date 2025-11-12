@@ -10,7 +10,7 @@
 
 .sidebar {
   width: 220px;
-  background-color: #001f3f;
+  background-color: #4a5568;
   color: white;
   padding: 20px;
   display: flex;
@@ -35,9 +35,9 @@
 }
 
 .sidebar a:hover {
-  background-color: #2e2e48; /* Slightly lighter than sidebar */
+  background-color: #5a6578; /* Slightly lighter than sidebar */
   transform: scale(1.05);
-  color: #ffd700; /* Optional: golden hover text */
+  color: #e2e8f0; /* Light gray hover text */
 }
 
 /* Sidebar button styles */
@@ -59,9 +59,9 @@
 }
 
 .sidebar-btn:hover {
-  background-color: #2e2e48;
+  background-color: #5a6578;
   transform: scale(1.05);
-  color: #ffd700;
+  color: #e2e8f0;
 }
 
 .sidebar-btn.logout-btn {
@@ -70,7 +70,7 @@
 
 .sidebar-btn.logout-btn:hover {
   color: #ff4757;
-  background-color: #2e2e48;
+  background-color: #5a6578;
 }
 
 
@@ -131,7 +131,7 @@
 }
 
 .popup-box {
-  background: #1e1e2f; /* same as sidebar */
+  background: #4a5568; /* same as sidebar */
   padding: 25px 30px;
   border-radius: 12px;
   box-shadow: 0 0 10px rgba(0, 0, 0, 0.3);
@@ -158,7 +158,7 @@
   border-radius: 5px;
   font-weight: bold;
   cursor: pointer;
-  background-color: #1e1e2f; /* same as sidebar */
+  background-color: #4a5568; /* same as sidebar */
   color: white;
   border: 2px solid white;
   transition: background-color 0.3s ease;
@@ -166,7 +166,7 @@
 
 .popup-box button:hover {
   background-color: white;
-  color: #1e1e2f;
+  color: #4a5568;
 }
 
 .popup-box .yes {
@@ -267,7 +267,7 @@ table thead {
 }
 
 .user-table th {
-  background-color: #1c1f2b;
+  background-color: #4a5568;
   color: white;
 }
 
@@ -290,7 +290,7 @@ table thead {
 /* Make sidebar fixed */
 .sidebar {
   width: 220px;
-  background-color: #001f3f;
+  background-color: #4a5568;
   color: white;
   padding: 20px;
   display: flex;
@@ -314,8 +314,8 @@ table thead {
 
 /* Highlight active tab */
 .active-tab {
-  background-color: #2e2e48;
-  color: #ffd700;
+  background-color: #5a6578;
+  color: #e2e8f0;
   font-weight: bold;
 }
 
@@ -429,7 +429,7 @@ button[type="submit"] {
 }
 
 .popup-content {
-  background: #1e1e2f;
+  background: #4a5568;
   padding: 25px 30px;
   border-radius: 12px;
   box-shadow: 0 0 15px rgba(0, 0, 0, 0.4);
@@ -482,7 +482,7 @@ button[type="submit"] {
 }
 
 .reset-form h2 {
-  color: #1e1e2f;
+  color: #4a5568;
   margin-bottom: 25px;
   text-align: center;
 }
@@ -496,7 +496,7 @@ button[type="submit"] {
 .form-group label {
   font-weight: bold;
   margin-bottom: 8px;
-  color: #1e1e2f;
+  color: #4a5568;
 }
 
 .form-group input,
@@ -542,14 +542,14 @@ button[type="button"]:hover {
 }
 
 .sidebar .sidebar-btn:hover {
-  background-color: #2e2e48 !important;
+  background-color: #5a6578 !important;
   transform: scale(1.05);
-  color: #ffd700 !important;
+  color: #e2e8f0 !important;
 }
 
 .sidebar .sidebar-btn.active-tab {
-  background-color: #2e2e48 !important;
-  color: #ffd700 !important;
+  background-color: #5a6578 !important;
+  color: #e2e8f0 !important;
   font-weight: bold !important;
 }
 
@@ -721,7 +721,7 @@ button[type="button"]:hover {
   display: block;
   font-size: 24px;
   font-weight: bold;
-  color: #001f3f;
+  color: #4a5568;
 }
 
 .stat-label {
@@ -744,7 +744,7 @@ button[type="button"]:hover {
 }
 
 .assignments-table th {
-  background: #001f3f;
+  background: #4a5568;
   color: white;
   padding: 15px 12px;
   text-align: left;

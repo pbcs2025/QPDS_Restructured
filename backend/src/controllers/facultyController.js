@@ -15,6 +15,24 @@ function generatePassword() {
   return password;
 }
 
+exports.checkEmailExists = async (req, res) => {
+  try {
+    const { email } = req.body;
+    
+    if (!email) {
+      return res.status(400).json({ error: 'Email is required' });
+    }
+
+    const existingUser = await User.findOne({ $or: [{ username: email }, { email }] });
+    const exists = !!existingUser;
+    
+    res.json({ exists });
+  } catch (error) {
+    console.error('Email check error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+};
+
 exports.registerFaculty = async (req, res) => {
   try {
     const { name, clgName, deptName, email, phone, usertype, departmentId } = req.body;
@@ -26,7 +44,10 @@ exports.registerFaculty = async (req, res) => {
     // Check if user already exists
     const existingUser = await User.findOne({ $or: [{ username }, { email }] });
     if (existingUser) {
-      return res.status(400).json({ error: 'User with this email already exists' });
+      return res.status(400).json({ 
+        success: false,
+        message: 'User with this email already exists' 
+      });
     }
 
     // Create user record for authentication
@@ -62,7 +83,7 @@ exports.registerFaculty = async (req, res) => {
         '',
         `<p>Dear ${name},</p>
         
-        <p>Welcome to Global Academy of Technology! We are pleased to inform you that your faculty registration has been successfully completed.</p>
+        <p>Welcome to Global Academy of Technology - QPDS Portal! We are pleased to inform you that your faculty registration has been successfully completed.</p>
         
         <p>Your account has been created and activated. You can now access the Question Paper Development System (QPDS) using the credentials provided below:</p>
         
@@ -448,5 +469,143 @@ exports.bulkUploadFaculties = async (req, res) => {
   } catch (err) {
     console.error('Bulk upload error:', err);
     res.status(500).json({ error: 'Failed to process bulk upload' });
+  }
+};
+
+exports.sendMessageToFaculty = async (req, res) => {
+  try {
+    const { email, messageType, subjectCode, submitDate, facultyName } = req.body;
+
+    if (!email || !messageType) {
+      return res.status(400).json({ 
+        success: false,
+        error: 'Email and message type are required' 
+      });
+    }
+
+    if (!['reminder', 'earlySubmission'].includes(messageType)) {
+      return res.status(400).json({ 
+        success: false,
+        error: 'Invalid message type. Must be "reminder" or "earlySubmission"' 
+      });
+    }
+
+    // Get faculty details
+    const faculty = await Faculty.findOne({ email }).lean();
+    if (!faculty) {
+      return res.status(404).json({ 
+        success: false,
+        error: 'Faculty not found' 
+      });
+    }
+
+    const name = facultyName || faculty.name;
+    let subject, html;
+
+    if (messageType === 'reminder') {
+      // Deadline reminder message
+      const deadlineText = submitDate 
+        ? new Date(submitDate).toLocaleDateString('en-US', { 
+            year: 'numeric', 
+            month: 'long', 
+            day: 'numeric' 
+          })
+        : 'the specified deadline';
+      
+      subject = `Reminder: Question Paper Submission Deadline - ${subjectCode || 'Assignment'}`;
+      html = `
+        <p>Dear ${name},</p>
+        
+        <p>This is a reminder regarding your question paper submission assignment.</p>
+        
+        ${subjectCode ? `<p><strong>Subject Code:</strong> ${subjectCode}</p>` : ''}
+        ${submitDate ? `<p><strong>Submission Deadline:</strong> ${deadlineText}</p>` : ''}
+        
+        <div style="background-color: #fff3cd; border: 1px solid #ffc107; border-radius: 8px; padding: 20px; margin: 20px 0;">
+          <h3 style="color: #856404; margin-top: 0;">⚠️ Deadline Reminder</h3>
+          <p style="color: #856404; margin: 0;">Please ensure that you submit your question paper by <strong>${deadlineText}</strong>. Timely submission is crucial for the smooth conduct of examinations.</p>
+        </div>
+        
+        <p>If you have any questions or face any difficulties in preparing the question paper, please do not hesitate to contact the examination cell at support@gat.ac.in.</p>
+        
+        <p>We appreciate your cooperation and look forward to receiving your submission.</p>
+        
+        <p>Best regards,<br>
+        <strong>Examination Cell</strong><br>
+        Global Academy of Technology<br>
+        Bengaluru, Karnataka</p>
+        
+        <hr style="border: none; border-top: 1px solid #dee2e6; margin: 30px 0;">
+        <p style="font-size: 12px; color: #6c757d; text-align: center;">
+          This is an automated message. Please do not reply to this email.<br>
+          For support, contact: support@gat.ac.in
+        </p>
+      `;
+    } else if (messageType === 'earlySubmission') {
+      // Early submission request message
+      subject = `Request for Early Submission - ${subjectCode || 'Question Paper Assignment'}`;
+      html = `
+        <p>Dear ${name},</p>
+        
+        <p>We hope this message finds you well.</p>
+        
+        ${subjectCode ? `<p><strong>Subject Code:</strong> ${subjectCode}</p>` : ''}
+        ${submitDate ? `<p><strong>Original Submission Deadline:</strong> ${new Date(submitDate).toLocaleDateString('en-US', { 
+            year: 'numeric', 
+            month: 'long', 
+            day: 'numeric' 
+          })}</p>` : ''}
+        
+        <div style="background-color: #d1ecf1; border: 1px solid #0c5460; border-radius: 8px; padding: 20px; margin: 20px 0;">
+          <h3 style="color: #0c5460; margin-top: 0;">📝 Early Submission Request</h3>
+          <p style="color: #0c5460; margin: 0;">We kindly request you to submit your question paper as early as possible, if your schedule permits. Early submissions help us in better planning and preparation for the examination process.</p>
+        </div>
+        
+        <p><strong>Benefits of Early Submission:</strong></p>
+        <ul>
+          <li>Allows time for thorough review and verification</li>
+          <li>Ensures adequate time for any necessary corrections</li>
+          <li>Facilitates better coordination with other examination processes</li>
+          <li>Helps maintain a smooth workflow</li>
+        </ul>
+        
+        <p>Please note that this is a request, and we understand if you need the full allocated time. However, if you are able to complete and submit earlier, it would be greatly appreciated.</p>
+        
+        <p>If you have any questions or concerns, please feel free to contact the examination cell at support@gat.ac.in.</p>
+        
+        <p>Thank you for your understanding and cooperation.</p>
+        
+        <p>Best regards,<br>
+        <strong>Examination Cell</strong><br>
+        Global Academy of Technology<br>
+        Bengaluru, Karnataka</p>
+        
+        <hr style="border: none; border-top: 1px solid #dee2e6; margin: 30px 0;">
+        <p style="font-size: 12px; color: #6c757d; text-align: center;">
+          This is an automated message. Please do not reply to this email.<br>
+          For support, contact: support@gat.ac.in
+        </p>
+      `;
+    }
+
+    try {
+      await sendEmail(email, subject, '', html);
+      res.json({ 
+        success: true, 
+        message: `Message sent successfully to ${name}` 
+      });
+    } catch (err) {
+      console.error('Email error:', err.message);
+      res.status(500).json({ 
+        success: false,
+        error: 'Failed to send email. Please check email configuration.' 
+      });
+    }
+  } catch (error) {
+    console.error('Send message error:', error);
+    res.status(500).json({ 
+      success: false,
+      error: 'Internal server error' 
+    });
   }
 };
