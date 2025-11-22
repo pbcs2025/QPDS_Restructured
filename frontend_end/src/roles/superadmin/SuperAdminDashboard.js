@@ -9,11 +9,14 @@ import DepartmentsPage from "./DepartmentsPage";
 import AdminManageFacultyPage from "./AdminManageFacultyPage";
 import VerifierManagement from "../verifier/VerifierManagement";
 import { io } from "socket.io-client";
+import MTechPapers from "./SubmittedPapers/MTechPapers";
+import MBAPapers from "./SubmittedPapers/MBAPapers";
 
 
 function SuperAdminDashboard() {
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState("dashboard");
+  const [submittedMenuOpen, setSubmittedMenuOpen] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
   const [manageUsersView, setManageUsersView] = useState("cards"); // cards | faculty | verifiers
   const [facultyCount, setFacultyCount] = useState(0);
@@ -422,13 +425,39 @@ function SuperAdminDashboard() {
               📋 View Assignees
             </a>
 
-        <a
-          href="#"
-          className={activeTab === "submitted" ? "active-tab" : ""}
-          onClick={(e) => { e.preventDefault(); setActiveTab("submitted"); }}
+        <button
+          className="sidebar-btn"
+          onClick={() => setSubmittedMenuOpen((prev) => !prev)}
+          aria-expanded={submittedMenuOpen}
+          aria-controls="submitted-submenu"
         >
-          📄 Submitted Papers
-        </a>
+          {submittedMenuOpen ? "▾" : "▸"} 📄 Submitted Papers
+        </button>
+        {submittedMenuOpen && (
+          <div id="submitted-submenu" className="sidebar-submenu">
+            <a
+              href="#"
+              className={activeTab === "submitted" ? "active-tab submenu-item" : "submenu-item"}
+              onClick={(e) => { e.preventDefault(); setActiveTab("submitted"); }}
+            >
+              BE Papers
+            </a>
+            <a
+              href="#"
+              className={activeTab === "submitted_mtech" ? "active-tab submenu-item" : "submenu-item"}
+              onClick={(e) => { e.preventDefault(); setActiveTab("submitted_mtech"); }}
+            >
+              MTech Papers
+            </a>
+            <a
+              href="#"
+              className={activeTab === "submitted_mba" ? "active-tab submenu-item" : "submenu-item"}
+              onClick={(e) => { e.preventDefault(); setActiveTab("submitted_mba"); }}
+            >
+              MBA Papers
+            </a>
+          </div>
+        )}
 
             <a
               href="#"
@@ -649,6 +678,14 @@ function SuperAdminDashboard() {
               </>
             )}
           </>
+        )}
+
+        {activeTab === "submitted_mtech" && (
+          <MTechPapers />
+        )}
+
+        {activeTab === "submitted_mba" && (
+          <MBAPapers />
         )}
 
 

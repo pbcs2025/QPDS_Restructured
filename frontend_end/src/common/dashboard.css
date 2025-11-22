@@ -74,6 +74,28 @@
 }
 
 
+.sidebar-submenu {
+  margin-left: 12px;
+  border-left: 2px solid #5a6578;
+  padding-left: 8px;
+}
+
+.submenu-item {
+  display: block;
+  color: #e2e8f0;
+  padding: 8px 16px;
+  text-decoration: none;
+  font-size: 15px;
+  border-radius: 5px;
+  margin-bottom: 6px;
+}
+
+.submenu-item:hover {
+  background-color: #5a6578;
+  color: #ffffff;
+}
+
+
 .dashboard-content {
   flex: 1;
   padding: 30px;
