@@ -25,15 +25,10 @@ const ROLE_RULES = [
   {
     key: "verifier",
     label: "Verifier",
-    matcher: (username) =>
-      !username.includes("@") &&              // not email
-      username !== "admin" &&
-      username !== "superadmin" &&
-      username !== "super-admin",
+    matcher: (username) => username.startsWith("verifier"),
     type: "verifier",
     destination: "/verifier-dashboard",
-  }
-  ,
+  },
   {
     key: "faculty",
     label: "Faculty",

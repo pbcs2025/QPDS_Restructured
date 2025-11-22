@@ -54,8 +54,6 @@ exports.assignedSubjects = async (_req, res) => {
     const rows = await Assignment.aggregate([
       { $lookup: { from: 'users', localField: 'email', foreignField: 'email', as: 'user' } },
       { $unwind: '$user' },
-      { $lookup: { from: 'subjects', localField: 'subject_code', foreignField: 'subject_code', as: 'subject' } },
-      { $unwind: { path: '$subject', preserveNullAndEmptyArrays: true } },
       { $sort: { subject_code: 1, submit_date: -1 } },
     ]);
 
@@ -64,9 +62,6 @@ exports.assignedSubjects = async (_req, res) => {
       if (!grouped[row.subject_code]) {
         grouped[row.subject_code] = {
           subject_code: row.subject_code,
-          subject_name: row.subject?.subject_name || '',
-          department: row.subject?.department || '',
-          semester: row.subject?.semester || null,
           submit_date: row.submit_date,
           assigned_at: row.assigned_at,
           assignees: [],
