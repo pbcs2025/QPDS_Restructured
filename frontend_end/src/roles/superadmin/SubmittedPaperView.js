@@ -67,8 +67,50 @@ function SubmittedPaperView() {
                       </div>
                     </div>
                     {q.file_url && (
-                      <div style={{ marginTop: '10px' }}>
-                        <img src={`${API_BASE}${q.file_url}`} alt={q.file_name || 'attachment'} style={{ maxWidth: '100%', borderRadius: '8px', border: '1px solid #e9edf3' }} />
+                      <div style={{ 
+                        marginTop: '15px',
+                        padding: '15px',
+                        backgroundColor: '#f8f9fa',
+                        borderRadius: '12px',
+                        border: '2px solid #e9ecef'
+                      }}>
+                        <div style={{ 
+                          fontSize: '14px', 
+                          fontWeight: '600', 
+                          color: '#495057', 
+                          marginBottom: '10px',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '8px'
+                        }}>
+                          🖼️ Diagram/Image Attachment
+                        </div>
+                        <img 
+                          src={`${API_BASE}${q.file_url}`} 
+                          alt={q.file_name || 'diagram attachment'} 
+                          style={{ 
+                            maxWidth: '100%', 
+                            height: 'auto',
+                            borderRadius: '8px', 
+                            border: '1px solid #dee2e6',
+                            boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
+                            cursor: 'pointer',
+                            transition: 'transform 0.2s ease'
+                          }}
+                          onMouseOver={(e) => e.target.style.transform = 'scale(1.02)'}
+                          onMouseOut={(e) => e.target.style.transform = 'scale(1)'}
+                          onClick={() => {
+                            window.open(`${API_BASE}${q.file_url}`, '_blank');
+                          }}
+                        />
+                        <div style={{ 
+                          fontSize: '11px', 
+                          color: '#6c757d', 
+                          marginTop: '8px',
+                          textAlign: 'center'
+                        }}>
+                          Click to view full size
+                        </div>
                       </div>
                     )}
                     {/* Verifier Remarks Display */}
