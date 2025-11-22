@@ -314,6 +314,10 @@ const handleSemesterChange = (semester) => {
       alert("Please select a submission date.");
       return;
     }
+    if (!selectedSemester) {
+      alert("Please select a semester.");
+      return;
+    }
     if (selectedEmails.length === 0) {
       alert("Please select at least one faculty.");
       return;
@@ -331,6 +335,7 @@ const handleSemesterChange = (semester) => {
        users: selectedUsers,
         subjectCode,
         submitDate,
+        semester: selectedSemester,
       }),
     })
       .then((res) => {

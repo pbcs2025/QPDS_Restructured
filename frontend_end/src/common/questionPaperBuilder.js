@@ -4,6 +4,19 @@ import "../App.css";
 import html2canvas from "html2canvas";
 import { jsPDF } from "jspdf";
 import { useLocation } from "react-router-dom";
+import MBAQuestionPaperBuilder from "./MBAQuestionPaperBuilder";
+
+const MBA_SUB_LABELS = ["a", "b", "c"];
+
+const createInitialMBAQuestions = () =>
+  Array.from({ length: 8 }, (_, idx) => ({
+    number: idx + 1,
+    text: "",
+    co: "",
+    level: "",
+    image: null,
+    subQuestions: [],
+  }));
 
 function QuestionPaperBuilder() {
   const API_BASE = process.env.REACT_APP_API_BASE_URL;
@@ -12,7 +25,7 @@ function QuestionPaperBuilder() {
   const [subjectCode, setSubjectCode] = useState("");
   const [semester, setSemester] = useState("");
   const [instructions, setInstructions] = useState("");
-  const [cos, setCOs] = useState([""]);
+  const [cos, setCOs] = useState(["CO1"]);
   const [modules, setModules] = useState([]);
   const [nextGroupNumber, setNextGroupNumber] = useState(1);
   const [isSubmitted, setIsSubmitted] = useState(false);
@@ -21,10 +34,11 @@ function QuestionPaperBuilder() {
   const previewRef = useRef(null);
   const [assignedSubjects, setAssignedSubjects] = useState([]);
   const [facultyEmail, setFacultyEmail] = useState("");
-  const [examType, setExamType] = useState("SEE");
-  const [cieQuestions, setCieQuestions] = useState([]);
-  const [nextCieQuestionId, setNextCieQuestionId] = useState(1);
+  const [examType, setExamType] = useState("BE/MTECH");
   const [draftLoaded, setDraftLoaded] = useState(false);
+  const [mbaQuestions, setMbaQuestions] = useState(() =>
+    createInitialMBAQuestions()
+  );
 
   const markPresets = {
     "a, b, c, d (5 marks each)": [5, 5, 5, 5],
@@ -33,14 +47,35 @@ function QuestionPaperBuilder() {
     "a, b, c (8,8,4 marks)": [8, 8, 4],
   };
 
-  const ciePatterns = {
-    "1 question (10 marks)": { parts: ["main"], marks: [10] },
-    "2 sub-questions (6,4 marks)": { parts: ["a", "b"], marks: [6, 4] },
-    "2 sub-questions (5,5 marks)": { parts: ["a", "b"], marks: [5, 5] },
-    "2 sub-questions (7,3 marks)": { parts: ["a", "b"], marks: [7, 3] },
-    "3 sub-questions (4,3,3 marks)": { parts: ["a", "b", "c"], marks: [4, 3, 3] },
-    "3 sub-questions (5,3,2 marks)": { parts: ["a", "b", "c"], marks: [5, 3, 2] }
+  // Helper function to convert File to base64
+  const fileToBase64 = (file) => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.readAsDataURL(file);
+      reader.onload = () => resolve({
+        data: reader.result,
+        name: file.name,
+        type: file.type,
+        size: file.size
+      });
+      reader.onerror = error => reject(error);
+    });
   };
+
+  // Helper function to convert base64 back to File
+  const base64ToFile = (base64Data) => {
+    if (!base64Data || typeof base64Data === 'string') return base64Data;
+    
+    const byteCharacters = atob(base64Data.data.split(',')[1]);
+    const byteNumbers = new Array(byteCharacters.length);
+    for (let i = 0; i < byteCharacters.length; i++) {
+      byteNumbers[i] = byteCharacters.charCodeAt(i);
+    }
+    const byteArray = new Uint8Array(byteNumbers);
+    return new File([byteArray], base64Data.name, { type: base64Data.type });
+  };
+
+  // CIE patterns removed as CIE flow is no longer supported
 
   /** ------------------------
    * 🔍 Load Faculty Data and Assigned Subjects
@@ -57,6 +92,7 @@ function QuestionPaperBuilder() {
         fetch(`${API_BASE}/faculty/subject-codes/${data.email}`)
           .then(res => res.json())
           .then(subjects => {
+            console.log('📋 Assigned subjects data:', subjects); // Debug log
             setAssignedSubjects(subjects);
             
             // If state was passed from faculty dashboard, pre-select the subject
@@ -65,6 +101,10 @@ function QuestionPaperBuilder() {
               if (selectedSubject) {
                 setSubjectCode(selectedSubject.subject_code);
                 setSubject(selectedSubject.subject_name || "");
+                // Handle semester with fallback
+                const semesterValue = selectedSubject.semester || 1; // Default to 1 if missing
+                setSemester(semesterValue.toString());
+                console.log('🎯 Pre-selecting subject:', selectedSubject); // Debug log
               }
             }
           })
@@ -76,11 +116,18 @@ function QuestionPaperBuilder() {
     }
   }, [API_BASE, location.state]);
 
+  // Ensure CO1 is always present
+  useEffect(() => {
+    if (cos.length === 0) {
+      setCOs(["CO1"]);
+    }
+  }, [cos.length]);
+
   /** ------------------------
    * 💾 Load Draft Data from localStorage
    ------------------------- */
   useEffect(() => {
-    const loadDraftData = () => {
+    const loadDraftData = async () => {
       try {
         const draftKey = `questionPaper_draft_${facultyEmail}`;
         const savedDraft = localStorage.getItem(draftKey);
@@ -94,16 +141,61 @@ function QuestionPaperBuilder() {
             setSubjectCode(draftData.subjectCode || "");
             setSemester(draftData.semester || "");
             setInstructions(draftData.instructions || "");
-            setCOs(draftData.cos || [""]);
-            setModules(draftData.modules || []);
+            setCOs(draftData.cos || ["CO1"]);
+            
+            // Convert base64 images back to File objects for modules
+            const modulesWithFiles = await Promise.all((draftData.modules || []).map(async mod => ({
+              ...mod,
+              groups: await Promise.all((mod.groups || []).map(async group => 
+                await Promise.all((group || []).map(async q => ({
+                  ...q,
+                  image: q.image && typeof q.image === 'object' && q.image.data ? base64ToFile(q.image) : q.image
+                })))
+              ))
+            })));
+
+            const mbaQuestionsWithFiles = draftData.mbaQuestions
+              ? await Promise.all(
+                  draftData.mbaQuestions.map(async (question) => ({
+                    ...question,
+                    text:
+                      question.subQuestions &&
+                      question.subQuestions.length > 0
+                        ? ""
+                        : question.text || "",
+                    image:
+                      question.image &&
+                      typeof question.image === "object" &&
+                      question.image.data
+                        ? base64ToFile(question.image)
+                        : question.image,
+                    subQuestions: await Promise.all(
+                      (question.subQuestions || []).map(async (sub) => ({
+                        ...sub,
+                        image:
+                          sub.image &&
+                          typeof sub.image === "object" &&
+                          sub.image.data
+                            ? base64ToFile(sub.image)
+                            : sub.image,
+                      }))
+                    ),
+                  }))
+                )
+              : createInitialMBAQuestions();
+            
+            setModules(modulesWithFiles);
+            setMbaQuestions(
+              mbaQuestionsWithFiles.length === 8
+                ? mbaQuestionsWithFiles
+                : createInitialMBAQuestions()
+            );
             setNextGroupNumber(draftData.nextGroupNumber || 1);
-            setExamType(draftData.examType || "SEE");
-            setCieQuestions(draftData.cieQuestions || []);
-            setNextCieQuestionId(draftData.nextCieQuestionId || 1);
+            setExamType(draftData.examType || "BE/MTECH");
             setIsSubmitted(draftData.isSubmitted || false);
             setDraftLoaded(true);
             
-            console.log("📄 Draft data loaded successfully");
+            console.log("📄 Draft data loaded successfully with File objects restored");
           }
         }
       } catch (error) {
@@ -154,12 +246,30 @@ function QuestionPaperBuilder() {
       }
     }, 2 * 60 * 1000);
     return () => clearInterval(autoSaveInterval);
-  }, [subject, subjectCode, semester, instructions, cos, modules, examType, cieQuestions, isSubmitted]);
+  }, [
+    subject,
+    subjectCode,
+    semester,
+    instructions,
+    cos,
+    modules,
+    examType,
+    isSubmitted,
+    mbaQuestions,
+  ]);
 
   /** ------------------------
    * 📌 Add / Update Functions
    ------------------------- */
-  const addCO = () => !isSubmitted && setCOs([...cos, ""]);
+  const addCO = () => {
+    if (isSubmitted) return;
+    if (cos.length >= 5) {
+      alert("⚠️ Maximum 5 Course Outcomes (CO1-CO5) allowed.");
+      return;
+    }
+    const nextCO = `CO${cos.length + 1}`;
+    setCOs([...cos, nextCO]);
+  };
   const updateCO = (i, val) => {
     if (isSubmitted) return;
     const updated = [...cos];
@@ -167,17 +277,23 @@ function QuestionPaperBuilder() {
     setCOs(updated);
   };
 
-  // Handle subject code selection and auto-populate subject name
+  // Handle subject code selection and auto-populate subject name and semester
   const handleSubjectCodeChange = (selectedCode) => {
     if (isSubmitted) return;
     setSubjectCode(selectedCode);
     
-    // Find the corresponding subject name
+    // Find the corresponding subject name and semester
     const selectedSubject = assignedSubjects.find(sub => sub.subject_code === selectedCode);
+    console.log('🔍 Selected subject:', selectedSubject); // Debug log
     if (selectedSubject) {
       setSubject(selectedSubject.subject_name || "");
+      // Handle semester with fallback
+      const semesterValue = selectedSubject.semester || 1; // Default to 1 if missing
+      setSemester(semesterValue.toString());
+      console.log('📝 Setting semester to:', semesterValue); // Debug log
     } else {
       setSubject("");
+      setSemester("");
     }
   };
 
@@ -194,6 +310,10 @@ function QuestionPaperBuilder() {
 
   const addEmptyModule = () => {
     if (isSubmitted) return;
+    if (modules.length >= 5) {
+      alert("⚠️ Maximum 5 modules allowed.");
+      return;
+    }
     setModules([
       ...modules,
       {
@@ -224,62 +344,97 @@ function QuestionPaperBuilder() {
     setModules(updatedModules);
   };
 
-  const addCieQuestion = () => {
+  const handleMBAQuestionChange = (questionIndex, key, value) => {
     if (isSubmitted) return;
-    const newQuestion = {
-      id: nextCieQuestionId,
-      pattern: "",
-      subQuestions: [],
-      co: "CO1",
-      level: "L1"
-    };
-    setCieQuestions([...cieQuestions, newQuestion]);
-    setNextCieQuestionId(nextCieQuestionId + 1);
+    setMbaQuestions((prev) => {
+      const updated = [...prev];
+      const current = updated[questionIndex];
+      if (!current) {
+        return prev;
+      }
+
+      if (key === "text" && current.subQuestions.length > 0) {
+        return prev;
+      }
+
+      updated[questionIndex] = {
+        ...current,
+        [key]: value,
+      };
+      return updated;
+    });
   };
 
-  const updateCieQuestionPattern = (questionId, pattern) => {
+  const addMbaSubQuestion = (questionIndex) => {
     if (isSubmitted) return;
-    const patternData = ciePatterns[pattern];
-    if (!patternData) return;
+    setMbaQuestions((prev) => {
+      const updated = [...prev];
+      const selectedQuestion = updated[questionIndex];
 
-    const updatedQuestions = cieQuestions.map(q => 
-      q.id === questionId 
-        ? { 
-            ...q, 
-            pattern, 
-            subQuestions: patternData.parts.map((part, index) => ({
-              label: part,
-              text: "",
-              marks: patternData.marks[index],
-              co: q.co,
-              level: q.level,
-              image: null
-            }))
-          } 
-        : q
-    );
-    setCieQuestions(updatedQuestions);
+      if (
+        !selectedQuestion ||
+        selectedQuestion.subQuestions.length >= MBA_SUB_LABELS.length
+      ) {
+        return prev;
+      }
+
+      const nextLabel =
+        MBA_SUB_LABELS[selectedQuestion.subQuestions.length] || "a";
+
+      const newSubQuestion = {
+        label: nextLabel,
+        text: "",
+        co: "",
+        level: "",
+        marks: "",
+        image: null,
+      };
+
+      updated[questionIndex] = {
+        ...selectedQuestion,
+        text:
+          selectedQuestion.subQuestions.length === 0
+            ? ""
+            : selectedQuestion.text,
+        subQuestions: [...selectedQuestion.subQuestions, newSubQuestion],
+      };
+
+      return updated;
+    });
   };
 
-  const updateCieSubQuestion = (questionId, subIndex, key, val) => {
+  const handleMBASubQuestionChange = (
+    questionIndex,
+    subIndex,
+    key,
+    value
+  ) => {
     if (isSubmitted) return;
-    const updatedQuestions = cieQuestions.map(q => 
-      q.id === questionId 
-        ? {
-            ...q,
-            subQuestions: q.subQuestions.map((sub, index) => 
-              index === subIndex ? { ...sub, [key]: val } : sub
-            )
-          }
-        : q
-    );
-    setCieQuestions(updatedQuestions);
+
+    setMbaQuestions((prev) => {
+      const updated = [...prev];
+      const question = updated[questionIndex];
+
+      if (!question || !question.subQuestions[subIndex]) {
+        return prev;
+      }
+
+      const updatedSubQuestions = [...question.subQuestions];
+      updatedSubQuestions[subIndex] = {
+        ...updatedSubQuestions[subIndex],
+        [key]: value,
+      };
+
+      updated[questionIndex] = {
+        ...question,
+        subQuestions: updatedSubQuestions,
+      };
+
+      return updated;
+    });
   };
 
-  const deleteCieQuestion = (questionId) => {
-    if (isSubmitted) return;
-    setCieQuestions(cieQuestions.filter(q => q.id !== questionId));
-  };
+  // CIE actions removed as CIE flow is no longer supported
 
   const deleteModule = (modIndex) => {
     if (isSubmitted) return;
@@ -297,46 +452,71 @@ function QuestionPaperBuilder() {
       return false;
     }
 
-    // Validate CIE questions
-    if (examType === "CIE") {
-      for (let question of cieQuestions) {
-        if (!question.pattern) {
-          alert(`⚠️ CIE Question ${question.id} - Please select a pattern.`);
-          return false;
-        }
+    if (examType === "BE/MTECH") {
+      // Validate modules (BE/MTECH)
+      for (let mod of modules) {
+        for (let group of mod.groups) {
+          // Validation: all sub-questions in a group must be filled
+          const anyFilled = group.some((q) => q.text.trim() !== "");
+          const anyEmpty = group.some((q) => q.text.trim() === "");
+          if (anyFilled && anyEmpty) {
+            alert(
+              `⚠️ Incomplete group in ${mod.title}, question set ${group[0].label[0]}`
+            );
+            return false;
+          }
 
-        for (let sub of question.subQuestions) {
-          if (!sub.text.trim()) {
-            alert(`⚠️ CIE Question ${question.id} - Please fill all sub-questions.`);
+          // Validation: marks should not exceed 20
+          const totalMarks = group.reduce(
+            (sum, q) => sum + (q.marks || 0),
+            0
+          );
+          if (totalMarks > 20) {
+            alert(
+              `⚠️ Marks exceed 20 in ${mod.title}, question set ${group[0].label[0]}`
+            );
             return false;
           }
         }
       }
-    }
+    } else if (examType === "MBA") {
+      for (let question of mbaQuestions) {
+        const hasSubs = question.subQuestions.length > 0;
 
-    // Validate SEE modules (existing logic)
-    for (let mod of modules) {
-      for (let group of mod.groups) {
-        // Validation: all sub-questions in a group must be filled
-        const anyFilled = group.some((q) => q.text.trim() !== "");
-        const anyEmpty = group.some((q) => q.text.trim() === "");
-        if (anyFilled && anyEmpty) {
-          alert(
-            `⚠️ Incomplete group in ${mod.title}, question set ${group[0].label[0]}`
-          );
+        if (!hasSubs && !question.text.trim()) {
+          alert(`⚠️ Please enter text for question Q${question.number}.`);
           return false;
         }
 
-        // Validation: marks should not exceed 20
-        const totalMarks = group.reduce(
-          (sum, q) => sum + (q.marks || 0),
-          0
-        );
-        if (totalMarks > 20) {
-          alert(
-            `⚠️ Marks exceed 20 in ${mod.title}, question set ${group[0].label[0]}`
+        if (hasSubs) {
+          if (question.text.trim().length > 0) {
+            alert(
+              `⚠️ Q${question.number} should not have main text when sub-questions exist.`
+            );
+            return false;
+          }
+
+          const incompleteSub = question.subQuestions.some(
+            (sub) => !sub.text.trim()
           );
-          return false;
+          if (incompleteSub) {
+            alert(
+              `⚠️ Please fill all sub-questions for Q${question.number}.`
+            );
+            return false;
+          }
+
+          const totalSubMarks = question.subQuestions.reduce(
+            (sum, sub) => sum + (parseInt(sub.marks, 10) || 0),
+            0
+          );
+
+          if (totalSubMarks !== 20) {
+            alert(
+              `⚠️ Total marks for sub-questions in Q${question.number} must equal 20.`
+            );
+            return false;
+          }
         }
       }
     }
@@ -346,28 +526,39 @@ function QuestionPaperBuilder() {
   /** ------------------------
    * 💾 Save Draft to localStorage
    ------------------------- */
-  const saveDraftToLocalStorage = () => {
+  const saveDraftToLocalStorage = async () => {
     try {
       const draftKey = `questionPaper_draft_${facultyEmail}`;
       
       // Convert File objects to base64 for storage
-      const modulesForStorage = modules.map(mod => ({
+      const modulesForStorage = await Promise.all(modules.map(async mod => ({
         ...mod,
-        groups: mod.groups.map(group => 
-          group.map(q => ({
+        groups: await Promise.all((mod.groups || []).map(async group => 
+          await Promise.all((group || []).map(async q => ({
             ...q,
-            image: q.image instanceof File ? URL.createObjectURL(q.image) : q.image
-          }))
-        )
-      }));
-      
-      const cieQuestionsForStorage = cieQuestions.map(q => ({
-        ...q,
-        subQuestions: q.subQuestions.map(sub => ({
-          ...sub,
-          image: sub.image instanceof File ? URL.createObjectURL(sub.image) : sub.image
+            image: q.image instanceof File ? await fileToBase64(q.image) : q.image
+          })))
+        ))
+      })));
+
+      const mbaQuestionsForStorage = await Promise.all(
+        mbaQuestions.map(async (question) => ({
+          ...question,
+          image:
+            question.image instanceof File
+              ? await fileToBase64(question.image)
+              : question.image,
+          subQuestions: await Promise.all(
+            (question.subQuestions || []).map(async (sub) => ({
+              ...sub,
+              image:
+                sub.image instanceof File
+                  ? await fileToBase64(sub.image)
+                  : sub.image,
+            }))
+          ),
         }))
-      }));
+      );
       
       const draftData = {
         subject,
@@ -378,8 +569,7 @@ function QuestionPaperBuilder() {
         modules: modulesForStorage,
         nextGroupNumber,
         examType,
-        cieQuestions: cieQuestionsForStorage,
-        nextCieQuestionId,
+        mbaQuestions: mbaQuestionsForStorage,
         isSubmitted,
         lastSavedAt: new Date().toISOString()
       };
@@ -400,7 +590,7 @@ function QuestionPaperBuilder() {
       const now = new Date().toISOString();
 
       // Always save draft to localStorage first
-      saveDraftToLocalStorage();
+      await saveDraftToLocalStorage();
 
       // If it's just a draft, don't send to server
       if (isDraft) {
@@ -408,76 +598,131 @@ function QuestionPaperBuilder() {
         return;
       }
 
-      // Save CIE questions to server
-      if (examType === "CIE") {
-        for (let question of cieQuestions) {
-          for (let sub of question.subQuestions) {
-            if (sub.text.trim() !== "") {
-              const formData = new FormData();
-              formData.append("subject_code", subjectCode);
-              formData.append("subject_name", subject);
-              formData.append("semester", semester);
-              formData.append("question_number", `Q${question.id}(${sub.label})`);
-              formData.append("question_text", sub.text);
-              formData.append("co", sub.co);
-              formData.append("level", sub.level);
-              formData.append("marks", sub.marks);
-              formData.append("faculty_email", facultyEmail);
-              formData.append("exam_type", "CIE");
-              if (sub.image) formData.append("file", sub.image);
-
-              await axios.post(
-                `${API_BASE}/question-bank`,
-                formData,
-                {
-                  headers: { "Content-Type": "multipart/form-data" },
-                }
-              );
-            }
-          }
+      const submitQuestionToServer = async ({
+        questionNumber,
+        questionText,
+        co,
+        level,
+        marks,
+        image,
+      }) => {
+        if (!questionText || !questionText.trim()) {
+          return;
         }
-      }
 
-      // Save SEE modules to server
-      for (let mod of modules) {
-        for (let group of mod.groups) {
-          for (let q of group) {
-            if (q.text.trim() !== "") {
-              const formData = new FormData();
-              formData.append("subject_code", subjectCode);
-              formData.append("subject_name", subject);
-              formData.append("semester", semester);
-              formData.append("question_number", q.label);
-              formData.append("question_text", q.text);
-              formData.append("co", q.co);
-              formData.append("level", q.level);
-              formData.append("marks", q.marks);
-              formData.append("faculty_email", facultyEmail);
-              formData.append("exam_type", "SEE");
-              if (q.image) formData.append("file", q.image);
+        const formData = new FormData();
+        formData.append("subject_code", subjectCode);
+        formData.append("subject_name", subject);
+        formData.append("semester", semester);
+        formData.append("question_number", questionNumber);
+        formData.append("question_text", questionText);
+        formData.append("co", co || "");
+        formData.append("level", level || "");
+        formData.append("marks", marks ?? 0);
+        formData.append("faculty_email", facultyEmail);
+        formData.append("exam_type", examType);
 
-              try {
-                const response = await axios.post(
-                  `${API_BASE}/question-bank`,
-                  formData,
-                  {
-                    headers: { "Content-Type": "multipart/form-data" },
-                  }
-                );
-                console.log(`✅ Question ${q.label} saved:`, response.data);
-              } catch (error) {
-                console.error(`❌ Error saving question ${q.label}:`, error.response?.data || error.message);
-                throw new Error(`Failed to save question ${q.label}: ${error.response?.data?.error || error.message}`);
+        if (image && image instanceof File) {
+          formData.append("file", image);
+          console.log(
+            `📎 Uploading file for question ${questionNumber}:`,
+            image.name,
+            image.size,
+            "bytes"
+          );
+        } else if (image) {
+          console.log(
+            `⚠️ Question ${questionNumber} has image but it's not a File object:`,
+            typeof image
+          );
+        }
+
+        try {
+          const response = await axios.post(
+            `${API_BASE}/question-bank`,
+            formData,
+            {
+              headers: { "Content-Type": "multipart/form-data" },
+            }
+          );
+          console.log(`✅ Question ${questionNumber} saved:`, response.data);
+        } catch (error) {
+          console.error(
+            `❌ Error saving question ${questionNumber}:`,
+            error.response?.data || error.message
+          );
+          throw new Error(
+            `Failed to save question ${questionNumber}: ${
+              error.response?.data?.error || error.message
+            }`
+          );
+        }
+      };
+
+      if (examType === "BE/MTECH") {
+        for (let mod of modules) {
+          for (let group of mod.groups) {
+            for (let q of group) {
+              if (q.text.trim() !== "") {
+                await submitQuestionToServer({
+                  questionNumber: q.label,
+                  questionText: q.text,
+                  co: q.co,
+                  level: q.level,
+                  marks: q.marks,
+                  image: q.image,
+                });
               }
             }
           }
         }
+      } else if (examType === "MBA") {
+        for (let question of mbaQuestions) {
+          if (question.subQuestions.length === 0) {
+            await submitQuestionToServer({
+              questionNumber: `Q${question.number}`,
+              questionText: question.text,
+              co: question.co,
+              level: question.level,
+              marks: 20,
+              image: question.image,
+            });
+          } else {
+            for (let sub of question.subQuestions) {
+              await submitQuestionToServer({
+                questionNumber: `Q${question.number}${sub.label}`,
+                questionText: sub.text,
+                co: sub.co,
+                level: sub.level,
+                marks: parseInt(sub.marks, 10) || 0,
+                image: sub.image,
+              });
+            }
+          }
+        }
+      } else {
+        throw new Error(`Unsupported exam type: ${examType}`);
       }
 
       // Mark as submitted and clear draft
       setIsSubmitted(true);
       const draftKey = `questionPaper_draft_${facultyEmail}`;
       localStorage.removeItem(draftKey);
+      
+      // Update assignment status to submitted
+      try {
+        await axios.post(`${API_BASE}/assignments/update-status`, {
+          email: facultyEmail,
+          subjectCode: subjectCode
+        });
+        
+        // Refresh assigned subjects to hide submitted one
+        const response = await fetch(`${API_BASE}/faculty/subject-codes/${facultyEmail}`);
+        const updatedSubjects = await response.json();
+        setAssignedSubjects(updatedSubjects);
+      } catch (error) {
+        console.error('Error updating assignment status:', error);
+      }
       
       alert("✅ All questions submitted successfully!");
     } catch (error) {
@@ -515,12 +760,11 @@ function QuestionPaperBuilder() {
       setSubjectCode("");
       setSemester("");
       setInstructions("");
-      setCOs([""]);
+      setCOs(["CO1"]);
       setModules([]);
       setNextGroupNumber(1);
-      setExamType("SEE");
-      setCieQuestions([]);
-      setNextCieQuestionId(1);
+      setExamType("BE/MTECH");
+      setMbaQuestions(createInitialMBAQuestions());
       setIsSubmitted(false);
       setDraftLoaded(false);
       setLastSavedAt(null);
@@ -532,42 +776,7 @@ function QuestionPaperBuilder() {
   /** ------------------------
    * ⬇️ Download Preview as PDF
    * ------------------------- */
-  const downloadPreviewAsPdf = async () => {
-    try {
-      const element = previewRef.current;
-      if (!element) return;
-
-      const canvas = await html2canvas(element, { scale: 2, useCORS: true });
-      const imgData = canvas.toDataURL("image/png");
-
-      const pdf = new jsPDF("p", "mm", "a4");
-      const pageWidth = pdf.internal.pageSize.getWidth();
-      const pageHeight = pdf.internal.pageSize.getHeight();
-
-      const imgWidth = pageWidth;
-      const imgHeight = (canvas.height * imgWidth) / canvas.width;
-
-      let heightLeft = imgHeight;
-      let position = 0;
-
-      pdf.addImage(imgData, "PNG", 0, position, imgWidth, imgHeight);
-      heightLeft -= pageHeight;
-
-      while (heightLeft > 0) {
-        position = heightLeft - imgHeight;
-        pdf.addPage();
-        pdf.addImage(imgData, "PNG", 0, position, imgWidth, imgHeight);
-        heightLeft -= pageHeight;
-      }
-
-      const fileName = `${subjectCode || "question-paper"}.pdf`;
-      pdf.save(fileName);
-    } catch (err) {
-      console.error("Failed to download PDF", err);
-      alert("❌ Failed to generate PDF. Please try again.");
-    }
-  };
-
+  
   /** ------------------------
    * 🎨 UI Rendering
    ------------------------- */
@@ -578,7 +787,11 @@ function QuestionPaperBuilder() {
         <p>Question Paper Builder</p>
       </div>
 
-      <div className="main-content">
+      <div
+        className={`main-content${
+          examType === "MBA" ? " mba-theme" : ""
+        }`}
+      >
         <h1>📘 Question Paper Setter</h1>
 
         {draftLoaded && (
@@ -607,8 +820,8 @@ function QuestionPaperBuilder() {
             onChange={(e) => setExamType(e.target.value)}
             disabled={isSubmitted}
           >
-            <option value="SEE">SEE</option>
-            <option value="CIE">CIE</option>
+            <option value="BE/MTECH">BE/MTECH</option>
+            <option value="MBA">MBA</option>
           </select>
         </div>
 
@@ -621,7 +834,9 @@ function QuestionPaperBuilder() {
               disabled={isSubmitted}
             >
               <option value="">Select Assigned Subject Code</option>
-              {assignedSubjects.map((sub, index) => (
+              {assignedSubjects
+                .filter(sub => sub.status !== 'submitted') // Hide submitted subjects
+                .map((sub, index) => (
                 <option key={index} value={sub.subject_code}>
                   {sub.subject_code}
                 </option>
@@ -643,13 +858,33 @@ function QuestionPaperBuilder() {
             disabled={isSubmitted}
           />
           <label>Semester:</label>
-          <input
-            type="text"
-            value={semester}
-            onChange={(e) => setSemester(e.target.value)}
-            placeholder="e.g., 4th Semester B.E."
-            disabled={isSubmitted}
-          />
+          {assignedSubjects.length > 0 ? (
+            <select
+              value={semester || ""}
+              onChange={(e) => setSemester(e.target.value)}
+              disabled={isSubmitted}
+            >
+              <option value="">Select Semester</option>
+              {[1, 2, 3, 4, 5, 6, 7, 8].map((sem) => (
+                <option key={sem} value={sem}>
+                  {sem}
+                </option>
+              ))}
+            </select>
+          ) : (
+            <select
+              value={semester}
+              onChange={(e) => setSemester(e.target.value)}
+              disabled={isSubmitted}
+            >
+              <option value="">Select Semester</option>
+              {[1, 2, 3, 4, 5, 6, 7, 8].map((sem) => (
+                <option key={sem} value={sem}>
+                  {sem}
+                </option>
+              ))}
+            </select>
+          )}
         </div>
 
         <label>Student Instructions:</label>
@@ -667,17 +902,37 @@ function QuestionPaperBuilder() {
             key={i}
             value={co}
             onChange={(e) => updateCO(i, e.target.value)}
-            placeholder={`CO${i + 1}`}
+            placeholder="Enter CO description"
             disabled={isSubmitted}
           />
         ))}
-        {!isSubmitted && <button onClick={addCO}>➕ Add CO</button>}
+        {!isSubmitted && cos.length < 5 && <button onClick={addCO}>➕ Add CO</button>}
+        {cos.length >= 5 && (
+          <p style={{ color: '#666', fontSize: '14px', marginTop: '10px' }}>
+            ✅ Maximum Course Outcomes reached (CO1-CO5)
+          </p>
+        )}
 
-        {examType === "SEE" && (
+        {examType === "BE/MTECH" && (
           <>
             <h3>📚 Modules</h3>
-            {!isSubmitted && <button onClick={addEmptyModule}>➕ Add Module</button>}
+            {!isSubmitted && modules.length < 5 && <button onClick={addEmptyModule}>➕ Add Module</button>}
+            {modules.length >= 5 && !isSubmitted && (
+              <p style={{ color: '#666', fontSize: '14px', marginTop: '10px' }}>
+                ✅ Maximum Modules reached (5)
+              </p>
+            )}
           </>
+        )}
+
+        {examType === "MBA" && (
+          <MBAQuestionPaperBuilder
+            questions={mbaQuestions}
+            onQuestionChange={handleMBAQuestionChange}
+            onAddSubQuestion={addMbaSubQuestion}
+            onSubQuestionChange={handleMBASubQuestionChange}
+            isSubmitted={isSubmitted}
+          />
         )}
 
         {examType === "CIE" && (
@@ -694,21 +949,13 @@ function QuestionPaperBuilder() {
           </>
         )}
 
-        {examType === "SEE" && modules.map((mod, modIndex) => (
+        {examType === "BE/MTECH" && modules.map((mod, modIndex) => (
           <div key={modIndex} className="module-box">
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <h4>{mod.title}</h4>
-              {!isSubmitted && (
-                <button 
-                  onClick={() => deleteModule(modIndex)}
-                  className="delete-question-btn"
-                  style={{ marginLeft: '10px' }}
-                >
-                  🗑️ Delete Module
-                </button>
-              )}
+              {/* Delete Module removed */}
             </div>
-            {mod.groups.length === 0 ? (
+            {!mod.groups || mod.groups.length === 0 ? (
               !isSubmitted && (
                 <>
                   <label>Choose Question Pattern:</label>
@@ -820,9 +1067,11 @@ function QuestionPaperBuilder() {
                         }
                         disabled={isSubmitted}
                       />
-                      {q.image && q.image instanceof File && (
+                      {q.image && (
                         <img
-                          src={URL.createObjectURL(q.image)}
+                          src={q.image instanceof File ? URL.createObjectURL(q.image) : 
+                               (q.image && typeof q.image === 'object' && q.image.data) ? q.image.data : 
+                               q.image}
                           alt="question"
                           style={{
                             maxWidth: "150px",
@@ -844,118 +1093,7 @@ function QuestionPaperBuilder() {
           </div>
         ))}
 
-        {/* CIE Questions Section */}
-        {examType === "CIE" && (
-          <div className="cie-questions-section">
-            {cieQuestions.map((question) => (
-              <div key={question.id} className="cie-question-box">
-                <div className="question-header">
-                  <h4>Question {question.id}</h4>
-                  {!isSubmitted && (
-                    <button 
-                      onClick={() => deleteCieQuestion(question.id)}
-                      className="delete-question-btn"
-                    >
-                      🗑️ Delete
-                    </button>
-                  )}
-                </div>
-
-                <div className="pattern-selection">
-                  <label>Choose Marks Distribution Pattern:</label>
-                  <select
-                    value={question.pattern}
-                    onChange={(e) => updateCieQuestionPattern(question.id, e.target.value)}
-                    disabled={isSubmitted}
-                  >
-                    <option value="">-- Select Pattern --</option>
-                    {Object.keys(ciePatterns).map((pattern, i) => (
-                      <option key={i} value={pattern}>
-                        {pattern}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                {question.subQuestions.length > 0 && (
-                  <div className="sub-questions">
-                    {question.subQuestions.map((sub, subIndex) => (
-                      <div key={subIndex} className="sub-question">
-                        <div className="sub-question-header">
-                          <label>{sub.label === "main" ? `${question.id})` : `${question.id}${sub.label})`}</label>
-                          <span className="marks-display">[{sub.marks} marks]</span>
-                        </div>
-                        
-                        <textarea
-                          value={sub.text}
-                          onChange={(e) => updateCieSubQuestion(question.id, subIndex, "text", e.target.value)}
-                          placeholder="Question text"
-                          rows={3}
-                          disabled={isSubmitted}
-                        />
-                        
-                        <div className="sub-question-meta">
-                          <select
-                            value={sub.co}
-                            onChange={(e) => updateCieSubQuestion(question.id, subIndex, "co", e.target.value)}
-                            disabled={isSubmitted}
-                            className="small"
-                          >
-                            <option value="CO1">CO1</option>
-                            <option value="CO2">CO2</option>
-                            <option value="CO3">CO3</option>
-                            <option value="CO4">CO4</option>
-                            <option value="CO5">CO5</option>
-                          </select>
-                          
-                          <select
-                            value={sub.level}
-                            onChange={(e) => updateCieSubQuestion(question.id, subIndex, "level", e.target.value)}
-                            disabled={isSubmitted}
-                            className="small"
-                          >
-                            <option value="L1">L1</option>
-                            <option value="L2">L2</option>
-                            <option value="L3">L3</option>
-                            <option value="L4">L4</option>
-                            <option value="L5">L5</option>
-                          </select>
-                          
-                          <input
-                            type="number"
-                            value={sub.marks}
-                            onChange={(e) => updateCieSubQuestion(question.id, subIndex, "marks", parseInt(e.target.value) || 0)}
-                            className="small"
-                            disabled={isSubmitted}
-                          />
-                          
-                          <input
-                            type="file"
-                            accept="image/*"
-                            onChange={(e) => updateCieSubQuestion(question.id, subIndex, "image", e.target.files[0] || null)}
-                            disabled={isSubmitted}
-                          />
-                          
-                          {sub.image && sub.image instanceof File && (
-                            <img
-                              src={URL.createObjectURL(sub.image)}
-                              alt="question"
-                              style={{
-                                maxWidth: "150px",
-                                display: "block",
-                                marginTop: "5px",
-                              }}
-                            />
-                          )}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            ))}
-          </div>
-        )}
+        {/* CIE Questions Section removed */}
 
         <hr />
         <h2>🖨 Question Paper Preview</h2>
@@ -976,53 +1114,30 @@ function QuestionPaperBuilder() {
             ))}
           </ul>
 
-          {/* CIE Questions Preview */}
-          {examType === "CIE" && cieQuestions.map((question, questionIndex) => (
-            <div key={question.id}>
-              <h4>Question {question.id}</h4>
-              {question.subQuestions.length === 0 ? (
-                <em>Pattern not selected yet</em>
-              ) : (
-                question.subQuestions.map((sub, subIndex) => (
-                  <div key={subIndex}>
-                    {sub.label === "main" ? `${question.id})` : `${question.id}${sub.label})`} {sub.text} <strong>[{sub.marks} marks]</strong>
-                    <em> CO: {sub.co || "N/A"}</em>
-                    <em> | L: {sub.level || "N/A"}</em>
-                    {sub.image && sub.image instanceof File && (
-                      <img
-                        src={URL.createObjectURL(sub.image)}
-                        alt="preview"
-                        style={{ maxWidth: "150px", display: "block" }}
-                      />
-                    )}
-                  </div>
-                ))
-              )}
-              {/* Add --OR-- separator between questions (except for the last question) */}
-              {questionIndex < cieQuestions.length - 1 && (
-                <p className="or-text">
-                  <strong>-- OR --</strong>
-                </p>
-              )}
-            </div>
-          ))}
+          {examType === "MBA" && (
+            <p className="mba-preview-note">
+             
+            </p>
+          )}
 
-          {/* SEE Modules Preview - Only for SEE exam type */}
-          {examType === "SEE" && modules.map((mod, modIndex) => (
+          {/* Modules Preview - Only for BE/MTECH exam type */}
+          {examType === "BE/MTECH" && modules.map((mod, modIndex) => (
             <div key={modIndex}>
               <h4>{mod.title}</h4>
               {mod.groups.length === 0 ? (
                 <em>Pattern not selected yet</em>
               ) : (
                 <>
-                  {mod.groups[0].map((q, i) => (
+                  {(mod.groups[0] || []).map((q, i) => (
                     <div key={i}>
                       {q.label}) {q.text} <strong>[{q.marks} marks]</strong>
                       <em> CO: {q.co || "N/A"}</em>
                       <em> | L: {q.level || "N/A"}</em>
-                      {q.image && q.image instanceof File && (
+                      {q.image && (
                         <img
-                          src={URL.createObjectURL(q.image)}
+                          src={q.image instanceof File ? URL.createObjectURL(q.image) : 
+                               (q.image && typeof q.image === 'object' && q.image.data) ? q.image.data : 
+                               q.image}
                           alt="preview"
                           style={{ maxWidth: "150px", display: "block" }}
                         />
@@ -1032,14 +1147,16 @@ function QuestionPaperBuilder() {
                   <p className="or-text">
                     <strong>-- OR --</strong>
                   </p>
-                  {mod.groups[1].map((q, i) => (
+                  {(mod.groups[1] || []).map((q, i) => (
                     <div key={i}>
                       {q.label}) {q.text} <strong>[{q.marks} marks]</strong>
                       <em> CO: {q.co || "N/A"}</em>
                       <em> | L: {q.level || "N/A"}</em>
-                      {q.image && q.image instanceof File && (
+                      {q.image && (
                         <img
-                          src={URL.createObjectURL(q.image)}
+                          src={q.image instanceof File ? URL.createObjectURL(q.image) : 
+                               (q.image && typeof q.image === 'object' && q.image.data) ? q.image.data : 
+                               q.image}
                           alt="preview"
                           style={{ maxWidth: "150px", display: "block" }}
                         />
@@ -1050,6 +1167,37 @@ function QuestionPaperBuilder() {
               )}
             </div>
           ))}
+
+          {examType === "MBA" &&
+            mbaQuestions.map((question) => (
+              <div key={question.number} className="mba-preview-card">
+                <p>
+                  <strong>Q{question.number}.</strong>{" "}
+                  {!question.subQuestions.length && question.text}
+                  <strong>
+                    [
+                    {question.subQuestions.length > 0
+                      ? "20 marks (split)"
+                      : "20 marks"}
+                    ]
+                  </strong>
+                  <em> CO: {question.co || "N/A"}</em>
+                  <em> | L: {question.level || "N/A"}</em>
+                </p>
+                {question.subQuestions.length > 0 && (
+                  <ul>
+                    {question.subQuestions.map((sub) => (
+                      <li key={`${question.number}-${sub.label}`}>
+                        {sub.label}) {sub.text}{" "}
+                        <strong>[{sub.marks || 0} marks]</strong>
+                        <em> CO: {sub.co || "N/A"}</em>
+                        <em> | L: {sub.level || "N/A"}</em>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            ))}
         </div>
 
         <div className="action-buttons">
@@ -1074,9 +1222,7 @@ function QuestionPaperBuilder() {
               🗑️ Clear Draft
             </button>
           )}
-          <button className="save-btn" onClick={downloadPreviewAsPdf}>
-            ⬇️ Download PDF
-          </button>
+         
         </div>
         {isSubmitted && (
           <p className="submitted-text">

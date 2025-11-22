@@ -15,6 +15,7 @@
 .main-content {
   flex: 1;
   padding: 20px;
+  background-color: #f3e8ff;
 }
 
 .module-box {
@@ -22,7 +23,7 @@
   border-radius: 12px;
   padding: 15px;
   margin-bottom: 20px;
-  background: #fff;
+  background:#fff;
 }
 
 .question-row {
@@ -330,4 +331,219 @@
 .sub-question-meta input[type="file"] {
   flex: 1;
   min-width: 150px;
+}
+
+/* MBA Builder Theme */
+.main-content.mba-theme {
+  background: #f0f5ff;
+}
+
+.mba-builder {
+  background: #e7f0ff;
+  border: 1px solid #a8c5ff;
+  border-radius: 16px;
+  padding: 20px;
+  margin-bottom: 25px;
+  box-shadow: 0 6px 20px rgba(17, 62, 125, 0.08);
+}
+
+.mba-instructions-banner {
+  background: #1f4d99;
+  color: #fff;
+  padding: 14px 18px;
+  border-radius: 10px;
+  font-weight: 600;
+  margin-bottom: 20px;
+}
+
+.mba-question-card {
+  background: #ffffff;
+  border: 1px solid #b3ccff;
+  border-left: 6px solid #3c7dff;
+  border-radius: 14px;
+  padding: 18px;
+  margin-bottom: 20px;
+  box-shadow: 0 6px 18px rgba(19, 60, 130, 0.08);
+}
+
+.mba-question-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+  color: #133b7c;
+}
+
+.mba-question-card textarea {
+  width: 100%;
+  min-height: 90px;
+  border-radius: 10px;
+  border: 1px solid #c6d8ff;
+  padding: 10px 12px;
+  margin-bottom: 14px;
+  font-size: 15px;
+  resize: vertical;
+}
+
+.mba-total-marks {
+  background: #dfe9ff;
+  color: #153c7a;
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-weight: 600;
+  font-size: 13px;
+}
+
+.mba-main-meta {
+  display: flex;
+  gap: 20px;
+  flex-wrap: wrap;
+  margin-bottom: 14px;
+}
+
+.mba-main-meta label {
+  display: block;
+  font-weight: 600;
+  color: #103368;
+  margin-bottom: 6px;
+}
+
+.mba-main-meta select,
+.mba-main-meta input[type="number"] {
+  padding: 8px 10px;
+  border: 1px solid #c6d8ff;
+  border-radius: 8px;
+  min-width: 140px;
+}
+
+.mba-file-upload {
+  margin-bottom: 18px;
+}
+
+.mba-file-upload label {
+  font-weight: 600;
+  color: #0f2d63;
+}
+
+.mba-file-upload input[type="file"] {
+  display: block;
+  margin-top: 8px;
+}
+
+.mba-file-upload img {
+  max-width: 180px;
+  margin-top: 8px;
+  border-radius: 8px;
+  border: 1px solid #d3e2ff;
+}
+
+.mba-sub-section {
+  background: #f5f9ff;
+  border: 1px dashed #9bb7ff;
+  border-radius: 12px;
+  padding: 16px;
+}
+
+.mba-sub-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  color: #1a3b75;
+  margin-bottom: 12px;
+}
+
+.mba-sub-card {
+  background: #ffffff;
+  border: 1px solid #c8d8ff;
+  border-radius: 12px;
+  padding: 14px;
+  margin-bottom: 15px;
+}
+
+.mba-sub-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 10px;
+  color: #15386f;
+}
+
+.mba-sub-card textarea {
+  width: 100%;
+  min-height: 80px;
+  border-radius: 10px;
+  border: 1px solid #d3e1ff;
+  padding: 10px 12px;
+  margin-bottom: 12px;
+}
+
+.mba-sub-meta {
+  display: flex;
+  gap: 16px;
+  flex-wrap: wrap;
+  margin-bottom: 10px;
+}
+
+.mba-sub-meta label {
+  display: block;
+  font-weight: 600;
+  color: #0e2f66;
+  margin-bottom: 4px;
+}
+
+.mba-sub-meta input,
+.mba-sub-meta select {
+  padding: 8px 10px;
+  border-radius: 8px;
+  border: 1px solid #c6d8ff;
+  min-width: 120px;
+}
+
+.mba-main-question-locked {
+  background: #f8fbff;
+  border: 1px dashed #8fb4ff;
+  border-radius: 10px;
+  padding: 12px;
+  color: #0f356c;
+  font-weight: 600;
+  margin-bottom: 14px;
+}
+
+.mba-add-sub-btn {
+  background: #1e5eff;
+  color: #fff;
+  border: none;
+  padding: 10px 20px;
+  border-radius: 999px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.2s ease;
+}
+
+.mba-add-sub-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.mba-add-sub-btn:not(:disabled):hover {
+  background: #154acc;
+}
+
+.mba-preview-note {
+  background: #e7f0ff;
+  border-left: 4px solid #3c7dff;
+  padding: 10px 16px;
+  border-radius: 8px;
+  color: #113269;
+  margin-bottom: 16px;
+}
+
+.mba-preview-card {
+  border: 1px solid #c6d8ff;
+  border-radius: 12px;
+  padding: 14px;
+  margin-bottom: 12px;
+  background: #fdfdff;
 }

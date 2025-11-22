@@ -15,6 +15,7 @@ router.get('/api/assignments/:subjectCode', require('../controllers/assignmentCo
 router.get('/api/faculty/assignments/:email', require('../controllers/assignmentController').getFacultyAssignments);
 router.get('/api/faculty/subject-codes/:email', require('../controllers/assignmentController').getFacultySubjectCodes);
 router.post('/api/assignment/update-status', require('../controllers/assignmentController').updateAssignmentStatus);
+router.post('/api/assignments/migrate', require('../controllers/assignmentController').migrateAssignments);
 // Compatibility alias for legacy frontend route
 router.get('/api/subject-codes', require('../controllers/subjectController').subjectCodes);
 // Test DB endpoint

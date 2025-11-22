@@ -437,15 +437,89 @@ const QuestionPapers = () => {
                     style={{ width: '100%', minHeight: '70px', padding: '10px 12px', border: '1px solid #b6d4fe', borderRadius: '10px', backgroundColor: '#f4f9ff', fontSize: '14px', resize: 'vertical', color: '#1b2a41' }}
                   />
                   {question.file_name && (
-                    <div style={{ fontSize: '12px', color: '#6c757d', marginTop: '6px' }}>📎 {question.file_name}</div>
+                    <div style={{ 
+                      fontSize: '12px', 
+                      color: '#6c757d', 
+                      marginTop: '6px',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '5px'
+                    }}>
+                      📎 {question.file_name}
+                      {question.file_type && (
+                        <span style={{ 
+                          fontSize: '10px', 
+                          backgroundColor: '#e9ecef', 
+                          padding: '2px 6px', 
+                          borderRadius: '4px',
+                          color: '#495057'
+                        }}>
+                          {question.file_type.split('/')[0]}
+                        </span>
+                      )}
+                    </div>
                   )}
                   {question.file_url && (
-                    <div style={{ marginTop: '10px' }}>
+                    <div style={{ 
+                      marginTop: '15px',
+                      padding: '15px',
+                      backgroundColor: '#f8f9fa',
+                      borderRadius: '12px',
+                      border: '2px solid #e9ecef'
+                    }}>
+                      <div style={{ 
+                        fontSize: '14px', 
+                        fontWeight: '600', 
+                        color: '#495057', 
+                        marginBottom: '10px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '8px'
+                      }}>
+                        🖼️ Diagram/Image Attachment
+                      </div>
                       <img
                         src={`${API_BASE}${question.file_url}`}
-                        alt={question.file_name || 'attachment'}
-                        style={{ maxWidth: '100%', borderRadius: '8px', border: '1px solid #e9edf3' }}
+                        alt={question.file_name || 'diagram attachment'}
+                        style={{ 
+                          maxWidth: '100%', 
+                          height: 'auto',
+                          borderRadius: '8px', 
+                          border: '1px solid #dee2e6',
+                          boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
+                          cursor: 'pointer',
+                          transition: 'transform 0.2s ease'
+                        }}
+                        onMouseOver={(e) => e.target.style.transform = 'scale(1.02)'}
+                        onMouseOut={(e) => e.target.style.transform = 'scale(1)'}
+                        onClick={() => {
+                          // Open image in new tab for better viewing
+                          window.open(`${API_BASE}${question.file_url}`, '_blank');
+                        }}
+                        onError={(e) => {
+                          e.target.style.display = 'none';
+                          e.target.nextSibling.style.display = 'block';
+                        }}
                       />
+                      <div style={{ 
+                        display: 'none',
+                        padding: '20px',
+                        textAlign: 'center',
+                        color: '#6c757d',
+                        backgroundColor: '#f8f9fa',
+                        borderRadius: '8px',
+                        border: '1px solid #dee2e6'
+                      }}>
+                        ⚠️ Unable to load image. <a href={`${API_BASE}${question.file_url}`} target="_blank" rel="noopener noreferrer" style={{ color: '#0d6efd' }}>Click here to view</a>
+                      </div>
+                      <div style={{ 
+                        fontSize: '11px', 
+                        color: '#6c757d', 
+                        marginTop: '8px',
+                        textAlign: 'center'
+                      }}>
+                        Click to view full size
+                      </div>
                     </div>
                   )}
                 </div>

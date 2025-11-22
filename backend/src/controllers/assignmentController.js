@@ -3,16 +3,17 @@ const User = require('../models/User');
 const sendEmail = require('../utils/mailer');
 
 exports.assignQPSetter = async (req, res) => {
-  const { users, subjectCode, submitDate } = req.body;
+  const { users, subjectCode, submitDate, semester } = req.body;
   if (!users || !Array.isArray(users) || users.length === 0) return res.status(400).json({ error: 'No users provided' });
   if (!subjectCode) return res.status(400).json({ error: 'Subject code missing' });
   if (!submitDate) return res.status(400).json({ error: 'Submission date missing' });
+  if (!semester) return res.status(400).json({ error: 'Semester missing' });
 
   try {
     const ops = users.map(async ({ email, password }) => {
       const exists = await Assignment.findOne({ email, subject_code: subjectCode });
       if (exists) return null;
-      await Assignment.create({ email, subject_code: subjectCode, submit_date: new Date(submitDate) });
+      await Assignment.create({ email, subject_code: subjectCode, semester: parseInt(semester), submit_date: new Date(submitDate) });
       try {
         await sendEmail(
           email,
@@ -126,6 +127,7 @@ exports.getFacultyAssignments = async (req, res) => {
         _id: 1,
         subject_code: 1,
         subject_name: '$subject.subject_name',
+        semester: { $ifNull: ['$semester', 1] }, // Default to semester 1 if missing
         assigned_at: 1,
         submit_date: 1,
         status: {
@@ -174,15 +176,38 @@ exports.getFacultySubjectCodes = async (req, res) => {
       { $project: {
         subject_code: 1,
         subject_name: '$subject.subject_name',
+        semester: { $ifNull: ['$semester', 1] }, // Default to semester 1 if missing
         submit_date: 1,
         status: 1
       } }
     ]);
 
+    // Log assignments for debugging (commented out to reduce console clutter)
+    // console.log(`📋 Faculty ${email} assignments:`, assignments);
+
     res.json(assignments);
   } catch (err) {
     console.error('Error fetching faculty subject codes:', err);
     res.status(500).json({ error: 'Failed to fetch faculty subject codes' });
+  }
+};
+
+// Migration endpoint to update existing assignments with default semester
+exports.migrateAssignments = async (req, res) => {
+  try {
+    const result = await Assignment.updateMany(
+      { semester: { $exists: false } }, // Find assignments without semester
+      { $set: { semester: 1 } } // Set default semester to 1
+    );
+    
+    console.log(`🔄 Migration completed: Updated ${result.modifiedCount} assignments`);
+    res.json({ 
+      message: `Migration completed: Updated ${result.modifiedCount} assignments with default semester`,
+      modifiedCount: result.modifiedCount
+    });
+  } catch (err) {
+    console.error('Error during migration:', err);
+    res.status(500).json({ error: 'Failed to migrate assignments' });
   }
 };
 
