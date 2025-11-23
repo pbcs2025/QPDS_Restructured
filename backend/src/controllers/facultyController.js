@@ -1,9 +1,12 @@
+// backend/src/controllers/facultyController.js
 const crypto = require('crypto');
 const User = require('../models/User');
 const Faculty = require('../models/Faculty');
 const Department = require('../models/Department');
 const sendEmail = require('../utils/mailer');
 const xlsx = require('xlsx');
+const { logLogin } = require('../middleware/activityLogger');
+const jwt = require('jsonwebtoken');
 
 // Generate 6-character alphanumeric password
 function generatePassword() {
@@ -15,21 +18,249 @@ function generatePassword() {
   return password;
 }
 
+/**
+ * Faculty Login - send verification code
+ * POST /api/faculty/login
+ */
+exports.loginFaculty = async (req, res) => {
+  const { username, password } = req.body;
+  
+  try {
+    // First check user collection for authentication
+    const user = await User.findOne({ username, password }).lean();
+    if (!user || user.role !== 'Faculty') {
+      return res.status(401).json({ 
+        success: false, 
+        message: 'Invalid credentials or not a faculty member' 
+      });
+    }
+
+    // Get faculty details
+    const faculty = await Faculty.findOne({ facultyId: user._id }).lean();
+    if (!faculty || !faculty.isActive) {
+      return res.status(401).json({ 
+        success: false, 
+        message: 'Faculty account not found or inactive' 
+      });
+    }
+
+    const code = Math.floor(100000 + Math.random() * 900000).toString();
+    const expiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes from now
+    
+    // Store verification code on faculty document with expiration
+    await Faculty.findOneAndUpdate(
+      { facultyId: user._id },
+      { 
+        verificationCode: code,
+        verificationCodeExpiresAt: expiresAt
+      },
+      { new: true }
+    );
+
+    try {
+      await sendEmail(
+        username,
+        'Faculty Login - Verification Code',
+        '',
+        `<div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+          <h2 style="color: #333;">Faculty Login Verification</h2>
+          <p>Hello ${faculty.name},</p>
+          <p>Your verification code for faculty login:</p>
+          <div style="background: #f4f4f4; padding: 20px; text-align: center; border-radius: 5px; margin: 20px 0;">
+            <h1 style="color: #4CAF50; margin: 0; font-size: 36px; letter-spacing: 5px;">${code}</h1>
+          </div>
+          <p><strong>This code is valid for 10 minutes.</strong></p>
+          <p>If you didn't attempt to login, please ignore this email.</p>
+          <p>Best regards,<br>GAT Portal Team</p>
+        </div>`
+      );
+    } catch (err) {
+      console.error('Email error:', err.message);
+    }
+
+    const emailConfigured = Boolean(process.env.EMAIL_USER && process.env.EMAIL_PASSWORD);
+    res.json({ 
+      success: true, 
+      message: emailConfigured ? 'Verification code sent to email' : 'Email not configured; code returned in response',
+      code: emailConfigured ? undefined : code
+    });
+  } catch (err) {
+    console.error('Error during faculty login:', err);
+    res.status(500).json({ success: false, message: 'Server error' });
+  }
+};
+
+/**
+ * Verify faculty login code
+ * POST /api/faculty/verify
+ */
+exports.verifyFaculty = async (req, res) => {
+  const { email, code } = req.body;
+  
+  try {
+    // Find user first
+    const user = await User.findOne({ username: email }).lean();
+    if (!user) {
+      return res.status(400).json({ 
+        success: false, 
+        message: 'Invalid user' 
+      });
+    }
+
+    // Find faculty record
+    const faculty = await Faculty.findOne({ facultyId: user._id }).lean();
+    if (!faculty || faculty.verificationCode !== code) {
+      return res.status(400).json({ 
+        success: false, 
+        message: 'Invalid verification code' 
+      });
+    }
+
+    // Check if code has expired
+    if (faculty.verificationCodeExpiresAt && new Date() > new Date(faculty.verificationCodeExpiresAt)) {
+      await Faculty.updateOne({ facultyId: user._id }, { 
+        $unset: { verificationCode: 1, verificationCodeExpiresAt: 1 } 
+      });
+      return res.status(400).json({ 
+        success: false, 
+        message: 'Verification code has expired. Please login again.' 
+      });
+    }
+
+    // Clear code after successful verification
+    await Faculty.updateOne({ facultyId: user._id }, { 
+      $unset: { verificationCode: 1, verificationCodeExpiresAt: 1 } 
+    });
+
+    // 🔥 GENERATE JWT TOKEN
+    const token = jwt.sign(
+      {
+        id: user._id.toString(),
+        username: user.username,
+        email: user.email || faculty.email,
+        role: user.role,
+        usertype: user.usertype || faculty.type,
+        name: user.name || faculty.name,
+        department: faculty.department || user.deptName,
+        college: faculty.clgName || user.clgName
+      },
+      process.env.JWT_SECRET || 'your-secret-key', // Make sure this matches your .env
+      { expiresIn: '24h' } // Token expires in 24 hours
+    );
+
+    // 🔥 LOG LOGIN ACTIVITY
+    await logLogin({
+      id: user._id.toString(),
+      username: user.username,
+      name: user.name || faculty.name,
+      role: user.role,
+      usertype: user.usertype || faculty.type
+    }, req);
+
+    // Return faculty data with TOKEN
+    res.json({ 
+      success: true, 
+      message: 'Verification successful',
+      token: token, // ⬅️ Send the token to frontend
+      facultyData: {
+        id: faculty._id,
+        name: faculty.name || user.name,
+        email: faculty.email || user.email,
+        department: faculty.department || user.deptName,
+        clgName: faculty.clgName || user.clgName,
+        contactNumber: faculty.contactNumber || user.phoneNo,
+        type: faculty.type || user.usertype
+      }
+    });
+  } catch (err) {
+    console.error('Error during faculty verification:', err);
+    res.status(500).json({ 
+      success: false, 
+      message: 'Server error' 
+    });
+  }
+};
+
+/**
+ * Forgot faculty password
+ * POST /api/faculty/forgot-password
+ */
+exports.forgotFacultyPassword = async (req, res) => {
+  const { email } = req.body;
+  
+  try {
+    const user = await User.findOne({ username: email, role: 'Faculty' }).lean();
+    if (!user) {
+      return res.status(401).json({ 
+        success: false, 
+        message: 'Faculty account not found' 
+      });
+    }
+
+    const faculty = await Faculty.findOne({ facultyId: user._id }).lean();
+    if (!faculty) {
+      return res.status(401).json({ 
+        success: false, 
+        message: 'Faculty profile not found' 
+      });
+    }
+
+    try {
+      await sendEmail(
+        email,
+        'GAT Portal - Faculty Password Recovery',
+        '',
+        `<div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+          <h2 style="color: #333;">Password Recovery</h2>
+          <p>Hello ${faculty.name},</p>
+          <p>Your temporary password is:</p>
+          <div style="background: #f4f4f4; padding: 20px; text-align: center; border-radius: 5px; margin: 20px 0;">
+            <h2 style="color: #FF5722; margin: 0; font-size: 24px; letter-spacing: 2px;">${user.password}</h2>
+          </div>
+          <p><strong>⚠️ Important:</strong> Please login and change your password immediately for security reasons.</p>
+          <p>If you have any questions, contact the examination cell at <a href="mailto:support@gat.ac.in">support@gat.ac.in</a>.</p>
+          <p>Best regards,<br>
+          Examination Cell<br>
+          Global Academy of Technology</p>
+        </div>`
+      );
+    } catch (err) {
+      console.error('Email error:', err.message);
+    }
+    
+    res.json({ 
+      success: true, 
+      message: 'Password sent to your email' 
+    });
+  } catch (err) {
+    console.error('Error during faculty forgot-password:', err);
+    res.status(500).json({ 
+      success: false, 
+      message: 'Server error' 
+    });
+  }
+};
+
+/**
+ * Register new faculty
+ * POST /api/faculty/register
+ */
 exports.registerFaculty = async (req, res) => {
   try {
     const { name, clgName, deptName, email, phone, usertype, departmentId } = req.body;
     
-    // Use email as username
     const username = email;
-    const password = generatePassword(); // 6-character alphanumeric
+    const password = generatePassword();
 
     // Check if user already exists
     const existingUser = await User.findOne({ $or: [{ username }, { email }] });
     if (existingUser) {
-      return res.status(400).json({ error: 'User with this email already exists' });
+      return res.status(400).json({ 
+        error: 'User with this email already exists' 
+      });
     }
 
-    // Create user record for authentication
+    // Create user record
     const user = await User.create({
       name,
       username,
@@ -37,21 +268,21 @@ exports.registerFaculty = async (req, res) => {
       deptName: deptName || departmentId,
       email,
       phoneNo: phone,
-      password, // Not encrypted as requested
+      password,
       usertype: usertype || 'internal',
       role: 'Faculty',
     });
 
-    // Create faculty record with detailed information
+    // Create faculty record
     const faculty = await Faculty.create({
       facultyId: user._id,
       name,
       email,
-      passwordHash: password, // Not encrypted as requested
+      passwordHash: password,
       department: deptName || departmentId,
       clgName,
       contactNumber: phone,
-      type: usertype, // internal or external
+      type: usertype,
       role: 'faculty'
     });
 
@@ -60,36 +291,17 @@ exports.registerFaculty = async (req, res) => {
         email,
         'Welcome to GAT Portal - Faculty Registration',
         '',
-        `<p>Dear ${name},</p>
-        
-        <p>Welcome to Global Academy of Technology! We are pleased to inform you that your faculty registration has been successfully completed.</p>
-        
-        <p>Your account has been created and activated. You can now access the Question Paper Development System (QPDS) using the credentials provided below:</p>
-        
-        <div style="background-color: #f8f9fa; border: 1px solid #dee2e6; border-radius: 8px; padding: 20px; margin: 20px 0;">
-          <h3 style="color: #2c5aa0; margin-top: 0;">Login Credentials</h3>
-          <p><strong>Username:</strong> ${username}</p>
-          <p><strong>Password:</strong> <span style="font-size: 18px; font-weight: bold; color: #333; background-color: #e9ecef; padding: 4px 8px; border-radius: 4px;">${password}</span></p>
-        </div>
-        
-        <p><strong>Important Security Notice:</strong> For security reasons, we strongly recommend that you change your password immediately after your first login.</p>
-        
-        <p>You can access the system by visiting the faculty login portal and using the credentials provided above.</p>
-        
-        <p>If you encounter any issues or have questions regarding the system, please do not hesitate to contact our technical support team at support@gat.ac.in.</p>
-        
-        <p>We look forward to your contribution to our academic community.</p>
-        
-        <p>Best regards,<br>
-        <strong>Examination Cell</strong><br>
-        Global Academy of Technology<br>
-        Bengaluru, Karnataka</p>
-        
-        <hr style="border: none; border-top: 1px solid #dee2e6; margin: 30px 0;">
-        <p style="font-size: 12px; color: #6c757d; text-align: center;">
-          This is an automated message. Please do not reply to this email.<br>
-          For support, contact: support@gat.ac.in
-        </p>`
+        `<div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+          <h2 style="color: #4CAF50;">Welcome to GAT Portal</h2>
+          <p>Dear ${name},</p>
+          <p>Your faculty account has been created successfully.</p>
+          <div style="background: #f4f4f4; padding: 20px; border-radius: 5px; margin: 20px 0;">
+            <p><strong>Username:</strong> ${username}</p>
+            <p><strong>Password:</strong> ${password}</p>
+          </div>
+          <p><strong>⚠️ Important:</strong> Please change your password after your first login.</p>
+          <p>Best regards,<br>GAT Portal Team</p>
+        </div>`
       );
     } catch (err) {
       console.error('Email error:', err.message);
@@ -107,90 +319,10 @@ exports.registerFaculty = async (req, res) => {
   }
 };
 
-exports.loginFaculty = async (req, res) => {
-  const { username, password } = req.body;
-  try {
-    // First check user collection for authentication
-    const user = await User.findOne({ username, password }).lean();
-    if (!user || user.role !== 'Faculty') {
-      return res.status(401).json({ success: false, message: 'Invalid credentials or not a faculty member' });
-    }
-
-    // Get faculty details
-    const faculty = await Faculty.findOne({ facultyId: user._id }).lean();
-    if (!faculty || !faculty.isActive) {
-      return res.status(401).json({ success: false, message: 'Faculty account not found or inactive' });
-    }
-
-    const code = Math.floor(100000 + Math.random() * 900000).toString();
-    // Store verification code on faculty document until used
-    await Faculty.findOneAndUpdate(
-      { facultyId: user._id },
-      { verificationCode: code },
-      { new: true }
-    );
-
-    let emailInfo = null;
-    try {
-      emailInfo = await sendEmail(
-        username,
-        'Faculty Login - Verification Code',
-        '',
-        `<p>Hello ${faculty.name},</p>
-        
-        <p>Your verification code for faculty login:</p>
-        
-        <h2 style="font-size: 24px; font-weight: bold; color: #333; margin: 20px 0;">${code}</h2>
-        
-        <p>Valid for 10 minutes.</p>`
-      );
-    } catch (err) {
-      console.error('Email error:', err.message);
-    }
-
-    // If email is not configured, also return the code in response for testing
-    const emailConfigured = Boolean(process.env.EMAIL_USER && process.env.EMAIL_PASSWORD);
-    res.json({ 
-      success: true, 
-      message: emailConfigured ? 'Verification code sent to email' : 'Email not configured; code returned in response',
-      code: emailConfigured ? undefined : code
-    });
-  } catch (err) {
-    console.error('Error during faculty login:', err);
-    res.status(500).json({ success: false, message: 'Server error' });
-  }
-};
-
-exports.verifyFaculty = async (req, res) => {
-  const { email, code } = req.body;
-  try {
-    const user = await User.findOne({ username: email }).lean();
-    if (!user) {
-      return res.status(400).json({ success: false, message: 'Invalid user' });
-    }
-    const faculty = await Faculty.findOne({ facultyId: user._id }).lean();
-    if (!faculty || faculty.verificationCode !== code) {
-      return res.status(400).json({ success: false, message: 'Invalid verification code' });
-    }
-    // Clear code after successful verification
-    await Faculty.updateOne({ facultyId: user._id }, { $unset: { verificationCode: 1 } });
-    res.json({ 
-      success: true, 
-      message: 'Verification successful',
-      facultyData: {
-        id: faculty._id,
-        name: faculty.name,
-        email: faculty.email,
-        department: faculty.department,
-        clgName: faculty.clgName
-      }
-    });
-  } catch (err) {
-    console.error('Error during faculty verification:', err);
-    res.status(500).json({ success: false, message: 'Server error' });
-  }
-};
-
+/**
+ * Get faculty profile
+ * GET /api/faculty/profile/:email
+ */
 exports.getFacultyProfile = async (req, res) => {
   try {
     const { email } = req.params;
@@ -220,6 +352,10 @@ exports.getFacultyProfile = async (req, res) => {
   }
 };
 
+/**
+ * Update faculty profile
+ * PUT /api/faculty/profile/:email
+ */
 exports.updateFacultyProfile = async (req, res) => {
   try {
     const { email } = req.params;
@@ -247,13 +383,20 @@ exports.updateFacultyProfile = async (req, res) => {
   }
 };
 
+/**
+ * Reset faculty password
+ * POST /api/faculty/reset-password
+ */
 exports.resetFacultyPassword = async (req, res) => {
   const { username, oldPassword, newPassword } = req.body;
+  
   try {
     // Verify in users collection
     const user = await User.findOne({ username, password: oldPassword });
     if (!user || user.role !== 'Faculty') {
-      return res.status(401).json({ error: 'Old password is incorrect or not a faculty member' });
+      return res.status(401).json({ 
+        error: 'Old password is incorrect or not a faculty member' 
+      });
     }
 
     // Update password in both collections
@@ -265,56 +408,20 @@ exports.resetFacultyPassword = async (req, res) => {
       { passwordHash: newPassword }
     );
 
-    res.status(200).json({ message: 'Password updated successfully' });
+    res.status(200).json({ 
+      success: true,
+      message: 'Password updated successfully' 
+    });
   } catch (err) {
     console.error('Faculty password update error:', err);
     res.status(500).json({ error: 'Failed to update password' });
   }
 };
 
-exports.forgotFacultyPassword = async (req, res) => {
-  const { email } = req.body;
-  try {
-    const user = await User.findOne({ username: email, role: 'Faculty' }).lean();
-    if (!user) {
-      return res.status(401).json({ success: false, message: 'Faculty account not found' });
-    }
-
-    const faculty = await Faculty.findOne({ facultyId: user._id }).lean();
-    if (!faculty) {
-      return res.status(401).json({ success: false, message: 'Faculty profile not found' });
-    }
-
-    try {
-      await sendEmail(
-        email,
-        'GAT Portal - Faculty Password Recovery',
-        '',
-        `<p>Hello ${faculty.name},</p>
-        
-        <p>Your temporary password is:</p>
-        
-        <h2 style="font-size: 24px; font-weight: bold; color: #333; margin: 20px 0;">${user.password}</h2>
-        
-        <p>Please login and change your password immediately.</p>
-        
-        <p>If you have any questions or face difficulties accessing the system, kindly contact the examination cell at support@gat.ac.in.</p>
-        
-        <p>Best regards,<br>
-        Examination Cell<br>
-        Global Academy of Technology</p>`
-      );
-    } catch (err) {
-      console.error('Email error:', err.message);
-    }
-    
-    res.json({ success: true, message: 'Password sent to your email' });
-  } catch (err) {
-    console.error('Error during faculty forgot-password:', err);
-    res.status(500).json({ success: false, message: 'Server error' });
-  }
-};
-
+/**
+ * Get all faculties
+ * GET /api/faculty/all
+ */
 exports.getAllFaculties = async (req, res) => {
   try {
     const faculties = await Faculty.find({ isActive: true })
@@ -329,6 +436,10 @@ exports.getAllFaculties = async (req, res) => {
   }
 };
 
+/**
+ * Get faculties by department
+ * GET /api/faculty/department/:department
+ */
 exports.getFacultiesByDepartment = async (req, res) => {
   try {
     const { department } = req.params;
@@ -344,7 +455,49 @@ exports.getFacultiesByDepartment = async (req, res) => {
   }
 };
 
-// Bulk upload faculties via Excel/CSV (buffer from multer)
+/**
+ * Faculty Logout - log activity
+ * POST /api/faculty/logout
+ */
+exports.logoutFaculty = async (req, res) => {
+  try {
+    const userId = req.user?.id || req.user?._id;
+    const username = req.user?.username;
+    const role = req.user?.role;
+    const name = req.user?.name;
+    const usertype = req.user?.usertype;
+
+    console.log(`Faculty logout: ${username} (${userId}) - Role: ${role}`);
+    
+    // Update Faculty collection with last logout time
+    if (userId) {
+      await Faculty.findOneAndUpdate(
+        { facultyId: userId },
+        { lastLogout: new Date() }
+      );
+    }
+
+    // 🔥 LOG THE LOGOUT ACTIVITY (this will emit to Socket.io)
+    const { logLogout } = require('../middleware/activityLogger');
+    await logLogout(req);
+
+    res.json({ 
+      success: true,
+      message: 'Logged out successfully' 
+    });
+  } catch (error) {
+    console.error('Faculty logout error:', error);
+    res.status(500).json({ 
+      success: false,
+      error: 'Logout failed' 
+    });
+  }
+};
+
+/**
+ * Bulk upload faculties via Excel
+ * POST /api/faculty/bulk-upload
+ */
 exports.bulkUploadFaculties = async (req, res) => {
   try {
     if (!req.file || !req.file.buffer) {
@@ -360,11 +513,9 @@ exports.bulkUploadFaculties = async (req, res) => {
       return res.status(400).json({ error: 'Uploaded file is empty or invalid' });
     }
 
-    // Get valid departments from database
     const validDepartments = await Department.find({ isActive: true }).select('name').lean();
     const validDeptNames = validDepartments.map(dept => dept.name);
 
-    // Expected headers: name, email, phone, clgName, deptName, usertype
     const results = { created: 0, skipped: 0, errors: [] };
 
     for (const [index, row] of rows.entries()) {
@@ -376,15 +527,17 @@ exports.bulkUploadFaculties = async (req, res) => {
       const usertype = String(row.usertype || row.type || '').trim() || 'internal';
 
       if (!name || !email || !deptName) {
-        results.errors.push({ row: index + 2, error: 'Missing required fields (name, email, deptName)' });
+        results.errors.push({ 
+          row: index + 2, 
+          error: 'Missing required fields (name, email, deptName)' 
+        });
         continue;
       }
 
-      // Validate department name against database
       if (!validDeptNames.includes(deptName)) {
         results.errors.push({ 
           row: index + 2, 
-          error: `Invalid department "${deptName}". Valid departments: ${validDeptNames.join(', ')}` 
+          error: `Invalid department "${deptName}". Valid: ${validDeptNames.join(', ')}` 
         });
         continue;
       }
@@ -423,7 +576,6 @@ exports.bulkUploadFaculties = async (req, res) => {
           role: 'faculty'
         });
 
-        // Email is best-effort; don't fail the whole row if it errors
         try {
           await sendEmail(
             email,

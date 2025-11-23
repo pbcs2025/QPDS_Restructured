@@ -11,10 +11,8 @@ function FacultyLogin() {
   const [formValues, setFormValues] = useState(initialValues);
   const [formErrors, setFormErrors] = useState({});
   const [loginMessage, setLoginMessage] = useState("");
-  const [step, setStep] = useState(1); // 1 = login, 2 = verify login, 3 = forgot email, 4 = reset password
-  const [code, setCode] = useState("");
+  const [step, setStep] = useState(1); // 1 = login, 2 = verify login, 3 = forgot email
   const [showPassword, setShowPassword] = useState(false);
-  const [resetPassword, setResetPassword] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [verificationCode, setVerificationCode] = useState(['', '', '', '', '', '']);
 
@@ -25,19 +23,18 @@ function FacultyLogin() {
 
   // Handle verification code input
   const handleVerificationCodeChange = (index, value) => {
-    if (value.length > 1) return; // Only allow single character
+    if (value.length > 1) return;
     
     const newCode = [...verificationCode];
     newCode[index] = value;
     setVerificationCode(newCode);
     
-    // Auto-focus next input
     if (value && index < 5) {
       setTimeout(() => {
         const nextInput = document.getElementById(`verification-${index + 1}`);
         if (nextInput) {
           nextInput.focus();
-          nextInput.select(); // Select text for better visibility
+          nextInput.select();
         }
       }, 10);
     }
@@ -49,23 +46,20 @@ function FacultyLogin() {
     const pastedData = e.clipboardData.getData('text').replace(/\D/g, '').slice(0, 6);
     const newCode = ['', '', '', '', '', ''];
     
-    // Fill the code array with pasted digits
     for (let i = 0; i < pastedData.length && i < 6; i++) {
       newCode[i] = pastedData[i];
     }
     
     setVerificationCode(newCode);
     
-    // Focus the next empty input or the last one
     const nextEmptyIndex = newCode.findIndex(digit => digit === '');
     const focusIndex = nextEmptyIndex !== -1 ? nextEmptyIndex : 5;
     
-    // Use setTimeout to ensure state update is complete
     setTimeout(() => {
       const nextInput = document.getElementById(`verification-${focusIndex}`);
       if (nextInput) {
         nextInput.focus();
-        nextInput.select(); // Select the text for better visibility
+        nextInput.select();
       }
     }, 10);
   };
@@ -81,7 +75,7 @@ function FacultyLogin() {
   // Get the complete verification code
   const getCompleteCode = () => verificationCode.join('');
 
-  // ✅ Step 1: Login
+  // Step 1: Login
   const handleSubmit = async (e) => {
     e.preventDefault();
     const errors = validateLogin(formValues);
@@ -89,7 +83,7 @@ function FacultyLogin() {
 
     if (Object.keys(errors).length === 0) {
       setIsLoading(true);
-      setLoginMessage(""); // Clear previous messages
+      setLoginMessage("");
       
       try {
         const response = await fetch(`${API_BASE}/faculty/login`, {
@@ -102,11 +96,10 @@ function FacultyLogin() {
 
         if (response.ok && data.success) {
           setLoginMessage("✔ Verification code sent to your email.");
-          // Immediate transition to verification step
           setTimeout(() => {
             setStep(2);
             setIsLoading(false);
-          }, 500); // Small delay for better UX
+          }, 500);
         } else {
           setLoginMessage("❌ " + (data.message || "Invalid credentials."));
           setIsLoading(false);
@@ -119,7 +112,7 @@ function FacultyLogin() {
     }
   };
 
-  // ✅ Step 2: Verify login code
+  // Step 2: Verify login code
   const handleVerify = async (e) => {
     e.preventDefault();
     const completeCode = getCompleteCode();
@@ -130,7 +123,7 @@ function FacultyLogin() {
     }
     
     setIsLoading(true);
-    setLoginMessage(""); // Clear previous messages
+    setLoginMessage("");
     
     try {
       const response = await fetch(`${API_BASE}/faculty/verify`, {
@@ -142,11 +135,12 @@ function FacultyLogin() {
       const data = await response.json();
 
       if (response.ok && data.success) {
+        // Store faculty data
         localStorage.setItem("faculty_username", formValues.username);
-        // Store faculty data for dashboard use
         if (data.facultyData) {
           localStorage.setItem("faculty_data", JSON.stringify(data.facultyData));
         }
+        
         setLoginMessage("✔ Login successful! Redirecting...");
         setTimeout(() => {
           navigate("/faculty-dashboard");
@@ -162,11 +156,17 @@ function FacultyLogin() {
     }
   };
 
-  // ✅ Step 3: Forgot password - request code
+  // Step 3: Forgot password - request password via email
   const handleForgotPassword = async (e) => {
     e.preventDefault();
+    
+    if (!formValues.username) {
+      setLoginMessage("❌ Please enter your email address.");
+      return;
+    }
+    
     setIsLoading(true);
-    setLoginMessage(""); // Clear previous messages
+    setLoginMessage("");
     
     try {
       const response = await fetch(`${API_BASE}/faculty/forgot-password`, {
@@ -176,13 +176,13 @@ function FacultyLogin() {
       });
 
       const data = await response.json();
+      
       if (response.ok && data.success) {
-        setLoginMessage("✔ Password sent to your email.");
-        // setStep(4);
+        setLoginMessage("✔ Password sent to your email. Please check your inbox.");
         setTimeout(() => {
           setStep(1);
           setIsLoading(false);
-        }, 2000); // Show success message for 2 seconds before going back
+        }, 2000);
       } else {
         setLoginMessage("❌ " + (data.message || "Email not found."));
         setIsLoading(false);
@@ -191,33 +191,6 @@ function FacultyLogin() {
       console.error("Forgot password failed:", error);
       setLoginMessage("❌ Server error. Please try again later.");
       setIsLoading(false);
-    }
-  };
-
-  // ✅ Step 4: Reset password
-  const handleResetPassword = async (e) => {
-    e.preventDefault();
-    try {
-      const response = await fetch(`${API_BASE}/faculty/reset-password`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          email: formValues.username,
-          code,
-          newPassword: resetPassword,
-        }),
-      });
-
-      const data = await response.json();
-      if (response.ok && data.success) {
-        setLoginMessage("✔ Password reset successful. Please login again.");
-        setStep(1); // go back to login
-      } else {
-        setLoginMessage("❌ " + (data.message || "Invalid code or error."));
-      }
-    } catch (error) {
-      console.error("Reset failed:", error);
-      setLoginMessage("❌ Server error. Please try again later.");
     }
   };
 
@@ -565,7 +538,7 @@ function FacultyLogin() {
         </div>
       )}
 
-      {/* Step 3: Forgot password (request email) */}
+      {/* Step 3: Forgot password */}
       {step === 3 && (
         <div style={{ padding: '40px' }}>
           <form onSubmit={handleForgotPassword} style={{ animation: 'fadeIn 0.5s ease-in' }}>
@@ -587,7 +560,7 @@ function FacultyLogin() {
             }}>
               <i className="fa fa-info-circle" style={{ color: '#856404', fontSize: '18px', marginRight: '8px' }}></i>
               <span style={{ color: '#856404', fontWeight: '500', fontSize: '14px' }}>
-                Enter your registered email address to know your password
+                Enter your registered email to receive your password
               </span>
             </div>
 
@@ -623,6 +596,7 @@ function FacultyLogin() {
               <button 
                 className="fluid ui button orange"
                 disabled={isLoading}
+                type="submit"
                 style={{
                   width: '100%',
                   padding: '14px',
@@ -721,97 +695,6 @@ function FacultyLogin() {
               >
                 <i className="fa fa-arrow-left" style={{ fontSize: '12px' }}></i>
                 Back to Login
-              </button>
-            </div>
-          </form>
-        </div>
-      )}
-
-      {/* Step 4: Reset password */}
-      {step === 4 && (
-        <div style={{ padding: '40px' }}>
-          <form onSubmit={handleResetPassword} style={{ animation: 'fadeIn 0.5s ease-in' }}>
-            <h1 style={{
-              textAlign: 'center',
-              color: '#2c3e50',
-              marginBottom: '30px',
-              fontSize: '28px',
-              fontWeight: '600'
-            }}>Reset Password</h1>
-            <div className="ui form">
-              <div className="field">
-                <label style={{
-                  fontSize: '14px',
-                  fontWeight: '600',
-                  color: '#34495e',
-                  marginBottom: '8px',
-                  display: 'block'
-                }}>Verification Code</label>
-                <input
-                  type="text"
-                  name="code"
-                  value={code}
-                  onChange={(e) => setCode(e.target.value)}
-                  style={{
-                    width: '100%',
-                    padding: '12px 16px',
-                    border: '2px solid #e1e8ed',
-                    borderRadius: '8px',
-                    fontSize: '16px',
-                    transition: 'border-color 0.3s ease',
-                    outline: 'none',
-                    boxSizing: 'border-box'
-                  }}
-                  onFocus={(e) => e.target.style.borderColor = '#4caf50'}
-                  onBlur={(e) => e.target.style.borderColor = '#e1e8ed'}
-                />
-              </div>
-              <div className="field" style={{ marginTop: '20px' }}>
-                <label style={{
-                  fontSize: '14px',
-                  fontWeight: '600',
-                  color: '#34495e',
-                  marginBottom: '8px',
-                  display: 'block'
-                }}>New Password</label>
-                <input
-                  type="password"
-                  name="newPassword"
-                  value={resetPassword}
-                  onChange={(e) => setResetPassword(e.target.value)}
-                  style={{
-                    width: '100%',
-                    padding: '12px 16px',
-                    border: '2px solid #e1e8ed',
-                    borderRadius: '8px',
-                    fontSize: '16px',
-                    transition: 'border-color 0.3s ease',
-                    outline: 'none',
-                    boxSizing: 'border-box'
-                  }}
-                  onFocus={(e) => e.target.style.borderColor = '#4caf50'}
-                  onBlur={(e) => e.target.style.borderColor = '#e1e8ed'}
-                />
-              </div>
-              <button 
-                className="fluid ui button green"
-                style={{
-                  width: '100%',
-                  padding: '14px',
-                  background: '#4caf50',
-                  color: 'white',
-                  border: 'none',
-                  borderRadius: '8px',
-                  fontSize: '16px',
-                  fontWeight: '600',
-                  cursor: 'pointer',
-                  transition: 'all 0.3s ease',
-                  marginTop: '25px'
-                }}
-                onMouseEnter={(e) => e.target.style.background = '#45a049'}
-                onMouseLeave={(e) => e.target.style.background = '#4caf50'}
-              >
-                Reset Password
               </button>
             </div>
           </form>

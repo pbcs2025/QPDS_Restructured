@@ -1,8 +1,10 @@
+// backend/src/controllers/authController.js
 const crypto = require('crypto');
 const User = require('../models/User');
 const Verification = require('../models/Verification');
 const sendEmail = require('../utils/mailer');
 const { generateToken } = require('../utils/jwtHelper');
+const { logLogin, logLogout } = require('../middleware/activityLogger');
 
 /**
  * Generate a unique username by appending random 3-digit number
@@ -24,7 +26,6 @@ exports.register = async (req, res) => {
   try {
     const { username: baseName, clgName, deptName, email, phoneNo, role } = req.body;
 
-    // Validate required fields
     if (!baseName || !clgName || !deptName || !email || !phoneNo) {
       return res.status(400).json({ 
         error: 'All fields are required' 
@@ -47,7 +48,6 @@ exports.register = async (req, res) => {
       role: role || 'Faculty',
     });
 
-    // If registering a faculty member, also create faculty record
     if (role === 'Faculty' || !role) {
       const Faculty = require('../models/Faculty');
       await Faculty.create({
@@ -63,7 +63,6 @@ exports.register = async (req, res) => {
       });
     }
 
-    // Send welcome email with credentials
     try {
       await sendEmail(
         email,
@@ -88,7 +87,6 @@ exports.register = async (req, res) => {
   } catch (error) {
     console.error('Registration error:', error);
     
-    // Handle duplicate email error
     if (error.code === 11000) {
       return res.status(400).json({ 
         error: 'Email or username already exists' 
@@ -106,7 +104,6 @@ exports.register = async (req, res) => {
 exports.login = async (req, res) => {
   const { username, password } = req.body;
 
-  // Validate input
   if (!username || !password) {
     return res.status(400).json({ 
       success: false, 
@@ -117,11 +114,9 @@ exports.login = async (req, res) => {
   console.log('🔍 Login attempt:', { username });
 
   try {
-    // Trim whitespace from inputs
     const trimmedUsername = username.trim();
     const trimmedPassword = password.trim();
 
-    // Find user with matching credentials
     const user = await User.findOne({ 
       username: trimmedUsername, 
       password: trimmedPassword 
@@ -137,18 +132,15 @@ exports.login = async (req, res) => {
 
     console.log('✅ User authenticated:', user.username, '| Role:', user.role);
 
-    // Generate 6-digit verification code
     const code = Math.floor(100000 + Math.random() * 900000).toString();
-    const expiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
+    const expiresAt = new Date(Date.now() + 10 * 60 * 1000);
 
-    // Store verification code
     await Verification.findOneAndUpdate(
       { email: trimmedUsername },
       { code, expiresAt },
       { upsert: true, new: true }
     );
 
-    // Send verification code via email
     try {
       await sendEmail(
         user.email,
@@ -169,7 +161,6 @@ exports.login = async (req, res) => {
       console.log('📧 Verification code sent to:', user.email);
     } catch (err) {
       console.error('❌ Email error:', err.message);
-      // Continue even if email fails - code is stored in database
     }
 
     res.json({ 
@@ -192,7 +183,6 @@ exports.login = async (req, res) => {
 exports.verify = async (req, res) => {
   const { email, code } = req.body;
 
-  // Validate input
   if (!email || !code) {
     return res.status(400).json({ 
       success: false, 
@@ -203,13 +193,11 @@ exports.verify = async (req, res) => {
   console.log('🔐 Verification attempt for:', email);
 
   try {
-    // Find verification record
     const rec = await Verification.findOne({ 
       email: email.trim(), 
       code: code.trim() 
     }).lean();
 
-    // Check if code exists and is not expired
     if (!rec) {
       console.log('❌ Invalid code for:', email);
       return res.status(400).json({ 
@@ -227,7 +215,6 @@ exports.verify = async (req, res) => {
       });
     }
 
-    // Find the user
     const user = await User.findOne({ username: email.trim() }).lean();
     if (!user) {
       console.log('❌ User not found:', email);
@@ -237,7 +224,6 @@ exports.verify = async (req, res) => {
       });
     }
 
-    // Generate JWT token with user information
     const token = generateToken({
       id: user._id.toString(),
       username: user.username,
@@ -249,10 +235,18 @@ exports.verify = async (req, res) => {
       college: user.clgName
     });
 
-    // Delete verification record (one-time use)
     await Verification.deleteOne({ email: email.trim() });
 
     console.log('✅ Verification successful for:', user.username);
+
+    // 🔥 LOG LOGIN ACTIVITY
+    await logLogin({
+      id: user._id.toString(),
+      username: user.username,
+      name: user.name,
+      role: user.role,
+      usertype: user.usertype
+    }, req);
 
     res.json({ 
       success: true, 
@@ -300,14 +294,12 @@ exports.forgotPassword = async (req, res) => {
     
     if (!user) {
       console.log('❌ User not found for password recovery:', email);
-      // Don't reveal if user exists or not for security
       return res.status(401).json({ 
         success: false, 
         message: 'If this email exists, a password recovery email has been sent.' 
       });
     }
 
-    // Send password recovery email
     try {
       await sendEmail(
         user.email,
@@ -356,14 +348,12 @@ exports.forgotPassword = async (req, res) => {
 exports.resetPassword = async (req, res) => {
   const { username, oldPassword, newPassword } = req.body;
 
-  // Validate input
   if (!username || !oldPassword || !newPassword) {
     return res.status(400).json({ 
       error: 'Username, old password, and new password are required' 
     });
   }
 
-  // Validate new password strength
   if (newPassword.length < 6) {
     return res.status(400).json({ 
       error: 'New password must be at least 6 characters long' 
@@ -373,7 +363,6 @@ exports.resetPassword = async (req, res) => {
   console.log('🔄 Password reset attempt for:', username);
 
   try {
-    // Find user with old credentials
     const user = await User.findOne({ 
       username: username.trim(), 
       password: oldPassword.trim() 
@@ -386,11 +375,9 @@ exports.resetPassword = async (req, res) => {
       });
     }
 
-    // Update password
     user.password = newPassword.trim();
     await user.save();
 
-    // Also update Faculty collection if exists
     try {
       const Faculty = require('../models/Faculty');
       await Faculty.updateOne(
@@ -403,7 +390,6 @@ exports.resetPassword = async (req, res) => {
 
     console.log('✅ Password updated successfully for:', username);
 
-    // Send confirmation email
     try {
       await sendEmail(
         user.email,
@@ -440,7 +426,7 @@ exports.resetPassword = async (req, res) => {
 exports.getInternalUsers = async (_req, res) => {
   try {
     const users = await User.find({ usertype: 'internal' })
-      .select('-password') // Exclude password field
+      .select('-password')
       .sort({ createdAt: -1 })
       .lean();
     
@@ -461,7 +447,7 @@ exports.getInternalUsers = async (_req, res) => {
 exports.getExternalUsers = async (_req, res) => {
   try {
     const users = await User.find({ usertype: 'external' })
-      .select('-password') // Exclude password field
+      .select('-password')
       .sort({ _id: -1 })
       .lean();
     
@@ -481,10 +467,9 @@ exports.getExternalUsers = async (_req, res) => {
  */
 exports.getColleges = async (_req, res) => {
   try {
-    // Get unique college names from users
     const colleges = await User.distinct('clgName');
     const formatted = colleges
-      .filter(name => name) // Remove null/undefined
+      .filter(name => name)
       .map((name, index) => ({ 
         id: index + 1, 
         name 
@@ -529,20 +514,99 @@ exports.getDepartments = async (_req, res) => {
 };
 
 /**
+ * Super Admin Login - direct authentication without verification code
+ * POST /superadmin/login
+ */
+exports.superAdminLogin = async (req, res) => {
+  const { username, password } = req.body;
+
+  if (!username || !password) {
+    return res.status(400).json({ 
+      success: false, 
+      message: 'Username and password are required' 
+    });
+  }
+
+  console.log('🔍 Super Admin login attempt:', { username });
+
+  try {
+    const trimmedUsername = username.trim();
+    const trimmedPassword = password.trim();
+
+    const user = await User.findOne({ 
+      username: { $regex: new RegExp(`^${trimmedUsername}$`, 'i') },
+      password: trimmedPassword,
+      role: 'SuperAdmin'
+    }).lean();
+
+    if (!user) {
+      console.log('❌ Invalid Super Admin credentials for:', trimmedUsername);
+      return res.status(401).json({ 
+        success: false, 
+        message: 'Invalid Super Admin credentials' 
+      });
+    }
+
+    console.log('✅ Super Admin authenticated:', user.username);
+
+    const token = generateToken({
+      id: user._id.toString(),
+      username: user.username,
+      email: user.email,
+      role: user.role,
+      usertype: user.usertype,
+      name: user.name,
+      department: user.deptName,
+      college: user.clgName
+    });
+
+    // 🔥 LOG LOGIN ACTIVITY
+    await logLogin({
+      id: user._id.toString(),
+      username: user.username,
+      name: user.name,
+      role: user.role,
+      usertype: user.usertype
+    }, req);
+
+    res.json({ 
+      success: true, 
+      message: 'Super Admin login successful',
+      token,
+      user: {
+        id: user._id.toString(),
+        username: user.username,
+        name: user.name,
+        email: user.email,
+        role: user.role,
+        usertype: user.usertype,
+        department: user.deptName,
+        college: user.clgName,
+        phoneNo: user.phoneNo
+      }
+    });
+  } catch (err) {
+    console.error('❌ Error during Super Admin login:', err);
+    res.status(500).json({ 
+      success: false, 
+      message: 'Server error. Please try again.' 
+    });
+  }
+};
+
+/**
  * Register a new faculty member
  * POST /registerFaculty
  */
 exports.registerFaculty = async (req, res) => {
   const { name, clgName, departmentId, email, phone, usertype } = req.body;
 
-  // Validate all required fields
   if (!name || !clgName || !departmentId || !email || !phone || !usertype) {
     return res.status(400).json({ 
       error: 'All fields are required' 
     });
   }
 
-  // Validate email format
   const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
   if (!emailRegex.test(email)) {
     return res.status(400).json({ 
@@ -553,10 +617,8 @@ exports.registerFaculty = async (req, res) => {
   console.log('👤 Registering new faculty:', email);
 
   try {
-    // Generate random password
     const password = crypto.randomBytes(4).toString('hex');
 
-    // Create user
     const user = await User.create({
       name: name.trim(),
       username: email.trim().toLowerCase(),
@@ -569,7 +631,6 @@ exports.registerFaculty = async (req, res) => {
       password,
     });
 
-    // Create corresponding faculty record
     try {
       const Faculty = require('../models/Faculty');
       await Faculty.create({
@@ -587,7 +648,6 @@ exports.registerFaculty = async (req, res) => {
       console.error('Note: Faculty record creation failed:', err.message);
     }
 
-    // Send welcome email
     try {
       await sendEmail(
         email,
@@ -620,7 +680,6 @@ exports.registerFaculty = async (req, res) => {
   } catch (err) {
     console.error('❌ Error registering faculty:', err);
     
-    // Handle duplicate email/username
     if (err.code === 11000) {
       return res.status(400).json({ 
         error: 'Email already registered' 
@@ -629,6 +688,28 @@ exports.registerFaculty = async (req, res) => {
     
     res.status(500).json({ 
       error: 'Failed to register faculty' 
+    });
+  }
+};
+
+/**
+ * Logout - log user activity
+ * POST /logout
+ */
+exports.logout = async (req, res) => {
+  try {
+    // Log logout activity
+    await logLogout(req);
+    
+    res.json({ 
+      success: true, 
+      message: 'Logged out successfully' 
+    });
+  } catch (err) {
+    console.error('❌ Error during logout:', err);
+    res.status(500).json({ 
+      success: false, 
+      message: 'Server error during logout' 
     });
   }
 };

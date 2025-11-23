@@ -3,15 +3,18 @@ import "./Main.css";
 import { Link, useNavigate } from "react-router-dom";
 import validateLogin from "./validateLogin";
 
-const API_BASE = process.env.REACT_APP_API_BASE_URL;
+const API_BASE = process.env.REACT_APP_API_BASE_URL || 'http://localhost:5001/api';
 
 const ROLE_RULES = [
   {
     key: "super-admin",
     label: "Super Admin",
-    matcher: (username) => ["superadmin", "super-admin"].includes(username),
-    type: "static",
-    password: "12345",
+    matcher: (username) => {
+      const normalized = username.trim().toLowerCase();
+      return ["superadmin", "super-admin", "superadmin"].includes(normalized) || 
+             username.trim() === "SuperAdmin";
+    },
+    type: "super-admin",
     destination: "/super-admin-dashboard",
   },
   {
@@ -83,6 +86,8 @@ function RoleSelection() {
     setIsSubmitting(true);
     if (role.type === "static") {
       handleStaticRole(role);
+    } else if (role.type === "super-admin") {
+      await handleSuperAdminLogin(role);
     } else if (role.type === "verifier") {
       await handleVerifierLogin(role);
     } else if (role.type === "faculty") {
@@ -96,6 +101,32 @@ function RoleSelection() {
       navigate(role.destination);
     } else {
       setLoginMessage(`❌ Incorrect password for ${role.label}.`);
+    }
+  };
+
+  const handleSuperAdminLogin = async (role) => {
+    try {
+      const response = await fetch(`${API_BASE}/superadmin/login`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(formValues),
+      });
+      const data = await response.json();
+      if (response.ok && data.success) {
+        // Store token and user data
+        if (data.token) {
+          localStorage.setItem("token", data.token);
+        }
+        if (data.user) {
+          localStorage.setItem("superAdmin", JSON.stringify(data.user));
+        }
+        navigate(role.destination);
+      } else {
+        setLoginMessage(`❌ ${data.message || "Invalid Super Admin credentials."}`);
+      }
+    } catch (error) {
+      console.error("Super Admin login failed:", error);
+      setLoginMessage("❌ Unable to reach authentication service. Please try again.");
     }
   };
 

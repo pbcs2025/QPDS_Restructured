@@ -1,4 +1,4 @@
-
+// backend/src/routes/authRoutes.js
 const express = require('express');
 const router = express.Router();
 const { body } = require('express-validator');
@@ -29,6 +29,12 @@ router.post('/register', ctrl.register);
 router.post('/login', ctrl.login);
 
 /**
+ * Super Admin Login - direct authentication
+ * Access: Public
+ */
+router.post('/superadmin/login', ctrl.superAdminLogin);
+
+/**
  * Verify code and get JWT token
  * Access: Public (secured by verification code)
  */
@@ -46,6 +52,12 @@ router.post('/forgot-password', ctrl.forgotPassword);
  */
 router.post('/reset-password', verifyToken, ctrl.resetPassword);
 
+/**
+ * Logout - log user activity
+ * Access: Authenticated users only
+ */
+router.post('/logout', verifyToken, ctrl.logout);
+
 // ============================================
 // SUPERADMIN ONLY ROUTES
 // ============================================
@@ -53,18 +65,16 @@ router.post('/reset-password', verifyToken, ctrl.resetPassword);
 /**
  * Register new faculty
  * Access: SuperAdmin only
- * Reason: Only SuperAdmin should be able to create faculty accounts
  */
 router.post('/registerFaculty', 
-  verifyToken,           // Must be authenticated
-  isSuperAdmin,          // Must be SuperAdmin role
+  verifyToken,
+  isSuperAdmin,
   ctrl.registerFaculty
 );
 
 /**
  * Get all internal users
  * Access: SuperAdmin only
- * Reason: Sensitive user data - full system access
  */
 router.get('/users', 
   verifyToken,
@@ -75,7 +85,6 @@ router.get('/users',
 /**
  * Get all external users
  * Access: SuperAdmin only
- * Reason: Sensitive user data - full system access
  */
 router.get('/externalusers', 
   verifyToken,
@@ -84,69 +93,27 @@ router.get('/externalusers',
 );
 
 // ============================================
-// SUPERADMIN & FACULTY ROUTES
+// SUPERADMIN & FACULTY & VERIFIER ROUTES
 // ============================================
 
 /**
  * Get all colleges
- * Access: SuperAdmin and Faculty
- * Reason: Both need to see college list for their work
+ * Access: SuperAdmin, Faculty, and Verifier
  */
 router.get('/colleges', 
   verifyToken,
-  authorize('SuperAdmin', 'Faculty','Verifier'),
+  authorize('SuperAdmin', 'Faculty', 'Verifier'),
   ctrl.getColleges
 );
 
 /**
  * Get all departments
- * Access: SuperAdmin and Faculty and Verifier
- * Reason: all may have to see department list for their work
+ * Access: SuperAdmin, Faculty, and Verifier
  */
 router.get('/departments', 
   verifyToken,
-  authorize('SuperAdmin', 'Faculty','Verifier'),
+  authorize('SuperAdmin', 'Faculty', 'Verifier'),
   ctrl.getDepartments
 );
-
-// ============================================
-// EXAMPLE: Additional Protected Routes
-// ============================================
-
-/*
-// SuperAdmin, Faculty, and Verifier can access
-router.get('/some-shared-route', 
-  verifyToken,
-  authorize('SuperAdmin', 'Faculty', 'Verifier'),
-  ctrl.someFunction
-);
-
-// Only Faculty can access
-router.post('/faculty-only-route', 
-  verifyToken,
-  isFaculty,
-  ctrl.facultyFunction
-);
-
-// Only Verifier can access
-router.post('/verify-submission', 
-  verifyToken,
-  isVerifier,
-  ctrl.verifySubmission
-);
-
-// Any authenticated user
-router.get('/profile', 
-  verifyToken,
-  ctrl.getProfile
-);
-
-// Owner or SuperAdmin (for editing personal data)
-router.put('/users/:userId', 
-  verifyToken,
-  isOwnerOrSuperAdmin,
-  ctrl.updateUser
-);
-*/
 
 module.exports = router;

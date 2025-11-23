@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 
-const API_BASE = process.env.REACT_APP_API_BASE_URL;
+const API_BASE = process.env.REACT_APP_API_BASE_URL || 'http://localhost:5001/api';
 
 function AdminManageFaculty() {
   const [formData, setFormData] = useState({
@@ -20,11 +20,24 @@ function AdminManageFaculty() {
     // Fetch colleges
     const fetchColleges = async () => {
       try {
-        const res = await fetch(`${API_BASE}/colleges/active`);
+        const token = localStorage.getItem('token');
+        const res = await fetch(`${API_BASE}/colleges/active`, {
+          headers: { 
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          }
+        });
+        
+        if (!res.ok) {
+          throw new Error(`HTTP error! status: ${res.status}`);
+        }
+        
         const data = await res.json();
-        setColleges(data);
+        const collegesList = Array.isArray(data) ? data : [];
+        setColleges(collegesList);
       } catch (err) {
         console.error("Failed to fetch colleges:", err);
+        setColleges([]);
       }
     };
 
@@ -32,14 +45,57 @@ function AdminManageFaculty() {
     const fetchDepartments = async () => {
       try {
         setDepartmentsLoading(true);
-        const res = await fetch(`${API_BASE}/departments/active`);
+        const token = localStorage.getItem('token');
+        
+        if (!token) {
+          console.error("No authentication token found");
+          setDepartments([]);
+          setDepartmentsLoading(false);
+          return;
+        }
+        
+        const res = await fetch(`${API_BASE}/departments/active`, {
+          headers: { 
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          }
+        });
+        
+        console.log("Departments API response status:", res.status);
+        
+        if (!res.ok) {
+          throw new Error(`HTTP error! status: ${res.status}`);
+        }
+        
         const data = await res.json();
-        console.log("Departments fetched:", data); // Debug log
-        console.log("Departments count:", data.length); // Debug log
-        setDepartments(data);
+        console.log("Departments fetched (raw):", data);
+        
+        // Handle different response formats
+        let departmentsList = [];
+        if (Array.isArray(data)) {
+          departmentsList = data;
+        } else if (data && Array.isArray(data.data)) {
+          departmentsList = data.data;
+        } else if (data && Array.isArray(data.departments)) {
+          departmentsList = data.departments;
+        }
+        
+        console.log("Departments processed:", departmentsList.length);
+        console.log("First department sample:", departmentsList[0]);
+        
+        // Ensure each department has id and name
+        const normalizedDepartments = departmentsList.map((dept) => ({
+          id: dept.id || (dept._id ? dept._id.toString() : null),
+          name: dept.name || "Unknown",
+          color: dept.color || "#6c757d"
+        }));
+        
+        console.log("Normalized departments:", normalizedDepartments);
+        setDepartments(normalizedDepartments);
       } catch (err) {
         console.error("Failed to fetch departments:", err);
-        setDepartments([]); // Set empty array on error
+        console.error("Error details:", err.message);
+        setDepartments([]);
       } finally {
         setDepartmentsLoading(false);
       }
@@ -93,9 +149,13 @@ function AdminManageFaculty() {
     }
 
     try {
+      const token = localStorage.getItem('token');
       const res = await fetch(`${API_BASE}/faculty/register`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { 
+          "Content-Type": "application/json",
+          'Authorization': `Bearer ${token}`
+        },
         body: JSON.stringify({
           name: formData.name,
           clgName: formData.clgName,
@@ -205,12 +265,14 @@ function AdminManageFaculty() {
               <option disabled>Loading departments...</option>
             ) : departments.length > 0 ? (
               departments.map((dept) => (
-                <option key={dept.id} value={dept.name}>
+                <option key={dept.id || dept.name} value={dept.name}>
                   {dept.name}
                 </option>
               ))
             ) : (
-              <option disabled>No departments available</option>
+              <option disabled value="">
+                {departmentsLoading ? "Loading..." : "No departments available"}
+              </option>
             )}
           </select>
         </div>

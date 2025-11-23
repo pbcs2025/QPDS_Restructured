@@ -1,3 +1,4 @@
+//controllers/departmentController.js
 const Department = require('../models/Department');
 
 //GET all departments

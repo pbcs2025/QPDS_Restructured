@@ -16,6 +16,7 @@ const FacultySchema = new mongoose.Schema(
     type: { type: String, enum: ['internal', 'external'], required: true },
     role: { type: String, default: "faculty" },
     verificationCode: { type: String },
+    verificationCodeExpiresAt: { type: Date },
     isActive: { type: Boolean, default: true }
   },
   { timestamps: true }

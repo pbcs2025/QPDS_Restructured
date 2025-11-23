@@ -37,34 +37,40 @@ function ManageUsers({ userType , userpage }) {
     { value: "8", label: "Semester 8" }
   ];
   useEffect(() => {
-  axios
-  .get(`${API_BASE}/subjects`)
-    .then((res) => {
-    // Normalize to array of { code, name, department, semester }
-    const list = Array.isArray(res.data) ? res.data : [];
-    const normalized = list.map(item => {
-      if (typeof item === 'string') {
-        return { code: item, name: '', department: '', semester: '' };
-      }
-      return {
-        code: item.subject_code || item.code || '',
-        name: item.subject_name || item.name || '',
-        department: item.department || '',
-        semester: typeof item.semester === 'number' ? String(item.semester) : (item.semester || '')
-      };
-    }).filter(x => x.code);
-    setSubjectCodes(normalized);
+    const token = localStorage.getItem('token');
+    axios
+    .get(`${API_BASE}/subjects`, {
+      headers: { 'Authorization': `Bearer ${token}` }
     })
-    .catch((err) => console.error("Error fetching subject codes:", err));
-}, []);
+      .then((res) => {
+      // Normalize to array of { code, name, department, semester }
+      const list = Array.isArray(res.data) ? res.data : [];
+      const normalized = list.map(item => {
+        if (typeof item === 'string') {
+          return { code: item, name: '', department: '', semester: '' };
+        }
+        return {
+          code: item.subject_code || item.code || '',
+          name: item.subject_name || item.name || '',
+          department: item.department || '',
+          semester: typeof item.semester === 'number' ? String(item.semester) : (item.semester || '')
+        };
+      }).filter(x => x.code);
+      setSubjectCodes(normalized);
+      })
+      .catch((err) => console.error("Error fetching subject codes:", err));
+  }, []);
 
 useEffect(() => {
+  const token = localStorage.getItem('token');
   axios
-    .get(`${API_BASE}/departments`)
+    .get(`${API_BASE}/departments`, {
+      headers: { 'Authorization': `Bearer ${token}` }
+    })
     .then((res) => {
       if (Array.isArray(res.data)) {
         // If API returns objects like {department: "CSE"}, map to strings
-        const deptNames = res.data.map(d => typeof d === "string" ? d : d.department);
+        const deptNames = res.data.map(d => typeof d === "string" ? d : (d.department || d.name));
         setDepartments(deptNames.filter(Boolean));
       } else {
         console.error("Unexpected departments response:", res.data);
@@ -94,8 +100,14 @@ useEffect(() => {
 // Fetch recent assignments
 useEffect(() => {
   if (userType === "superadmin" && userpage === "qp") {
-    fetch(`${API_BASE}/recent-assignments`)
-      .then(res => res.json())
+    const token = localStorage.getItem('token');
+    fetch(`${API_BASE}/recent-assignments`, {
+      headers: { 'Authorization': `Bearer ${token}` }
+    })
+      .then(res => {
+        if (!res.ok) throw new Error(`Status ${res.status}`);
+        return res.json();
+      })
       .then(data => {
         // Process assignments to ensure completed ones have proper timestamps
         const processedData = (data || []).map(assignment => {
@@ -197,8 +209,14 @@ const handleSemesterChange = (semester) => {
 
   useEffect(() => {
     const fetchFaculties = () => {
-      fetch(`${API_BASE}/users`)
-        .then((res) => res.json())
+      const token = localStorage.getItem('token');
+      fetch(`${API_BASE}/users`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      })
+        .then((res) => {
+          if (!res.ok) throw new Error(`Status ${res.status}`);
+          return res.json();
+        })
         .then((data) => setInternalFaculties(data))
         .catch((err) => console.error("Fetch error:", err));
     };
@@ -219,8 +237,14 @@ const handleSemesterChange = (semester) => {
 
   useEffect(() => {
     const fetchExternalFaculties = () => {
-      fetch(`${API_BASE}/externalusers`)
-        .then((res) => res.json())
+      const token = localStorage.getItem('token');
+      fetch(`${API_BASE}/externalusers`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      })
+        .then((res) => {
+          if (!res.ok) throw new Error(`Status ${res.status}`);
+          return res.json();
+        })
         .then((data) => setOtherFaculties(data))
         .catch((err) => console.error("Fetch error:", err));
     };
@@ -335,9 +359,13 @@ const handleSemesterChange = (semester) => {
 
     setStatusMessage("Submitting assignment...");
 
+    const token = localStorage.getItem('token');
     fetch(`${API_BASE}/assignQPSetter`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { 
+        "Content-Type": "application/json",
+        'Authorization': `Bearer ${token}`
+      },
       body: JSON.stringify({
         //emails: selectedEmails,
        users: selectedUsers,
@@ -396,8 +424,14 @@ const handleSemesterChange = (semester) => {
           
           // Then refresh from backend after a short delay
           setTimeout(() => {
-            fetch(`${API_BASE}/recent-assignments`)
-              .then(res => res.json())
+            const token = localStorage.getItem('token');
+            fetch(`${API_BASE}/recent-assignments`, {
+              headers: { 'Authorization': `Bearer ${token}` }
+            })
+              .then(res => {
+                if (!res.ok) throw new Error(`Status ${res.status}`);
+                return res.json();
+              })
               .then(data => {
                 // Process assignments to ensure completed ones have proper timestamps
                 const processedData = (data || []).map(assignment => {
