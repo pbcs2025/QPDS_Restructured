@@ -95,6 +95,7 @@ function FacultyLogin() {
         const response = await fetch(`${API_BASE}/faculty/login`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
+          credentials: 'include',
           body: JSON.stringify(formValues),
         });
 

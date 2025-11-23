@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useLocation } from "react-router-dom";
 import axios from "axios";
 import {
   BarChart,
@@ -45,6 +45,7 @@ const ViewAnalytics = () => {
   const [allSubjects, setAllSubjects] = useState([]);
   const [metrics, setMetrics] = useState({ sent: 0, received: 0, pending: 0, rejected: 0 });
   const navigate = useNavigate();
+  const location = useLocation();
 
   // Fetch backend data for departments and subjects
   useEffect(() => {
@@ -68,6 +69,35 @@ const ViewAnalytics = () => {
     };
     load();
   }, []);
+
+  // Restore state from URL parameters when component mounts or URL changes
+  useEffect(() => {
+    const urlParams = new URLSearchParams(location.search);
+    const subjectFromUrl = urlParams.get('subject');
+    const deptFromUrl = urlParams.get('department');
+    const semFromUrl = urlParams.get('semester');
+
+    // Only restore if we have parameters and data is loaded
+    if ((subjectFromUrl || deptFromUrl || semFromUrl) && departments.length > 0 && allSubjects.length > 0) {
+      setDept(deptFromUrl || "");
+      setSem(semFromUrl || "");
+      setSubject(subjectFromUrl || "");
+
+      // If we have all required parameters, trigger the analytics fetch after a brief delay
+      if (subjectFromUrl && deptFromUrl && semFromUrl) {
+        // Clear any existing chart and set loading state
+        setShowChart(false);
+        setChartData([]);
+        setError("");
+
+        // Small delay to ensure state is fully set and dropdowns are populated
+        setTimeout(() => {
+          const event = { preventDefault: () => {} };
+          handleConfirm();
+        }, 300); // Increased delay for smoother transition
+      }
+    }
+  }, [location.search, departments, allSubjects]);
 
   // Derive semester options for selected department
   const semesterOptions = React.useMemo(() => {
@@ -96,6 +126,9 @@ const ViewAnalytics = () => {
       return;
     }
     setError("");
+
+    // Show loading state immediately
+    setShowChart(false);
 
     const fetchAnalytics = async () => {
       try {
@@ -300,9 +333,38 @@ const ViewAnalytics = () => {
           </select>
         </div>
 
-        <button className="view-analytics-button" onClick={handleConfirm}>
-          Confirm
-        </button>
+        <div style={{ display: 'flex', gap: '8px', alignItems: 'flex-end' }}>
+          <button className="view-analytics-button" onClick={handleConfirm}>
+            Confirm
+          </button>
+          {(dept || sem || subject) && (
+            <button
+              className="view-analytics-button"
+              onClick={() => {
+                setDept("");
+                setSem("");
+                setSubject("");
+                setShowChart(false);
+                setChartData([]);
+                setError("");
+              }}
+              style={{
+                backgroundColor: '#6c757d',
+                border: '1px solid #6c757d'
+              }}
+              onMouseEnter={(e) => {
+                e.target.style.backgroundColor = '#5a6268';
+                e.target.style.borderColor = '#5a6268';
+              }}
+              onMouseLeave={(e) => {
+                e.target.style.backgroundColor = '#6c757d';
+                e.target.style.borderColor = '#6c757d';
+              }}
+            >
+              Clear
+            </button>
+          )}
+        </div>
       </div>
 
       {error && <div className="error-message">{error}</div>}
@@ -332,11 +394,11 @@ const ViewAnalytics = () => {
                   const row = chartData[index];
                   if (!row || row.name !== 'Papers Pending') return;
                   if (!subject) return;
-                  
+
                   // Store the current state in session storage
                   const analyticsState = { subject, dept, sem, tab: 'viewAnalytics' };
                   sessionStorage.setItem('analyticsState', JSON.stringify(analyticsState));
-                  
+
                   // Create URL with query parameters
                   const params = new URLSearchParams();
                   params.set('tab', 'viewAssignees');
@@ -345,10 +407,10 @@ const ViewAnalytics = () => {
                   params.set('fromAnalytics', 'true');
                   if (dept) params.set('department', dept);
                   if (sem) params.set('semester', String(sem));
-                  
+
                   // Navigate to the View Assignees tab with filters
-                  navigate(`/super-admin-dashboard?${params.toString()}`, { 
-                    state: { fromAnalytics: true } 
+                  navigate(`/super-admin-dashboard?${params.toString()}`, {
+                    state: { fromAnalytics: true }
                   });
                 }}
                 cursor="pointer"

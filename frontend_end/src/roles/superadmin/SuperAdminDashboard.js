@@ -702,7 +702,7 @@ function SuperAdminDashboard() {
 
 
         {activeTab === "viewAssignees" && (
-          <ViewAssignees 
+          <ViewAssignees
             key={location.search} // Force re-render when URL params change
             status={new URLSearchParams(location.search).get('status')}
           />

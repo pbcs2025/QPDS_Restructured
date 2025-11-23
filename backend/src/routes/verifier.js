@@ -27,12 +27,16 @@ router.get('/papers/:subject_code/:semester/corrected', ctrl.getCorrectedQuestio
 router.get('/approved-list', ctrl.listApprovedPapers);
 router.get('/rejected-list', ctrl.listRejectedPapers);
 
-router.delete('/:verifierId', ctrl.removeOne);
+router.delete('/remove/:verifierId', ctrl.removeOne);
 
 // Faculty management routes for verifiers
 router.get('/faculties/department/:department', ctrl.getFacultiesByDepartment);
 router.post('/assign-temporary/:facultyId', ctrl.assignTemporaryVerifier);
 router.delete('/remove-temporary/:facultyId', ctrl.removeTemporaryVerifier);
+
+// Subject assignment routes for verifiers
+router.post('/assign-subject', ctrl.assignSubjectToFaculty);
+router.delete('/remove-subject-assignment', ctrl.removeSubjectFromFaculty);
 
 
 // Admin-only: normalize Verifier.department to active Departments canonical names

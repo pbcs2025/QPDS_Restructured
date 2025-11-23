@@ -8,7 +8,6 @@ const upload = multer({ storage: multer.memoryStorage() });
 router.post('/register', facultyController.registerFaculty);
 router.post('/login', facultyController.loginFaculty);
 router.post('/verify', facultyController.verifyFaculty);
-router.post('/check-email', facultyController.checkEmailExists);
 router.post('/forgot-password', facultyController.forgotFacultyPassword);
 router.post('/reset-password', facultyController.resetFacultyPassword);
 

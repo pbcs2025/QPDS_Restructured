@@ -3,6 +3,8 @@ import { useNavigate } from "react-router-dom";
 import "../../common/dashboard.css";
 import QuestionPapers from "./QuestionPapers";
 import ManageFaculties from "./ManageFaculties";
+import SubjectsManagement from "./SubjectsManagement";
+import ReportsManagement from "./ReportsManagement";
 
 
 const API_BASE = process.env.REACT_APP_API_BASE_URL;
@@ -22,10 +24,16 @@ function VerifierDashboard() {
     try {
       const parsed = JSON.parse(raw);
       setVerifier(parsed);
+      // Set default tab based on verifier type
+      if (parsed.role === 'verifier' && parsed.temporary) {
+        setActiveTab("papers");
+      }
     } catch {
       navigate("/login/verifier");
     }
   }, [navigate]);
+
+  const isTemporaryVerifier = verifier && verifier.role === 'verifier' && verifier.temporary;
 
   const handleLogoutClick = () => setShowConfirm(true);
   const confirmLogout = () => {
@@ -35,7 +43,30 @@ function VerifierDashboard() {
   };
   const cancelLogout = () => setShowConfirm(false);
 
-  if (!verifier) return null;
+  if (!verifier) {
+    return (
+      <div style={{
+        display: 'flex',
+        justifyContent: 'center',
+        alignItems: 'center',
+        height: '100vh',
+        background: 'url(/images/GAT.jpg)',
+        backgroundSize: 'cover',
+        backgroundPosition: 'center'
+      }}>
+        <div style={{
+          background: 'white',
+          padding: '20px',
+          borderRadius: '8px',
+          boxShadow: '0 2px 10px rgba(0,0,0,0.1)',
+          textAlign: 'center'
+        }}>
+          <div style={{ fontSize: '20px', marginBottom: '10px' }}>Loading Verifier Dashboard...</div>
+          <div style={{ border: '2px solid #3498db', borderTop: '2px solid transparent', borderRadius: '50%', width: '30px', height: '30px', animation: 'spin 1s linear infinite', margin: '0 auto' }}></div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="dashboard-container">
@@ -75,17 +106,11 @@ function VerifierDashboard() {
         )}
 
         {activeTab === "subjects" && (
-          <div>
-            <h1>Subjects</h1>
-            <p>Manage department subjects & assign to faculties (placeholder).</p>
-          </div>
+          <SubjectsManagement verifier={verifier} />
         )}
 
         {activeTab === "reports" && (
-          <div>
-            <h1>Reports</h1>
-            <p>Submission/approval stats (placeholder).</p>
-          </div>
+          <ReportsManagement verifier={verifier} />
         )}
 
         {activeTab === "settings" && (

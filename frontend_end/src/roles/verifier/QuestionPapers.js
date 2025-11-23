@@ -33,31 +33,74 @@ const QuestionPapers = () => {
   const fetchPapers = useCallback(async () => {
     try {
       setLoading(true);
-      
-      console.log('🔄 FETCHING ALL PAPERS - NO FILTERING');
-      console.log('⚠️  FILTERING DISABLED - SHOWING ALL PAPERS');
-      
-      // NO FILTERING - GET ALL PAPERS
-      const response = await fetch(`${API_BASE}/verifier/papers`, {
+
+      // Get verifier info to determine filtering
+      const verifierData = localStorage.getItem('verifier');
+      let verifier = null;
+      let isTemporaryVerifier = false;
+      let verifierDepartment = '';
+
+      if (verifierData) {
+        verifier = JSON.parse(verifierData);
+        isTemporaryVerifier = verifier.temporary;
+        verifierDepartment = verifier.department;
+      }
+
+      console.log('🔄 FETCHING PAPERS');
+      console.log('Temporary verifier:', isTemporaryVerifier);
+      console.log('Verifier department:', verifierDepartment);
+
+      // Build query parameters based on verifier type
+      const params = new URLSearchParams();
+
+      if (isTemporaryVerifier) {
+        // Temporary verifiers only see papers from their assigned subjects
+        // The backend will filter by assignedSubjects from verifier data
+        console.log('📋 TEMPORARY VERIFIER: Will filter by assigned subjects', verifier?.assignedSubjects);
+      } else {
+        // Permanent verifiers can see all papers but can filter by selected department
+        if (selectedDepartment) {
+          params.append('department', selectedDepartment);
+          console.log('📋 PERMANENT VERIFIER: Filtering by selected department', selectedDepartment);
+        }
+        if (selectedSemester) {
+          params.append('semester', selectedSemester);
+          console.log('📋 PERMANENT VERIFIER: Filtering by semester', selectedSemester);
+        }
+      }
+
+      const queryString = params.toString();
+      const url = `${API_BASE}/verifier/papers${queryString ? `?${queryString}` : ''}`;
+
+      console.log('Fetching papers from:', url);
+
+      // Include verifier data in headers for backend filtering
+      const headers = {
+        'Content-Type': 'application/json',
+      };
+
+      if (verifierData) {
+        headers['verifier-data'] = verifierData;
+      }
+
+      const response = await fetch(url, {
         method: 'GET',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers: headers,
       });
-      
+
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`);
       }
-      
+
       const data = await response.json();
       console.log('Fetched submitted papers:', data);
       console.log('Filtered papers count:', Array.isArray(data) ? data.length : (data.papers ? data.papers.length : 0));
-      
+
       // Debug: Log the actual data structure
       if (Array.isArray(data) && data.length > 0) {
         console.log('Sample paper structure:', data[0]);
       }
-      
+
       // Ensure data is an array - if it's wrapped in an object, extract the papers array
       if (data && data.papers) {
         setPapers(data.papers);
@@ -75,7 +118,7 @@ const QuestionPapers = () => {
     } finally {
       setLoading(false);
     }
-  }, []); // Remove dependencies - fetch all papers
+  }, [selectedDepartment, selectedSemester]);
 
   // Fetch papers immediately - NO FILTERING
   useEffect(() => {

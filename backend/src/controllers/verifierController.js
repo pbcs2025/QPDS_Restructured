@@ -111,11 +111,41 @@ exports.login = async (req, res) => {
     const { username, password } = req.body;
     if (!username || !password) return res.status(400).json({ error: 'username and password are required' });
 
-    const user = await User.findOne({ username, password, role: 'Verifier' }).lean();
+    // Allow login by username or email for verifiers
+    const user = await User.findOne({
+      $or: [
+        { username },
+        { email: username }
+      ],
+      password,
+      role: 'Verifier'
+    }).lean();
     if (!user) return res.status(401).json({ success: false, message: 'Invalid credentials' });
 
-    const verifier = await Verifier.findOne({ username }).lean();
-    return res.json({ success: true, verifier });
+    const verifier = await Verifier.findOne({ verifierId: user._id }).lean();
+    console.log('Login successful for user:', user.username, 'verifier found by verifierId:', !!verifier);
+    if (!verifier) return res.status(401).json({ success: false, message: 'Verifier record not found' });
+
+    // Check if this is a temporary verifier by looking up the Faculty record
+    const faculty = await Faculty.findOne({ facultyId: user._id }).lean();
+
+    let isTemporary = false;
+    let assignedSubjects = [];
+
+    if (faculty && faculty.verifierExpiresAt && faculty.verifierExpiresAt > new Date()) {
+      // This is a temporary verifier
+      isTemporary = true;
+      assignedSubjects = faculty.assignedSubjects || [];
+    }
+
+    // Add temporary status and assigned subjects to the response
+    const verifierResponse = {
+      ...verifier,
+      temporary: isTemporary,
+      assignedSubjects: assignedSubjects
+    };
+
+    return res.json({ success: true, verifier: verifierResponse });
   } catch (err) {
     console.error('Verifier login error:', err);
     return res.status(500).json({ success: false, message: 'Server error' });
@@ -150,7 +180,23 @@ exports.getRejectedPapers = async (req, res) => {
     const { department, semester } = req.query;
 
     const filter = {};
-    if (department) filter.department = department;
+    
+    // Handle case-insensitive department filtering
+    if (department) {
+      // Find the canonical department name from the database
+      const dept = await Department.findOne({
+        name: { $regex: new RegExp(`^${department}$`, 'i') },
+        isActive: true
+      });
+      
+      if (dept) {
+        filter.department = dept.name; // Use the canonical department name
+      } else {
+        // If no matching active department found, return empty array
+        return res.json([]);
+      }
+    }
+    
     if (semester) filter.semester = parseInt(semester, 10);
 
     const rejected = await RejectedPaper.find(filter).sort({ rejected_at: -1 }).lean();
@@ -200,7 +246,23 @@ exports.getApprovedPapers = async (req, res) => {
     const { department, semester } = req.query;
 
     const filter = {};
-    if (department) filter.department = department;
+    
+    // Handle case-insensitive department filtering
+    if (department) {
+      // Find the canonical department name from the database
+      const dept = await Department.findOne({
+        name: { $regex: new RegExp(`^${department}$`, 'i') },
+        isActive: true
+      });
+      
+      if (dept) {
+        filter.department = dept.name; // Use the canonical department name
+      } else {
+        // If no matching active department found, return empty array
+        return res.json([]);
+      }
+    }
+    
     if (semester) filter.semester = parseInt(semester, 10);
 
     const approved = await ApprovedPaper.find(filter).sort({ approved_at: -1 }).lean();
@@ -244,26 +306,49 @@ exports.getApprovedPapers = async (req, res) => {
   }
 };
 
-// Get papers for verifier - DISPLAY ALL PAPERS WITHOUT FILTERING
+// Get papers for verifier - FILTER BY VERIFIER TYPE
 exports.getPapers = async (req, res) => {
   try {
-    const { department, semester } = req.query;
-    console.log('Verifier getPapers called with:', { department, semester });
-    console.log('⚠️  FILTERING DISABLED - SHOWING ALL PAPERS');
+    // Get verifier info from request (passed through middleware or stored in localStorage)
+    // For temporary verifiers, we need to filter by assigned subjects
+    const verifierData = req.headers['verifier-data'];
+    let verifier = null;
 
-    // REMOVE ALL FILTERING - SHOW ALL PAPERS
-    const filter = {};
-    // if (department) filter.department = String(department).trim();
-    // if (semester) filter.semester = parseInt(semester, 10);
-    
-    console.log('No filter applied - showing all papers');
+    if (verifierData) {
+      try {
+        verifier = JSON.parse(verifierData);
+      } catch (e) {
+        console.error('Error parsing verifier data:', e);
+      }
+    }
+
+    const { department, semester, assignedSubjects } = req.query;
+    console.log('Verifier getPapers called with:', { department, semester, assignedSubjects });
+    console.log('Verifier info:', verifier ? { temporary: verifier.temporary, assignedSubjects: verifier.assignedSubjects } : 'No verifier data');
+
+    let filter = {};
+
+    // If verifier is temporary, filter by assigned subjects
+    if (verifier && verifier.temporary && Array.isArray(verifier.assignedSubjects) && verifier.assignedSubjects.length > 0) {
+      filter.subject_code = { $in: verifier.assignedSubjects };
+      console.log('📋 TEMPORARY VERIFIER: Filtering by assigned subjects:', verifier.assignedSubjects);
+    } else {
+      // For permanent verifiers, allow department filtering or show all papers
+      if (department) filter.department = String(department).trim();
+      console.log('📋 PERMANENT VERIFIER: Using department filter or showing all papers');
+    }
+
+    if (semester) filter.semester = parseInt(semester, 10);
+
+    console.log('Applied filter:', filter);
 
     // Exclude papers already stored in rejected
     const rejectedPaperKeys = await RejectedPaper.find({}, { subject_code: 1, semester: 1 }).lean();
     const rejectedKeys = new Set(rejectedPaperKeys.map(rp => `${rp.subject_code}_${rp.semester}`));
 
-    // GET ALL PAPERS - NO FILTERING
+    // GET PAPERS WITH FILTERING
     const allPapers = await QuestionPaper.find({
+      ...filter,
       $or: [
         { status: { $exists: false } },
         { status: null },
@@ -271,7 +356,7 @@ exports.getPapers = async (req, res) => {
         { status: 'submitted' }
       ]
     }).sort({ subject_code: 1, semester: 1, question_number: 1 }).lean();
-    
+
     console.log('📋 TOTAL PAPERS FOUND:', allPapers.length);
 
     console.log('📄 Sample papers:', allPapers.slice(0, 3).map(p => ({
@@ -987,7 +1072,7 @@ exports.getFacultiesByDepartment = async (req, res) => {
       department,
       isActive: true
     })
-    .select('name email type verifierExpiresAt')
+    .select('name email type verifierExpiresAt assignedSubjects')
     .sort({ name: 1 })
     .lean();
 
@@ -1024,13 +1109,15 @@ exports.assignTemporaryVerifier = async (req, res) => {
 
     // Check if user account exists for this faculty
     let userAccount = await User.findOne({ email: faculty.email });
-    let username, password;
+    let username;
+
+    // Always generate a new password for temporary verifiers
+    const password = generateRandomAlphanumeric(8);
 
     if (!userAccount) {
       // Create a new user account for the faculty
       const randomSuffix = generateRandomAlphanumeric(4);
       username = `${faculty.name.replace(/\s+/g, '').toLowerCase()}_${randomSuffix}`;
-      password = generateRandomAlphanumeric(8);
 
       // Get department info
       const department = await Department.findById(faculty.department);
@@ -1045,12 +1132,32 @@ exports.assignTemporaryVerifier = async (req, res) => {
         phoneNo: faculty.phoneNo || '',
         password,
         usertype: faculty.type,
-        role: 'Faculty',
+        role: 'Verifier',
       });
     } else {
-      // Use existing credentials
+      // Update existing user to Verifier role and set new password
+      await User.findByIdAndUpdate(userAccount._id, { role: 'Verifier', password });
+      // Use existing username
       username = userAccount.username;
-      password = userAccount.password;
+    }
+
+    // Check if Verifier document already exists for this user
+    let existingVerifier = await Verifier.findOne({ username });
+    if (!existingVerifier) {
+      // Create the Verifier document if it doesn't exist
+      console.log('Creating Verifier document for:', username, 'department:', faculty.department);
+      await Verifier.create({
+        verifierId: userAccount._id,
+        verifierName: faculty.name,
+        username,
+        passwordHash: password,
+        department: faculty.department,
+        email: faculty.email,
+        role: 'verifier',
+      });
+      console.log('Verifier document created successfully');
+    } else {
+      console.log('Verifier document already exists for:', username);
     }
 
     // Get verifier details from the request to include in email
@@ -1210,11 +1317,11 @@ exports.cleanupExpiredUserAccounts = async () => {
       // Disable user accounts by setting a flag or changing password
       // Since we can't delete passwords easily, we'll set them to a disabled state
       const result = await User.updateMany(
-        { email: { $in: emails }, role: 'Faculty' },
+        { email: { $in: emails }, role: 'Verifier' }, // Changed from 'Faculty' to 'Verifier' for temporary verifiers
         {
           $set: {
             password: 'EXPIRED_' + generateRandomAlphanumeric(16),
-            role: 'Faculty' // Ensure they remain Faculty role
+            role: 'Faculty' // Revert back to Faculty role after expiry
           }
         }
       );
@@ -1225,6 +1332,136 @@ exports.cleanupExpiredUserAccounts = async () => {
     return expiredFaculties.length;
   } catch (err) {
     console.error('Error cleaning up expired user accounts:', err);
+  }
+};
+
+// Assign subject to faculty
+exports.assignSubjectToFaculty = async (req, res) => {
+  try {
+    let { subjectCode, facultyId, department } = req.body;
+
+    subjectCode = String(subjectCode || '').trim();
+    department = String(department || '').trim();
+
+    if (!subjectCode || !facultyId || !department) {
+      return res.status(400).json({ error: 'subjectCode, facultyId, and department are required' });
+    }
+
+    // Check if facultyId is a valid ObjectId
+    if (!mongoose.Types.ObjectId.isValid(facultyId)) {
+      return res.status(400).json({ error: 'Invalid faculty ID format' });
+    }
+
+    // Verify the faculty belongs to this department (case insensitive)
+    const faculty = await Faculty.findById(facultyId);
+    if (!faculty) {
+      return res.status(404).json({ error: 'Faculty not found' });
+    }
+    if (String(faculty.department || '').toLowerCase().trim() !== department.toLowerCase()) {
+      return res.status(403).json({ error: 'Faculty does not belong to this department' });
+    }
+
+    // Check if faculty already has this subject assigned (case sensitive, trimmed)
+    if (Array.isArray(faculty.assignedSubjects) && faculty.assignedSubjects.some(s => String(s || '').trim() === subjectCode)) {
+      return res.status(400).json({ error: 'Subject already assigned to this faculty' });
+    }
+
+    // Add subject to faculty's assigned subjects
+    const updatedFaculty = await Faculty.findByIdAndUpdate(
+      facultyId,
+      { $addToSet: { assignedSubjects: subjectCode } },
+      { new: true }
+    );
+
+    res.json({
+      message: 'Subject assigned successfully',
+      faculty: updatedFaculty
+    });
+  } catch (err) {
+    console.error('Error assigning subject to faculty:', err);
+    res.status(500).json({ error: 'Server error' });
+  }
+};
+
+// Remove subject assignment from faculty
+exports.removeSubjectFromFaculty = async (req, res) => {
+  const session = await mongoose.startSession();
+  session.startTransaction();
+  
+  try {
+    let { subjectCode, facultyId, department } = req.body;
+    console.log('removeSubjectFromFaculty called with:', { subjectCode, facultyId, department });
+
+    // Trim and validate inputs
+    subjectCode = String(subjectCode || '').trim();
+    department = String(department || '').trim();
+
+    if (!subjectCode || !facultyId || !department) {
+      console.error('Missing required fields:', { subjectCode: !!subjectCode, facultyId: !!facultyId, department: !!department });
+      return res.status(400).json({ error: 'subjectCode, facultyId, and department are required' });
+    }
+
+    // Check if facultyId is a valid ObjectId
+    if (!mongoose.Types.ObjectId.isValid(facultyId)) {
+      console.error('Invalid facultyId format:', facultyId);
+      return res.status(400).json({ error: 'Invalid faculty ID format' });
+    }
+
+    // Get the faculty document with all required fields
+    const faculty = await Faculty.findById(facultyId).session(session);
+    if (!faculty) {
+      console.error('Faculty not found with ID:', facultyId);
+      return res.status(404).json({ error: 'Faculty not found' });
+    }
+
+    // Verify department
+    if (String(faculty.department || '').toLowerCase().trim() !== department.toLowerCase()) {
+      console.error('Faculty department mismatch:', { facultyDept: faculty.department, requestedDept: department });
+      return res.status(403).json({ error: 'Faculty does not belong to this department' });
+    }
+
+    // Check if subject is actually assigned
+    if (!Array.isArray(faculty.assignedSubjects) || !faculty.assignedSubjects.some(s => String(s || '').trim() === subjectCode)) {
+      console.error('Subject not assigned to faculty:', { subjectCode, facultyId, assignedSubjects: faculty.assignedSubjects });
+      return res.status(400).json({ error: 'Subject is not assigned to this faculty' });
+    }
+
+    // Remove the subject from the array
+    faculty.assignedSubjects = faculty.assignedSubjects
+      .map(s => String(s || '').trim())
+      .filter(s => s !== subjectCode);
+
+    // Save the document with all required fields preserved
+    const updatedFaculty = await faculty.save({ session });
+
+    await session.commitTransaction();
+    session.endSession();
+
+    console.log('Subject removed successfully:', { subjectCode, facultyId, remainingSubjects: updatedFaculty.assignedSubjects });
+
+    res.json({
+      message: 'Subject assignment removed successfully',
+      faculty: updatedFaculty
+    });
+  } catch (err) {
+    await session.abortTransaction();
+    session.endSession();
+
+    console.error('=== ERROR in removeSubjectFromFaculty ===');
+    console.error('Error removing subject assignment:', err);
+    
+    if (err.name === 'ValidationError') {
+      console.error('Validation Error Details:', err.errors);
+      return res.status(400).json({
+        error: 'Validation Error',
+        details: Object.values(err.errors).map(e => e.message).join(', ')
+      });
+    }
+
+    res.status(500).json({
+      error: 'Failed to remove subject assignment',
+      details: process.env.NODE_ENV === 'development' ? err.message : 'Internal server error'
+    });
   }
 };
 

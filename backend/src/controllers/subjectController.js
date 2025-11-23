@@ -1,8 +1,16 @@
 const Subject = require('../models/Subject');
 
-exports.list = async (_req, res) => {
+exports.list = async (req, res) => {
   try {
-    const rows = await Subject.find({}).sort({ department: 1, semester: 1, subject_code: 1 }).lean();
+    const { department } = req.query;
+    let query = {};
+
+    // Filter by department if provided
+    if (department) {
+      query.department = department;
+    }
+
+    const rows = await Subject.find(query).sort({ department: 1, semester: 1, subject_code: 1 }).lean();
     res.json(rows);
   } catch (err) {
     console.error('Error fetching subjects:', err);
