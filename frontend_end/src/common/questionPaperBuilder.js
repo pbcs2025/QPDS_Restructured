@@ -5,8 +5,11 @@ import html2canvas from "html2canvas";
 import { jsPDF } from "jspdf";
 import { useLocation } from "react-router-dom";
 import MBAQuestionPaperBuilder from "./MBAQuestionPaperBuilder";
+import ReactQuill from 'react-quill';
+import 'react-quill/dist/quill.snow.css';
 
 const MBA_SUB_LABELS = ["a", "b", "c"];
+const BE_SUB_LABELS = ["a", "b", "c", "d"];
 
 const createInitialMBAQuestions = () =>
   Array.from({ length: 8 }, (_, idx) => ({
@@ -21,6 +24,8 @@ const createInitialMBAQuestions = () =>
 function QuestionPaperBuilder() {
   const API_BASE = process.env.REACT_APP_API_BASE_URL;
   const location = useLocation();
+
+  // basic state
   const [subject, setSubject] = useState("");
   const [subjectCode, setSubjectCode] = useState("");
   const [semester, setSemester] = useState("");
@@ -39,34 +44,62 @@ function QuestionPaperBuilder() {
   const [mbaQuestions, setMbaQuestions] = useState(() =>
     createInitialMBAQuestions()
   );
+  
+  // Quill Editor state
+  const [editorOpen, setEditorOpen] = useState(false);
+  const [editorContent, setEditorContent] = useState("");
+  const editorTimerRef = useRef(null);
 
-  const markPresets = {
-    "a, b, c, d (5 marks each)": [5, 5, 5, 5],
-    "a, b (10 marks each)": [10, 10],
-    "a, b, c (7,7,6 marks)": [7, 7, 6],
-    "a, b, c (8,8,4 marks)": [8, 8, 4],
+  // Quill modules configuration (Word-like toolbar)
+  const quillModules = {
+    toolbar: [
+      [{ 'header': [1, 2, 3, 4, 5, 6, false] }],
+      [{ 'font': [] }],
+      [{ 'size': ['small', false, 'large', 'huge'] }],
+      ['bold', 'italic', 'underline', 'strike'],
+      [{ 'color': [] }, { 'background': [] }],
+      [{ 'script': 'sub' }, { 'script': 'super' }],
+      [{ 'list': 'ordered' }, { 'list': 'bullet' }],
+      [{ 'indent': '-1' }, { 'indent': '+1' }],
+      [{ 'align': [] }],
+      ['blockquote', 'code-block'],
+      ['link', 'image', 'video'],
+      ['clean']
+    ],
+    clipboard: {
+      matchVisual: false
+    }
   };
 
-  // Helper function to convert File to base64
-  const fileToBase64 = (file) => {
-    return new Promise((resolve, reject) => {
+  const quillFormats = [
+    'header', 'font', 'size',
+    'bold', 'italic', 'underline', 'strike',
+    'color', 'background',
+    'script',
+    'list', 'bullet', 'indent',
+    'align',
+    'blockquote', 'code-block',
+    'link', 'image', 'video'
+  ];
+
+  // helpers for file <-> base64
+  const fileToBase64 = (file) =>
+    new Promise((resolve, reject) => {
       const reader = new FileReader();
       reader.readAsDataURL(file);
-      reader.onload = () => resolve({
-        data: reader.result,
-        name: file.name,
-        type: file.type,
-        size: file.size
-      });
-      reader.onerror = error => reject(error);
+      reader.onload = () =>
+        resolve({
+          data: reader.result,
+          name: file.name,
+          type: file.type,
+          size: file.size,
+        });
+      reader.onerror = (error) => reject(error);
     });
-  };
 
-  // Helper function to convert base64 back to File
   const base64ToFile = (base64Data) => {
-    if (!base64Data || typeof base64Data === 'string') return base64Data;
-    
-    const byteCharacters = atob(base64Data.data.split(',')[1]);
+    if (!base64Data || typeof base64Data === "string") return base64Data;
+    const byteCharacters = atob(base64Data.data.split(",")[1]);
     const byteNumbers = new Array(byteCharacters.length);
     for (let i = 0; i < byteCharacters.length; i++) {
       byteNumbers[i] = byteCharacters.charCodeAt(i);
@@ -75,92 +108,89 @@ function QuestionPaperBuilder() {
     return new File([byteArray], base64Data.name, { type: base64Data.type });
   };
 
-  // CIE patterns removed as CIE flow is no longer supported
-
-  /** ------------------------
-   * 🔍 Load Faculty Data and Assigned Subjects
-   ------------------------- */
+  // load faculty and assigned subjects
   useEffect(() => {
-    // Get faculty email from localStorage
     const storedFacultyData = localStorage.getItem("faculty_data");
     if (storedFacultyData) {
       const data = JSON.parse(storedFacultyData);
       setFacultyEmail(data.email);
-      
-      // Fetch assigned subjects for this faculty
       if (data.email) {
         fetch(`${API_BASE}/faculty/subject-codes/${data.email}`)
-          .then(res => res.json())
-          .then(subjects => {
-            console.log('📋 Assigned subjects data:', subjects); // Debug log
+          .then((res) => res.json())
+          .then((subjects) => {
             setAssignedSubjects(subjects);
-            
-            // If state was passed from faculty dashboard, pre-select the subject
             if (location.state?.subjectCode) {
-              const selectedSubject = subjects.find(sub => sub.subject_code === location.state.subjectCode);
+              const selectedSubject = subjects.find(
+                (sub) => sub.subject_code === location.state.subjectCode
+              );
               if (selectedSubject) {
                 setSubjectCode(selectedSubject.subject_code);
                 setSubject(selectedSubject.subject_name || "");
-                // Handle semester with fallback
-                const semesterValue = selectedSubject.semester || 1; // Default to 1 if missing
-                setSemester(semesterValue.toString());
-                console.log('🎯 Pre-selecting subject:', selectedSubject); // Debug log
+                setSemester((selectedSubject.semester || 1).toString());
               }
             }
           })
-          .catch(err => {
-            console.error('Error fetching assigned subjects:', err);
+          .catch((err) => {
+            console.error("Error fetching assigned subjects:", err);
             setAssignedSubjects([]);
           });
       }
     }
   }, [API_BASE, location.state]);
 
-  // Ensure CO1 is always present
   useEffect(() => {
-    if (cos.length === 0) {
-      setCOs(["CO1"]);
-    }
+    if (cos.length === 0) setCOs(["CO1"]);
   }, [cos.length]);
 
-  /** ------------------------
-   * 💾 Load Draft Data from localStorage
-   ------------------------- */
+  // load draft from localStorage
   useEffect(() => {
     const loadDraftData = async () => {
       try {
         const draftKey = `questionPaper_draft_${facultyEmail}`;
         const savedDraft = localStorage.getItem(draftKey);
-        
         if (savedDraft) {
           const draftData = JSON.parse(savedDraft);
-          
-          // Only load draft if not submitted
           if (!draftData.isSubmitted) {
             setSubject(draftData.subject || "");
             setSubjectCode(draftData.subjectCode || "");
             setSemester(draftData.semester || "");
             setInstructions(draftData.instructions || "");
             setCOs(draftData.cos || ["CO1"]);
-            
-            // Convert base64 images back to File objects for modules
-            const modulesWithFiles = await Promise.all((draftData.modules || []).map(async mod => ({
-              ...mod,
-              groups: await Promise.all((mod.groups || []).map(async group => 
-                await Promise.all((group || []).map(async q => ({
-                  ...q,
-                  image: q.image && typeof q.image === 'object' && q.image.data ? base64ToFile(q.image) : q.image
-                })))
-              ))
-            })));
+
+            const modulesWithFiles = await Promise.all(
+              (draftData.modules || []).map(async (mod) => ({
+                ...mod,
+                questions: await Promise.all(
+                  (mod.questions || []).map(async (q) => ({
+                    ...q,
+                    image:
+                      q.image && typeof q.image === "object" && q.image.data
+                        ? base64ToFile(q.image)
+                        : q.image,
+                    subQuestions: q.subQuestions
+                      ? await Promise.all(
+                          (q.subQuestions || []).map(async (sub) => ({
+                            ...sub,
+                            image:
+                              sub.image &&
+                              typeof sub.image === "object" &&
+                              sub.image.data
+                                ? base64ToFile(sub.image)
+                                : sub.image,
+                          }))
+                        )
+                      : [],
+                  }))
+                ),
+              }))
+            );
 
             const mbaQuestionsWithFiles = draftData.mbaQuestions
               ? await Promise.all(
                   draftData.mbaQuestions.map(async (question) => ({
                     ...question,
                     text:
-                      question.subQuestions &&
-                      question.subQuestions.length > 0
+                      question.subQuestions && question.subQuestions.length > 0
                         ? ""
                         : question.text || "",
                     image:
@@ -183,7 +213,7 @@ function QuestionPaperBuilder() {
                   }))
                 )
               : createInitialMBAQuestions();
-            
+
             setModules(modulesWithFiles);
             setMbaQuestions(
               mbaQuestionsWithFiles.length === 8
@@ -194,24 +224,18 @@ function QuestionPaperBuilder() {
             setExamType(draftData.examType || "BE/MTECH");
             setIsSubmitted(draftData.isSubmitted || false);
             setDraftLoaded(true);
-            
-            console.log("📄 Draft data loaded successfully with File objects restored");
+            console.log("Draft restored");
           }
         }
-      } catch (error) {
-        console.error("Error loading draft data:", error);
+      } catch (err) {
+        console.error("Error loading draft:", err);
       }
     };
 
-    // Load draft after faculty email is set
-    if (facultyEmail) {
-      loadDraftData();
-    }
+    if (facultyEmail) loadDraftData();
   }, [facultyEmail]);
 
-  /** ------------------------
-   * 🛑 Inactivity Logout (5 mins)
-   ------------------------- */
+  // inactivity timer - auto-save on timeout
   const resetInactivityTimer = () => {
     clearTimeout(inactivityTimer.current);
     inactivityTimer.current = setTimeout(() => {
@@ -228,21 +252,17 @@ function QuestionPaperBuilder() {
     events.forEach((e) => window.addEventListener(e, resetInactivityTimer));
     resetInactivityTimer();
     return () => {
-      events.forEach((e) =>
-        window.removeEventListener(e, resetInactivityTimer)
-      );
+      events.forEach((e) => window.removeEventListener(e, resetInactivityTimer));
       clearTimeout(inactivityTimer.current);
     };
   }, []);
 
-  /** ------------------------
-   * 💾 Auto-save every 2 mins (Background save, no alert)
-   ------------------------- */
+  // auto save every 2 minutes
   useEffect(() => {
     const autoSaveInterval = setInterval(() => {
       if (!isSubmitted) {
         saveDraftToLocalStorage();
-        console.log("💾 Auto-saved draft (background)");
+        console.log("Auto-saved draft");
       }
     }, 2 * 60 * 1000);
     return () => clearInterval(autoSaveInterval);
@@ -258,13 +278,11 @@ function QuestionPaperBuilder() {
     mbaQuestions,
   ]);
 
-  /** ------------------------
-   * 📌 Add / Update Functions
-   ------------------------- */
+  // CO handlers
   const addCO = () => {
     if (isSubmitted) return;
     if (cos.length >= 5) {
-      alert("⚠️ Maximum 5 Course Outcomes (CO1-CO5) allowed.");
+      alert("Maximum 5 Course Outcomes (CO1-CO5) allowed.");
       return;
     }
     const nextCO = `CO${cos.length + 1}`;
@@ -277,289 +295,259 @@ function QuestionPaperBuilder() {
     setCOs(updated);
   };
 
-  // Handle subject code selection and auto-populate subject name and semester
   const handleSubjectCodeChange = (selectedCode) => {
     if (isSubmitted) return;
     setSubjectCode(selectedCode);
-    
-    // Find the corresponding subject name and semester
-    const selectedSubject = assignedSubjects.find(sub => sub.subject_code === selectedCode);
-    console.log('🔍 Selected subject:', selectedSubject); // Debug log
+    const selectedSubject = assignedSubjects.find(
+      (sub) => sub.subject_code === selectedCode
+    );
     if (selectedSubject) {
       setSubject(selectedSubject.subject_name || "");
-      // Handle semester with fallback
-      const semesterValue = selectedSubject.semester || 1; // Default to 1 if missing
-      setSemester(semesterValue.toString());
-      console.log('📝 Setting semester to:', semesterValue); // Debug log
+      setSemester((selectedSubject.semester || 1).toString());
     } else {
       setSubject("");
       setSemester("");
     }
   };
 
-  const generateQuestions = (prefix, marksList) => {
-    return marksList.map((mark, i) => ({
-      label: `${prefix}${String.fromCharCode(97 + i)}`,
-      text: "",
-      marks: mark,
-      co: "",
-      level: "",
-      image: null, // 👈 store selected file
-    }));
-  };
+  /** BE/MTECH pattern functions **/
 
+  // Create a question with NO sub-questions initially (Option B behavior)
+  const createBEQuestionEmpty = (labelNumber) => ({
+    label: `${labelNumber}`,
+    text: "",
+    co: "",
+    level: "",
+    image: null,
+    marks: 20, // main marks default when no subquestions
+    subQuestions: [], // start empty
+  });
+
+  // Add a module (max 5). Each module contains two questions (Qn and Qn+1).
   const addEmptyModule = () => {
     if (isSubmitted) return;
     if (modules.length >= 5) {
-      alert("⚠️ Maximum 5 modules allowed.");
+      alert("Maximum 5 modules allowed.");
       return;
     }
-    setModules([
-      ...modules,
-      {
-        title: `Module ${modules.length + 1}`,
-        pattern: "",
-        groups: [],
-      },
-    ]);
+    const baseQuestionNumber = modules.length * 2 + 1;
+    const newModule = {
+      title: `Module ${modules.length + 1}`,
+      questions: [
+        createBEQuestionEmpty(baseQuestionNumber),
+        createBEQuestionEmpty(baseQuestionNumber + 1),
+      ],
+    };
+    setModules([...modules, newModule]);
+    setNextGroupNumber(nextGroupNumber + 1);
   };
 
-  const setModulePatternAndGenerate = (modIndex, pattern) => {
-    if (isSubmitted) return;
-    const marksList = markPresets[pattern];
-    const group1 = generateQuestions(nextGroupNumber, marksList);
-    const group2 = generateQuestions(nextGroupNumber + 1, marksList);
-
-    const updatedModules = [...modules];
-    updatedModules[modIndex].pattern = pattern;
-    updatedModules[modIndex].groups = [group1, group2];
-    setModules(updatedModules);
-    setNextGroupNumber(nextGroupNumber + 2);
-  };
-
-  const updateQuestion = (modIndex, groupIndex, qIndex, key, val) => {
+  // Add a sub-question to a question (a -> b -> c -> d). Manual marks allowed.
+  const addSubQuestionToBE = (modIndex, qIndex) => {
     if (isSubmitted) return;
     const updatedModules = [...modules];
-    updatedModules[modIndex].groups[groupIndex][qIndex][key] = val;
-    setModules(updatedModules);
-  };
-
-  const handleMBAQuestionChange = (questionIndex, key, value) => {
-    if (isSubmitted) return;
-    setMbaQuestions((prev) => {
-      const updated = [...prev];
-      const current = updated[questionIndex];
-      if (!current) {
-        return prev;
-      }
-
-      if (key === "text" && current.subQuestions.length > 0) {
-        return prev;
-      }
-
-      updated[questionIndex] = {
-        ...current,
-        [key]: value,
-      };
-      return updated;
-    });
-  };
-
-  const addMbaSubQuestion = (questionIndex) => {
-    if (isSubmitted) return;
-    setMbaQuestions((prev) => {
-      const updated = [...prev];
-      const selectedQuestion = updated[questionIndex];
-
-      if (
-        !selectedQuestion ||
-        selectedQuestion.subQuestions.length >= MBA_SUB_LABELS.length
-      ) {
-        return prev;
-      }
-
-      const nextLabel =
-        MBA_SUB_LABELS[selectedQuestion.subQuestions.length] || "a";
-
-      const newSubQuestion = {
-        label: nextLabel,
-        text: "",
-        co: "",
-        level: "",
-        marks: "",
-        image: null,
-      };
-
-      updated[questionIndex] = {
-        ...selectedQuestion,
-        text:
-          selectedQuestion.subQuestions.length === 0
-            ? ""
-            : selectedQuestion.text,
-        subQuestions: [...selectedQuestion.subQuestions, newSubQuestion],
-      };
-
-      return updated;
-    });
-  };
-
-  const handleMBASubQuestionChange = (
-    questionIndex,
-    subIndex,
-    key,
-    value
-  ) => {
-    if (isSubmitted) return;
-
-    setMbaQuestions((prev) => {
-      const updated = [...prev];
-      const question = updated[questionIndex];
-
-      if (!question || !question.subQuestions[subIndex]) {
-        return prev;
-      }
-
-      const updatedSubQuestions = [...question.subQuestions];
-      updatedSubQuestions[subIndex] = {
-        ...updatedSubQuestions[subIndex],
-        [key]: value,
-      };
-
-      updated[questionIndex] = {
-        ...question,
-        subQuestions: updatedSubQuestions,
-      };
-
-      return updated;
-    });
-  };
-
-  // CIE actions removed as CIE flow is no longer supported
-
-  const deleteModule = (modIndex) => {
-    if (isSubmitted) return;
-    if (window.confirm(`Are you sure you want to delete ${modules[modIndex].title}?`)) {
-      setModules(modules.filter((_, index) => index !== modIndex));
+    const question = updatedModules[modIndex].questions[qIndex];
+    if (!question.subQuestions) question.subQuestions = [];
+    if (question.subQuestions.length >= BE_SUB_LABELS.length) {
+      alert("Maximum sub-questions reached (a-d).");
+      return;
     }
+    const nextLabel = BE_SUB_LABELS[question.subQuestions.length];
+    question.subQuestions.push({
+      label: nextLabel,
+      text: "",
+      marks: "", // manual marks (user types)
+      image: null,
+    });
+    // disable main marks/text while sub-questions exist
+    question.marks = "";
+    question.text = "";
+    setModules(updatedModules);
   };
 
-  /** ------------------------
-   * ✅ Validation Function
-   ------------------------- */
+  // convert question back to main (clear sub-questions)
+  const convertToMainQuestion = (modIndex, qIndex) => {
+    if (isSubmitted) return;
+    const updatedModules = [...modules];
+    const question = updatedModules[modIndex].questions[qIndex];
+    question.subQuestions = [];
+    question.marks = 20;
+    setModules(updatedModules);
+  };
+
+  // update sub-question fields; ensure total <= 20 while editing
+  const updateBESubQuestion = (modIndex, qIndex, subIndex, key, value) => {
+    if (isSubmitted) return;
+    const updatedModules = [...modules];
+    const question = updatedModules[modIndex].questions[qIndex];
+
+    // if updating marks, ensure numbers
+    if (key === "marks") {
+      const newMarks = value === "" ? "" : parseInt(value, 10);
+      if (value !== "" && (isNaN(newMarks) || newMarks < 0)) return;
+      // compute tentative total
+      let total = 0;
+      question.subQuestions.forEach((s, i) => {
+        if (i === subIndex) {
+          total += newMarks || 0;
+        } else {
+          total += parseInt(s.marks, 10) || 0;
+        }
+      });
+      if (total > 20) {
+        alert("Total sub-question marks cannot exceed 20.");
+        return;
+      }
+      question.subQuestions[subIndex][key] = value === "" ? "" : newMarks;
+    } else {
+      question.subQuestions[subIndex][key] = value;
+    }
+    setModules(updatedModules);
+  };
+
+  // update main question fields (only allowed when no sub-questions)
+  const updateBEQuestion = (modIndex, qIndex, key, val) => {
+    if (isSubmitted) return;
+    const updatedModules = [...modules];
+    const q = updatedModules[modIndex].questions[qIndex];
+    if ((key === "text" || key === "marks") && q.subQuestions && q.subQuestions.length > 0) {
+      // not allowed while sub-questions exist
+      return;
+    }
+    // if marks, ensure numeric
+    if (key === "marks") {
+      const v = val === "" ? "" : parseInt(val, 10);
+      if (val !== "" && (isNaN(v) || v < 0)) return;
+      q[key] = v;
+    } else {
+      q[key] = val;
+    }
+    setModules(updatedModules);
+  };
+
+  /** Validation **/
   const validatePaper = () => {
     if (!subject || !subjectCode || !semester) {
-      alert("⚠️ Please fill subject code, name and semester.");
+      alert("Please fill subject code, name and semester.");
       return false;
     }
 
     if (examType === "BE/MTECH") {
-      // Validate modules (BE/MTECH)
-      for (let mod of modules) {
-        for (let group of mod.groups) {
-          // Validation: all sub-questions in a group must be filled
-          const anyFilled = group.some((q) => q.text.trim() !== "");
-          const anyEmpty = group.some((q) => q.text.trim() === "");
-          if (anyFilled && anyEmpty) {
-            alert(
-              `⚠️ Incomplete group in ${mod.title}, question set ${group[0].label[0]}`
-            );
-            return false;
-          }
+      for (let modIdx = 0; modIdx < modules.length; modIdx++) {
+        const mod = modules[modIdx];
+        if (!mod.questions || mod.questions.length === 0) continue;
 
-          // Validation: marks should not exceed 20
-          const totalMarks = group.reduce(
-            (sum, q) => sum + (q.marks || 0),
-            0
-          );
-          if (totalMarks > 20) {
-            alert(
-              `⚠️ Marks exceed 20 in ${mod.title}, question set ${group[0].label[0]}`
+        for (let qIdx = 0; qIdx < mod.questions.length; qIdx++) {
+          const q = mod.questions[qIdx];
+
+          if (q.subQuestions && q.subQuestions.length > 0) {
+            // all sub-question text must be filled
+            const incompleteSub = q.subQuestions.some(
+              (sub) => !sub.text || !sub.text.trim()
             );
-            return false;
+            if (incompleteSub) {
+              alert(`Please fill all sub-questions for question ${q.label} in ${mod.title}.`);
+              return false;
+            }
+            const totalSubMarks = q.subQuestions.reduce(
+              (sum, sub) => sum + (parseInt(sub.marks, 10) || 0),
+              0
+            );
+            // require total exactly 20 to match exam pattern
+            if (totalSubMarks !== 20) {
+              alert(`Total marks for sub-questions in Q${q.label} (${mod.title}) must equal 20. Current total: ${totalSubMarks}`);
+              return false;
+            }
+            // main text should be empty
+            if (q.text && q.text.trim().length > 0) {
+              alert(`Question ${q.label} should not have main text when sub-questions exist.`);
+              return false;
+            }
+            // CO & Level must be set at question level when sub-questions exist
+            if (!q.co || !q.level) {
+              alert(`Please select CO and Level for question ${q.label} in ${mod.title}. (CO & Level apply to the whole question)`);
+              return false;
+            }
+          } else {
+            // No subquestions: require main text and marks=20 and CO/Level
+            if (!q.text || !q.text.trim()) {
+              alert(`Please enter text for question ${q.label} in ${mod.title}.`);
+              return false;
+            }
+            if ((parseInt(q.marks, 10) || 0) !== 20) {
+              alert(`Question ${q.label} in ${mod.title} should have 20 marks when no sub-questions exist.`);
+              return false;
+            }
+            if (!q.co || !q.level) {
+              alert(`Please select CO and Level for question ${q.label} in ${mod.title}.`);
+              return false;
+            }
           }
         }
       }
     } else if (examType === "MBA") {
       for (let question of mbaQuestions) {
         const hasSubs = question.subQuestions.length > 0;
-
         if (!hasSubs && !question.text.trim()) {
-          alert(`⚠️ Please enter text for question Q${question.number}.`);
+          alert(`Please enter text for question Q${question.number}.`);
           return false;
         }
-
         if (hasSubs) {
           if (question.text.trim().length > 0) {
-            alert(
-              `⚠️ Q${question.number} should not have main text when sub-questions exist.`
-            );
+            alert(`Q${question.number} should not have main text when sub-questions exist.`);
             return false;
           }
-
-          const incompleteSub = question.subQuestions.some(
-            (sub) => !sub.text.trim()
-          );
+          const incompleteSub = question.subQuestions.some((sub) => !sub.text.trim());
           if (incompleteSub) {
-            alert(
-              `⚠️ Please fill all sub-questions for Q${question.number}.`
-            );
+            alert(`Please fill all sub-questions for Q${question.number}.`);
             return false;
           }
-
-          const totalSubMarks = question.subQuestions.reduce(
-            (sum, sub) => sum + (parseInt(sub.marks, 10) || 0),
-            0
-          );
-
+          const totalSubMarks = question.subQuestions.reduce((sum, sub) => sum + (parseInt(sub.marks, 10) || 0), 0);
           if (totalSubMarks !== 20) {
-            alert(
-              `⚠️ Total marks for sub-questions in Q${question.number} must equal 20.`
-            );
+            alert(`Total marks for sub-questions in Q${question.number} must equal 20.`);
             return false;
           }
         }
       }
     }
+
     return true;
   };
 
-  /** ------------------------
-   * 💾 Save Draft to localStorage
-   ------------------------- */
+  /** Save draft **/
   const saveDraftToLocalStorage = async () => {
     try {
       const draftKey = `questionPaper_draft_${facultyEmail}`;
-      
-      // Convert File objects to base64 for storage
-      const modulesForStorage = await Promise.all(modules.map(async mod => ({
-        ...mod,
-        groups: await Promise.all((mod.groups || []).map(async group => 
-          await Promise.all((group || []).map(async q => ({
-            ...q,
-            image: q.image instanceof File ? await fileToBase64(q.image) : q.image
-          })))
-        ))
-      })));
 
-      const mbaQuestionsForStorage = await Promise.all(
-        mbaQuestions.map(async (question) => ({
-          ...question,
-          image:
-            question.image instanceof File
-              ? await fileToBase64(question.image)
-              : question.image,
-          subQuestions: await Promise.all(
-            (question.subQuestions || []).map(async (sub) => ({
-              ...sub,
-              image:
-                sub.image instanceof File
-                  ? await fileToBase64(sub.image)
-                  : sub.image,
+      const modulesForStorage = await Promise.all(
+        modules.map(async (mod) => ({
+          ...mod,
+          questions: await Promise.all(
+            (mod.questions || []).map(async (q) => ({
+              ...q,
+              image: q.image instanceof File ? await fileToBase64(q.image) : q.image,
+              subQuestions: q.subQuestions
+                ? await Promise.all((q.subQuestions || []).map(async (sub) => ({
+                    ...sub,
+                    image: sub.image instanceof File ? await fileToBase64(sub.image) : sub.image,
+                  })))
+                : [],
             }))
           ),
         }))
       );
-      
+
+      const mbaQuestionsForStorage = await Promise.all(
+        mbaQuestions.map(async (question) => ({
+          ...question,
+          image: question.image instanceof File ? await fileToBase64(question.image) : question.image,
+          subQuestions: await Promise.all((question.subQuestions || []).map(async (sub) => ({
+            ...sub,
+            image: sub.image instanceof File ? await fileToBase64(sub.image) : sub.image,
+          }))),
+        }))
+      );
+
       const draftData = {
         subject,
         subjectCode,
@@ -571,28 +559,22 @@ function QuestionPaperBuilder() {
         examType,
         mbaQuestions: mbaQuestionsForStorage,
         isSubmitted,
-        lastSavedAt: new Date().toISOString()
+        lastSavedAt: new Date().toISOString(),
       };
-      
+
       localStorage.setItem(draftKey, JSON.stringify(draftData));
       setLastSavedAt(new Date().toISOString());
-      console.log("💾 Draft saved to localStorage");
+      console.log("Draft saved to localStorage");
     } catch (error) {
       console.error("Error saving draft to localStorage:", error);
     }
   };
 
-  /** ------------------------
-   * 💾 Save or Submit
-   ------------------------- */
+  /** Submit **/
   const saveQuestionPaper = async (isDraft = false) => {
     try {
       const now = new Date().toISOString();
-
-      // Always save draft to localStorage first
       await saveDraftToLocalStorage();
-
-      // If it's just a draft, don't send to server
       if (isDraft) {
         console.log("Draft saved locally at", now);
         return;
@@ -606,9 +588,7 @@ function QuestionPaperBuilder() {
         marks,
         image,
       }) => {
-        if (!questionText || !questionText.trim()) {
-          return;
-        }
+        if (!questionText || !questionText.trim()) return;
 
         const formData = new FormData();
         formData.append("subject_code", subjectCode);
@@ -624,52 +604,44 @@ function QuestionPaperBuilder() {
 
         if (image && image instanceof File) {
           formData.append("file", image);
-          console.log(
-            `📎 Uploading file for question ${questionNumber}:`,
-            image.name,
-            image.size,
-            "bytes"
-          );
-        } else if (image) {
-          console.log(
-            `⚠️ Question ${questionNumber} has image but it's not a File object:`,
-            typeof image
-          );
         }
 
         try {
-          const response = await axios.post(
-            `${API_BASE}/question-bank`,
-            formData,
-            {
-              headers: { "Content-Type": "multipart/form-data" },
-            }
-          );
-          console.log(`✅ Question ${questionNumber} saved:`, response.data);
+          const response = await axios.post(`${API_BASE}/question-bank`, formData, {
+            headers: { "Content-Type": "multipart/form-data" },
+          });
+          console.log(`Saved: ${questionNumber}`, response.data);
         } catch (error) {
-          console.error(
-            `❌ Error saving question ${questionNumber}:`,
-            error.response?.data || error.message
-          );
-          throw new Error(
-            `Failed to save question ${questionNumber}: ${
-              error.response?.data?.error || error.message
-            }`
-          );
+          console.error(`Error saving ${questionNumber}:`, error.response?.data || error.message);
+          throw new Error(`Failed to save ${questionNumber}`);
         }
       };
 
       if (examType === "BE/MTECH") {
         for (let mod of modules) {
-          for (let group of mod.groups) {
-            for (let q of group) {
-              if (q.text.trim() !== "") {
+          if (!mod.questions || mod.questions.length === 0) continue;
+          for (let q of mod.questions) {
+            if (q.subQuestions && q.subQuestions.length > 0) {
+              for (let sub of q.subQuestions) {
+                if (sub.text && sub.text.trim() !== "") {
+                  await submitQuestionToServer({
+                    questionNumber: `${q.label}${sub.label}`,
+                    questionText: sub.text,
+                    co: q.co || "",
+                    level: q.level || "",
+                    marks: parseInt(sub.marks, 10) || 0,
+                    image: sub.image,
+                  });
+                }
+              }
+            } else {
+              if (q.text && q.text.trim() !== "") {
                 await submitQuestionToServer({
                   questionNumber: q.label,
                   questionText: q.text,
-                  co: q.co,
-                  level: q.level,
-                  marks: q.marks,
+                  co: q.co || "",
+                  level: q.level || "",
+                  marks: q.marks || 20,
                   image: q.image,
                 });
               }
@@ -704,82 +676,100 @@ function QuestionPaperBuilder() {
         throw new Error(`Unsupported exam type: ${examType}`);
       }
 
-      // Mark as submitted and clear draft
       setIsSubmitted(true);
       const draftKey = `questionPaper_draft_${facultyEmail}`;
       localStorage.removeItem(draftKey);
-      
-      // Update assignment status to submitted
+
+      // Update assignment status (best-effort)
       try {
         await axios.post(`${API_BASE}/assignments/update-status`, {
           email: facultyEmail,
-          subjectCode: subjectCode
+          subjectCode: subjectCode,
         });
-        
-        // Refresh assigned subjects to hide submitted one
         const response = await fetch(`${API_BASE}/faculty/subject-codes/${facultyEmail}`);
         const updatedSubjects = await response.json();
         setAssignedSubjects(updatedSubjects);
-      } catch (error) {
-        console.error('Error updating assignment status:', error);
+      } catch (err) {
+        console.error("Error updating assignment status:", err);
       }
-      
-      alert("✅ All questions submitted successfully!");
+
+      alert("All questions submitted successfully!");
     } catch (error) {
-      console.error("❌ Error saving question bank:", error);
-      console.error("❌ Error details:", error.message);
-      console.error("❌ Full error:", error);
-      
-      // Show detailed error message
-      const errorMessage = error.message || "Unknown error occurred";
-      alert(`❌ Failed to save questions: ${errorMessage}`);
+      console.error("Error saving question bank:", error);
+      alert(`Failed to save questions: ${error.message || error}`);
     }
   };
 
   const confirmAndSubmit = () => {
     if (!validatePaper()) return;
-    if (
-      window.confirm(
-        "Are you sure you want to submit? After submission, editing will be locked."
-      )
-    ) {
+    if (window.confirm("Are you sure you want to submit? Editing will be locked.")) {
       saveQuestionPaper(false);
     }
   };
 
-  /** ------------------------
-   * 🗑️ Clear Draft
-   ------------------------- */
   const clearDraft = () => {
-    if (window.confirm("Are you sure you want to clear the saved draft? This action cannot be undone.")) {
-      const draftKey = `questionPaper_draft_${facultyEmail}`;
-      localStorage.removeItem(draftKey);
-      
-      // Reset form to initial state
-      setSubject("");
-      setSubjectCode("");
-      setSemester("");
-      setInstructions("");
-      setCOs(["CO1"]);
-      setModules([]);
-      setNextGroupNumber(1);
-      setExamType("BE/MTECH");
-      setMbaQuestions(createInitialMBAQuestions());
-      setIsSubmitted(false);
-      setDraftLoaded(false);
-      setLastSavedAt(null);
-      
-      alert("✅ Draft cleared successfully!");
-    }
+    if (!window.confirm("Clear saved draft? This cannot be undone.")) return;
+    const draftKey = `questionPaper_draft_${facultyEmail}`;
+    localStorage.removeItem(draftKey);
+    setSubject("");
+    setSubjectCode("");
+    setSemester("");
+    setInstructions("");
+    setCOs(["CO1"]);
+    setModules([]);
+    setNextGroupNumber(1);
+    setExamType("BE/MTECH");
+    setMbaQuestions(createInitialMBAQuestions());
+    setIsSubmitted(false);
+    setDraftLoaded(false);
+    setLastSavedAt(null);
+    alert("Draft cleared successfully!");
   };
 
-  /** ------------------------
-   * ⬇️ Download Preview as PDF
-   * ------------------------- */
-  
-  /** ------------------------
-   * 🎨 UI Rendering
-   ------------------------- */
+  // Helper for formatting marks into Option B "(05 Marks)" style
+  const formatMarksOptionB = (marks) => {
+    if (marks === "" || marks === null || marks === undefined) return "(00 Marks)";
+    const num = parseInt(marks, 10) || 0;
+    const padded = String(num).padStart(2, "0");
+    return `(${padded} Marks)`;
+  };
+
+  // Quill Editor functions
+  const openEditor = () => {
+    if (isSubmitted) return;
+    setEditorContent("");
+    setEditorOpen(true);
+    
+    // Auto-close timer (2 minutes)
+    editorTimerRef.current = setTimeout(() => {
+      closeEditor();
+      alert("Editor closed automatically after 2 minutes of inactivity.");
+    }, 2 * 60 * 1000);
+  };
+
+  const closeEditor = () => {
+    if (editorTimerRef.current) {
+      clearTimeout(editorTimerRef.current);
+    }
+    setEditorOpen(false);
+    setEditorContent("");
+  };
+
+  const copyToClipboard = () => {
+    // Strip HTML tags and copy plain text
+    const tempDiv = document.createElement("div");
+    tempDiv.innerHTML = editorContent;
+    const plainText = tempDiv.textContent || tempDiv.innerText || "";
+    
+    navigator.clipboard.writeText(plainText).then(() => {
+      alert("✅ Content copied to clipboard! You can now paste it into any question field.");
+    }).catch(err => {
+      console.error('Failed to copy:', err);
+      alert("❌ Failed to copy to clipboard. Please try again.");
+    });
+  };
+
+  /** Render **/
   return (
     <div className="dashboard-container">
       <div className="sidebar">
@@ -787,11 +777,7 @@ function QuestionPaperBuilder() {
         <p>Question Paper Builder</p>
       </div>
 
-      <div
-        className={`main-content${
-          examType === "MBA" ? " mba-theme" : ""
-        }`}
-      >
+      <div className={`main-content${examType === "MBA" ? " mba-theme" : ""}`}>
         <h1>📘 Question Paper Setter</h1>
 
         {draftLoaded && (
@@ -808,18 +794,12 @@ function QuestionPaperBuilder() {
         )}
 
         {lastSavedAt && (
-          <p className="timestamp">
-            Last saved at: {new Date(lastSavedAt).toLocaleString()}
-          </p>
+          <p className="timestamp">Last saved at: {new Date(lastSavedAt).toLocaleString()}</p>
         )}
 
         <div className="exam-type-selection">
           <label>Exam Type:</label>
-          <select
-            value={examType}
-            onChange={(e) => setExamType(e.target.value)}
-            disabled={isSubmitted}
-          >
+          <select value={examType} onChange={(e) => setExamType(e.target.value)} disabled={isSubmitted}>
             <option value="BE/MTECH">BE/MTECH</option>
             <option value="MBA">MBA</option>
           </select>
@@ -828,408 +808,446 @@ function QuestionPaperBuilder() {
         <div className="student-info">
           <label>Subject Code:</label>
           {assignedSubjects.length > 0 ? (
-            <select
-              value={subjectCode}
-              onChange={(e) => handleSubjectCodeChange(e.target.value)}
-              disabled={isSubmitted}
-            >
+            <select value={subjectCode} onChange={(e) => handleSubjectCodeChange(e.target.value)} disabled={isSubmitted}>
               <option value="">Select Assigned Subject Code</option>
-              {assignedSubjects
-                .filter(sub => sub.status !== 'submitted') // Hide submitted subjects
-                .map((sub, index) => (
-                <option key={index} value={sub.subject_code}>
-                  {sub.subject_code}
-                </option>
+              {assignedSubjects.filter(sub => sub.status !== 'submitted').map((sub, index) => (
+                <option key={index} value={sub.subject_code}>{sub.subject_code}</option>
               ))}
             </select>
           ) : (
-            <input
-              value={subjectCode}
-              onChange={(e) => setSubjectCode(e.target.value)}
-              placeholder="No assigned subjects"
-              disabled={true}
-            />
+            <input value={subjectCode} onChange={(e) => setSubjectCode(e.target.value)} placeholder="No assigned subjects" disabled={true} />
           )}
+
           <label>Subject Name:</label>
-          <input
-            value={subject}
-            onChange={(e) => setSubject(e.target.value)}
-            placeholder="Auto-populated from selected subject code"
-            disabled={isSubmitted}
-          />
+          <input value={subject} onChange={(e) => setSubject(e.target.value)} placeholder="Auto-populated from selected subject code" disabled={isSubmitted} />
+
           <label>Semester:</label>
-          {assignedSubjects.length > 0 ? (
-            <select
-              value={semester || ""}
-              onChange={(e) => setSemester(e.target.value)}
-              disabled={isSubmitted}
-            >
-              <option value="">Select Semester</option>
-              {[1, 2, 3, 4, 5, 6, 7, 8].map((sem) => (
-                <option key={sem} value={sem}>
-                  {sem}
-                </option>
-              ))}
-            </select>
-          ) : (
-            <select
-              value={semester}
-              onChange={(e) => setSemester(e.target.value)}
-              disabled={isSubmitted}
-            >
-              <option value="">Select Semester</option>
-              {[1, 2, 3, 4, 5, 6, 7, 8].map((sem) => (
-                <option key={sem} value={sem}>
-                  {sem}
-                </option>
-              ))}
-            </select>
-          )}
+          <select value={semester} onChange={(e) => setSemester(e.target.value)} disabled={isSubmitted}>
+            <option value="">Select Semester</option>
+            {[1,2,3,4,5,6,7,8].map((sem) => <option key={sem} value={sem}>{sem}</option>)}
+          </select>
         </div>
 
         <label>Student Instructions:</label>
-        <textarea
-          value={instructions}
-          onChange={(e) => setInstructions(e.target.value)}
-          rows={3}
-          placeholder="Write general instructions here"
-          disabled={isSubmitted}
-        />
+        <textarea value={instructions} onChange={(e) => setInstructions(e.target.value)} rows={3} placeholder="Write general instructions here" disabled={isSubmitted} />
 
         <h3>📌 Course Outcomes (COs)</h3>
         {cos.map((co, i) => (
-          <input
-            key={i}
-            value={co}
-            onChange={(e) => updateCO(i, e.target.value)}
-            placeholder="Enter CO description"
-            disabled={isSubmitted}
-          />
+          <input key={i} value={co} onChange={(e) => updateCO(i, e.target.value)} placeholder="Enter CO description" disabled={isSubmitted} />
         ))}
         {!isSubmitted && cos.length < 5 && <button onClick={addCO}>➕ Add CO</button>}
-        {cos.length >= 5 && (
-          <p style={{ color: '#666', fontSize: '14px', marginTop: '10px' }}>
-            ✅ Maximum Course Outcomes reached (CO1-CO5)
-          </p>
-        )}
+        {cos.length >= 5 && <p style={{ color: '#666', fontSize: '14px', marginTop: '10px' }}>✅ Maximum Course Outcomes reached (CO1-CO5)</p>}
 
         {examType === "BE/MTECH" && (
           <>
             <h3>📚 Modules</h3>
             {!isSubmitted && modules.length < 5 && <button onClick={addEmptyModule}>➕ Add Module</button>}
-            {modules.length >= 5 && !isSubmitted && (
-              <p style={{ color: '#666', fontSize: '14px', marginTop: '10px' }}>
-                ✅ Maximum Modules reached (5)
-              </p>
-            )}
+            {modules.length >= 5 && !isSubmitted && <p style={{ color: '#666', fontSize: '14px', marginTop: '10px' }}>✅ Maximum Modules reached (5)</p>}
           </>
         )}
 
         {examType === "MBA" && (
           <MBAQuestionPaperBuilder
             questions={mbaQuestions}
-            onQuestionChange={handleMBAQuestionChange}
-            onAddSubQuestion={addMbaSubQuestion}
-            onSubQuestionChange={handleMBASubQuestionChange}
+            onQuestionChange={() => {}}
+            onAddSubQuestion={() => {}}
+            onSubQuestionChange={() => {}}
             isSubmitted={isSubmitted}
           />
         )}
 
-        {examType === "CIE" && (
-          <>
-            <h3>📝 Questions</h3>
-            <div className="cie-info">
-              
-            </div>
-            {!isSubmitted && (
-              <button onClick={addCieQuestion} className="add-question-btn">
-                ➕ Add Question
-              </button>
-            )}
-          </>
-        )}
-
+        {/* BE/MTECH Module Editor */}
         {examType === "BE/MTECH" && modules.map((mod, modIndex) => (
-          <div key={modIndex} className="module-box">
+          <div key={modIndex} className="module-box" style={{ marginBottom: '18px' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <h4>{mod.title}</h4>
-              {/* Delete Module removed */}
             </div>
-            {!mod.groups || mod.groups.length === 0 ? (
-              !isSubmitted && (
-                <>
-                  <label>Choose Question Pattern:</label>
-                  <select
-                    value={mod.pattern}
-                    onChange={(e) =>
-                      setModulePatternAndGenerate(modIndex, e.target.value)
-                    }
-                  >
-                    <option value="">-- Select Marks Distribution --</option>
-                    {Object.keys(markPresets).map((label, i) => (
-                      <option key={i} value={label}>
-                        {label}
-                      </option>
-                    ))}
-                  </select>
-                </>
-              )
-            ) : (
-              mod.groups.map((group, groupIndex) => (
-                <div key={groupIndex}>
-                  {group.map((q, qIndex) => (
-                    <div key={qIndex} className="question-row">
-                      <label>{q.label})</label>
-                      <input
-                        value={q.text}
-                        onChange={(e) =>
-                          updateQuestion(
-                            modIndex,
-                            groupIndex,
-                            qIndex,
-                            "text",
-                            e.target.value
-                          )
-                        }
-                        placeholder="Question text"
-                        disabled={isSubmitted}
-                      />
-                      <select
-                        value={q.co}
-                        onChange={(e) =>
-                          updateQuestion(
-                            modIndex,
-                            groupIndex,
-                            qIndex,
-                            "co",
-                            e.target.value
-                          )
-                        }
-                        className="small"
-                        disabled={isSubmitted}
-                      >
-                        
-                        <option value="CO1">CO1</option>
-                        <option value="CO2">CO2</option>
-                        <option value="CO3">CO3</option>
-                        <option value="CO4">CO4</option>
-                        <option value="CO5">CO5</option>
-                      </select>
-                      <select
-                        value={q.level}
-                        onChange={(e) =>
-                          updateQuestion(
-                            modIndex,
-                            groupIndex,
-                            qIndex,
-                            "level",
-                            e.target.value
-                          )
-                        }
-                        className="small"
-                        disabled={isSubmitted}
-                      >
-                        
-                        <option value="L1">L1</option>
-                        <option value="L2">L2</option>
-                        <option value="L3">L3</option>
-                        <option value="L4">L4</option>
-                        <option value="L5">L5</option>
-                      </select>
-                      <input
-                        type="number"
-                        value={q.marks}
-                        onChange={(e) =>
-                          updateQuestion(
-                            modIndex,
-                            groupIndex,
-                            qIndex,
-                            "marks",
-                            parseInt(e.target.value) || 0
-                          )
-                        }
-                        className="small"
-                        disabled={isSubmitted}
-                      />
 
-                      {/* 👇 Image Upload */}
-                      <input
-                        type="file"
-                        accept="image/*"
-                        onChange={(e) =>
-                          updateQuestion(
-                            modIndex,
-                            groupIndex,
-                            qIndex,
-                            "image",
-                            e.target.files[0] || null
-                          )
-                        }
-                        disabled={isSubmitted}
-                      />
-                      {q.image && (
-                        <img
-                          src={q.image instanceof File ? URL.createObjectURL(q.image) : 
-                               (q.image && typeof q.image === 'object' && q.image.data) ? q.image.data : 
-                               q.image}
-                          alt="question"
-                          style={{
-                            maxWidth: "150px",
-                            display: "block",
-                            marginTop: "5px",
-                          }}
-                        />
+            {mod.questions.map((q, qIndex) => {
+              const hasSubs = q.subQuestions && q.subQuestions.length > 0;
+              const totalSubMarks = hasSubs ? q.subQuestions.reduce((s, sub) => s + (parseInt(sub.marks,10)||0), 0) : 0;
+
+              return (
+                <div key={qIndex} style={{ padding: '12px', backgroundColor: '#f9f9f9', borderRadius: '6px', marginBottom: '12px' }}>
+                  <div style={{ display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap' }}>
+                    <strong style={{ fontSize: '16px' }}>{q.label})</strong>
+
+                    {/* Main question text - disabled when sub-questions exist */}
+                    <input
+                      value={q.text}
+                      onChange={(e) => updateBEQuestion(modIndex, qIndex, "text", e.target.value)}
+                      placeholder={hasSubs ? "Main question disabled while sub-questions exist" : "Question text"}
+                      disabled={isSubmitted || hasSubs}
+                      style={{ flex: 1, minWidth: '240px', padding: '8px' }}
+                    />
+
+                    {/* CO & Level are at question level (apply to whole Q) */}
+                    <select value={q.co || ""} onChange={(e) => updateBEQuestion(modIndex, qIndex, "co", e.target.value)} disabled={isSubmitted} className="small">
+                      <option value="">CO</option>
+                      <option value="CO1">CO1</option>
+                      <option value="CO2">CO2</option>
+                      <option value="CO3">CO3</option>
+                      <option value="CO4">CO4</option>
+                      <option value="CO5">CO5</option>
+                    </select>
+
+                    <select value={q.level || ""} onChange={(e) => updateBEQuestion(modIndex, qIndex, "level", e.target.value)} disabled={isSubmitted} className="small">
+                      <option value="">Level</option>
+                      <option value="L1">L1</option>
+                      <option value="L2">L2</option>
+                      <option value="L3">L3</option>
+                      <option value="L4">L4</option>
+                      <option value="L5">L5</option>
+                    </select>
+
+                    {/* Main marks only when NO sub-questions */}
+                    {!hasSubs ? (
+                      <input type="number" value={q.marks || ""} onChange={(e) => updateBEQuestion(modIndex, qIndex, "marks", e.target.value)} placeholder="20 marks" disabled={isSubmitted} style={{ width: "100px" }} />
+                    ) : (
+                      <div style={{ minWidth: "100px", fontSize: "14px" }}>
+                        <strong>Total:</strong> {totalSubMarks}/20
+                      </div>
+                    )}
+
+                    {/* sub-question button */}
+                    {!isSubmitted && (
+                      <button onClick={() => addSubQuestionToBE(modIndex, qIndex)} style={{ padding: '6px 10px' }}>
+                        ➕ Add sub-question
+                      </button>
+                    )}
+
+                    <input type="file" accept="image/*" onChange={(e) => {
+                      const updated = [...modules];
+                      updated[modIndex].questions[qIndex].image = e.target.files[0] || null;
+                      setModules(updated);
+                    }} disabled={isSubmitted} style={{ fontSize: '12px' }} />
+                  </div>
+
+                  {q.image && (
+                    <img src={q.image instanceof File ? URL.createObjectURL(q.image) : (q.image && typeof q.image === 'object' && q.image.data ? q.image.data : q.image)} alt="question" style={{ maxWidth: '150px', display: 'block', marginTop: '8px' }} />
+                  )}
+
+                  {/* Sub-questions editor */}
+                  {hasSubs && (
+                    <div style={{ marginLeft: '28px', marginTop: '12px', padding: '12px', backgroundColor: '#fff', borderRadius: '6px', border: '1px solid #e0e0e0' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
+                        <strong>Sub-Questions</strong>
+                        <div style={{ fontWeight: 'bold', color: totalSubMarks === 20 ? 'green' : totalSubMarks > 20 ? 'red' : 'orange' }}>{totalSubMarks}/20</div>
+                      </div>
+
+                      {q.subQuestions.map((sub, subIndex) => (
+                        <div key={subIndex} style={{ marginBottom: '8px', display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
+                          <div style={{ width: "30px", fontWeight: 'bold' }}>{q.label}{sub.label})</div>
+                          <input value={sub.text} onChange={(e) => updateBESubQuestion(modIndex, qIndex, subIndex, "text", e.target.value)} placeholder="Sub-question text" disabled={isSubmitted} style={{ flex: 1, minWidth: '220px', padding: '6px' }} />
+                          <input type="number" value={sub.marks} onChange={(e) => updateBESubQuestion(modIndex, qIndex, subIndex, "marks", e.target.value)} placeholder="Marks" disabled={isSubmitted} style={{ width: '80px' }} />
+                          <input type="file" accept="image/*" onChange={(e) => {
+                            const updated = [...modules];
+                            updated[modIndex].questions[qIndex].subQuestions[subIndex].image = e.target.files[0] || null;
+                            setModules(updated);
+                          }} disabled={isSubmitted} style={{ fontSize: '12px' }} />
+                        </div>
+                      ))}
+
+                      {totalSubMarks > 20 && (
+                        <div style={{ marginTop: '8px', color: 'red', fontWeight: 'bold', backgroundColor: '#ffebee', padding: '6px', borderRadius: '4px' }}>
+                          ⚠️ Warning: Total marks exceed 20!
+                        </div>
+                      )}
+
+                      {!isSubmitted && (
+                        <div style={{ marginTop: '8px' }}>
+                          <button onClick={() => convertToMainQuestion(modIndex, qIndex)} style={{ padding: '6px 10px' }}>Convert to main question</button>
+                        </div>
                       )}
                     </div>
-                  ))}
-                  {groupIndex === 0 && (
-                    <p className="or-text">
-                      <strong>-- OR --</strong>
-                    </p>
                   )}
                 </div>
-              ))
-            )}
+              );
+            })}
           </div>
         ))}
 
-        {/* CIE Questions Section removed */}
-
         <hr />
         <h2>🖨 Question Paper Preview</h2>
-        <div className="preview" ref={previewRef}>
-          <p>
-            <strong>Subject:</strong> {subject} ({subjectCode})
-          </p>
-          <p>
-            <strong>Semester:</strong> {semester || "[Semester]"}
-          </p>
-          
+        <div className="preview" ref={previewRef} style={{ padding: '12px', backgroundColor: '#fff' }}>
+          <p><strong>Subject:</strong> {subject} ({subjectCode})</p>
+          <p><strong>Semester:</strong> {semester || "[Semester]"}</p>
           <p>{instructions}</p>
 
           <h4>Course Outcomes:</h4>
-          <ul>
-            {cos.map((co, i) => (
-              <li key={i}>{co}</li>
-            ))}
-          </ul>
+          <div>
+            {cos.map((co, i) => <div key={i}>{co}</div>)}
+          </div>
 
-          {examType === "MBA" && (
-            <p className="mba-preview-note">
-             
-            </p>
-          )}
-
-          {/* Modules Preview - Only for BE/MTECH exam type */}
+          {/* BE/MTECH Preview */}
           {examType === "BE/MTECH" && modules.map((mod, modIndex) => (
-            <div key={modIndex}>
-              <h4>{mod.title}</h4>
-              {mod.groups.length === 0 ? (
-                <em>Pattern not selected yet</em>
-              ) : (
-                <>
-                  {(mod.groups[0] || []).map((q, i) => (
-                    <div key={i}>
-                      {q.label}) {q.text} <strong>[{q.marks} marks]</strong>
-                      <em> CO: {q.co || "N/A"}</em>
-                      <em> | L: {q.level || "N/A"}</em>
-                      {q.image && (
-                        <img
-                          src={q.image instanceof File ? URL.createObjectURL(q.image) : 
-                               (q.image && typeof q.image === 'object' && q.image.data) ? q.image.data : 
-                               q.image}
-                          alt="preview"
-                          style={{ maxWidth: "150px", display: "block" }}
-                        />
-                      )}
+            <div key={modIndex} style={{ marginTop: '18px' }}>
+              <h4 style={{ marginBottom: '6px' }}>{mod.title}</h4>
+
+              {mod.questions.map((q, qIdx) => {
+                const hasSubs = q.subQuestions && q.subQuestions.length > 0;
+                const totalSubMarks = hasSubs ? q.subQuestions.reduce((s, sub) => s + (parseInt(sub.marks,10)||0), 0) : 0;
+
+                return (
+                  <div key={qIdx} style={{ marginBottom: '10px' }}>
+                    <div style={{ fontWeight: 'bold' }}>
+                      {q.label}.
                     </div>
-                  ))}
-                  <p className="or-text">
-                    <strong>-- OR --</strong>
-                  </p>
-                  {(mod.groups[1] || []).map((q, i) => (
-                    <div key={i}>
-                      {q.label}) {q.text} <strong>[{q.marks} marks]</strong>
-                      <em> CO: {q.co || "N/A"}</em>
-                      <em> | L: {q.level || "N/A"}</em>
-                      {q.image && (
-                        <img
-                          src={q.image instanceof File ? URL.createObjectURL(q.image) : 
-                               (q.image && typeof q.image === 'object' && q.image.data) ? q.image.data : 
-                               q.image}
-                          alt="preview"
-                          style={{ maxWidth: "150px", display: "block" }}
-                        />
-                      )}
-                    </div>
-                  ))}
-                </>
-              )}
+
+                    {hasSubs ? (
+                      <div style={{ marginLeft: '18px', marginTop: '6px' }}>
+                        {q.subQuestions.map((sub, si) => (
+                          <div key={si} style={{ marginBottom: '6px', display: 'flex', alignItems: 'baseline', gap: '8px' }}>
+                            <div style={{ minWidth: '40px', fontWeight: 'bold' }}>{q.label}{sub.label})</div>
+                            <div style={{ flex: 1 }}>{sub.text || "__________"}</div>
+                            <div style={{ minWidth: '120px', textAlign: 'right', fontWeight: 'bold' }}>{formatMarksOptionB(sub.marks)}</div>
+                          </div>
+                        ))}
+
+                        {/* CO & Level for whole question */}
+                        <div style={{ marginTop: '6px' }}>
+                          <strong>CO:</strong> {q.co || "N/A"} &nbsp; <strong>Level:</strong> {q.level || "N/A"}
+                        </div>
+
+                      </div>
+                    ) : (
+                      <div style={{ marginLeft: '18px', marginTop: '6px' }}>
+                        <div>{q.text || "__________"}</div>
+                        <div style={{ marginTop: '6px', fontWeight: 'bold' }}>Marks: {q.marks || 20}</div>
+                        <div style={{ marginTop: '6px' }}><strong>CO:</strong> {q.co || "N/A"} &nbsp; <strong>Level:</strong> {q.level || "N/A"}</div>
+                      </div>
+                    )}
+
+                    {qIdx === 0 && <div style={{ marginTop: '8px', marginBottom: '8px', textAlign: 'center', fontWeight: 'bold' }}>OR</div>}
+                  </div>
+                );
+              })}
             </div>
           ))}
 
-          {examType === "MBA" &&
-            mbaQuestions.map((question) => (
-              <div key={question.number} className="mba-preview-card">
-                <p>
-                  <strong>Q{question.number}.</strong>{" "}
-                  {!question.subQuestions.length && question.text}
-                  <strong>
-                    [
-                    {question.subQuestions.length > 0
-                      ? "20 marks (split)"
-                      : "20 marks"}
-                    ]
-                  </strong>
-                  <em> CO: {question.co || "N/A"}</em>
-                  <em> | L: {question.level || "N/A"}</em>
-                </p>
-                {question.subQuestions.length > 0 && (
-                  <ul>
-                    {question.subQuestions.map((sub) => (
-                      <li key={`${question.number}-${sub.label}`}>
-                        {sub.label}) {sub.text}{" "}
-                        <strong>[{sub.marks || 0} marks]</strong>
-                        <em> CO: {sub.co || "N/A"}</em>
-                        <em> | L: {sub.level || "N/A"}</em>
-                      </li>
-                    ))}
-                  </ul>
-                )}
-              </div>
-            ))}
+          {/* MBA preview */}
+          {examType === "MBA" && mbaQuestions.map((question) => (
+            <div key={question.number} className="mba-preview-card" style={{ marginTop: '10px' }}>
+              <p>
+                <strong>Q{question.number}.</strong>{" "}
+                {!question.subQuestions.length && question.text}
+                <strong>
+                  [
+                  {question.subQuestions.length > 0
+                    ? "20 marks (split)"
+                    : "20 marks"}
+                  ]
+                </strong>
+                <em> CO: {question.co || "N/A"}</em>
+                <em> | L: {question.level || "N/A"}</em>
+              </p>
+              {question.subQuestions.length > 0 && (
+                <ul>
+                  {question.subQuestions.map((sub) => (
+                    <li key={`${question.number}-${sub.label}`}>
+                      {sub.label}) {sub.text} <strong>[{sub.marks || 0} marks]</strong>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          ))}
         </div>
 
-        <div className="action-buttons">
+        <div className="action-buttons" style={{ marginTop: '14px' }}>
           {!isSubmitted && (
-            <button 
-              className="save-btn" 
-              onClick={() => {
-                saveDraftToLocalStorage();
-                alert("💾 Draft saved successfully!");
-              }}
-            >
-              💾 Save Draft
-            </button>
+            <button className="save-btn" onClick={() => { saveDraftToLocalStorage(); alert("Draft saved successfully!"); }}>💾 Save Draft</button>
           )}
           {!isSubmitted && (
-            <button className="submit-btn" onClick={confirmAndSubmit}>
-              📤 Submit Final
+            <button className="submit-btn" onClick={confirmAndSubmit}>📤 Submit Final</button>
+          )}
+          {!isSubmitted && (
+            <button 
+              className="editor-btn" 
+              onClick={openEditor}
+              style={{
+                backgroundColor: '#2196F3',
+                color: 'white',
+                padding: '10px 20px',
+                border: 'none',
+                borderRadius: '4px',
+                cursor: 'pointer',
+                fontSize: '14px',
+                fontWeight: 'bold',
+                marginLeft: '10px'
+              }}
+            >
+              ✏️ Open Editor
             </button>
           )}
           {!isSubmitted && (draftLoaded || lastSavedAt) && (
-            <button className="clear-btn" onClick={clearDraft}>
-              🗑️ Clear Draft
-            </button>
+            <button className="clear-btn" onClick={clearDraft}>🗑️ Clear Draft</button>
           )}
-         
         </div>
-        {isSubmitted && (
-          <p className="submitted-text">
-            ✅ Paper submitted. Editing is locked.
-          </p>
-        )}
+
+        {isSubmitted && <p className="submitted-text">✅ Paper submitted. Editing is locked.</p>}
       </div>
+
+      {/* React-Quill Editor Popup */}
+      {editorOpen && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          backgroundColor: 'rgba(0,0,0,0.85)',
+          display: 'flex',
+          justifyContent: 'center',
+          alignItems: 'center',
+          zIndex: 9999,
+          padding: '20px'
+        }}>
+          <div style={{
+            backgroundColor: 'white',
+            borderRadius: '12px',
+            width: '95%',
+            maxWidth: '1200px',
+            height: '90vh',
+            display: 'flex',
+            flexDirection: 'column',
+            boxShadow: '0 10px 40px rgba(0,0,0,0.3)'
+          }}>
+            {/* Header */}
+            <div style={{ 
+              padding: '20px 24px',
+              borderBottom: '2px solid #e0e0e0',
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              backgroundColor: '#f8f9fa',
+              borderTopLeftRadius: '12px',
+              borderTopRightRadius: '12px'
+            }}>
+              <div>
+                <h2 style={{ margin: 0, fontSize: '24px', color: '#333' }}>✏️ Word-like Question Editor</h2>
+                <p style={{ margin: '5px 0 0 0', fontSize: '13px', color: '#666' }}>
+                  Write your question with rich formatting • Auto-closes in 2 minutes
+                </p>
+              </div>
+              <button 
+                onClick={closeEditor}
+                style={{
+                  backgroundColor: 'transparent',
+                  border: 'none',
+                  fontSize: '28px',
+                  cursor: 'pointer',
+                  color: '#666',
+                  padding: '0',
+                  width: '40px',
+                  height: '40px',
+                  borderRadius: '50%',
+                  transition: 'all 0.2s'
+                }}
+                onMouseOver={(e) => {
+                  e.currentTarget.style.backgroundColor = '#f0f0f0';
+                  e.currentTarget.style.color = '#000';
+                }}
+                onMouseOut={(e) => {
+                  e.currentTarget.style.backgroundColor = 'transparent';
+                  e.currentTarget.style.color = '#666';
+                }}
+              >
+                ×
+              </button>
+            </div>
+            
+            {/* Editor Area */}
+            <div style={{ 
+              flex: 1, 
+              overflow: 'auto',
+              padding: '20px',
+              backgroundColor: '#fff'
+            }}>
+              <ReactQuill
+                theme="snow"
+                value={editorContent}
+                onChange={setEditorContent}
+                modules={quillModules}
+                formats={quillFormats}
+                placeholder="Start typing your question here... You can format text, add lists, insert images, and more!"
+                style={{
+                  height: 'calc(100% - 60px)',
+                  fontSize: '16px'
+                }}
+              />
+            </div>
+            
+            {/* Footer with Actions */}
+            <div style={{ 
+              padding: '16px 24px',
+              borderTop: '2px solid #e0e0e0',
+              display: 'flex',
+              gap: '12px',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              backgroundColor: '#f8f9fa',
+              borderBottomLeftRadius: '12px',
+              borderBottomRightRadius: '12px'
+            }}>
+              <div style={{ fontSize: '13px', color: '#666' }}>
+                💡 Tip: Copy the content and paste it into any question field above
+              </div>
+              <div style={{ display: 'flex', gap: '12px' }}>
+                <button 
+                  onClick={closeEditor}
+                  style={{
+                    padding: '10px 24px',
+                    backgroundColor: '#fff',
+                    color: '#333',
+                    border: '2px solid #ddd',
+                    borderRadius: '6px',
+                    cursor: 'pointer',
+                    fontSize: '14px',
+                    fontWeight: '500',
+                    transition: 'all 0.2s'
+                  }}
+                  onMouseOver={(e) => {
+                    e.currentTarget.style.backgroundColor = '#f5f5f5';
+                    e.currentTarget.style.borderColor = '#999';
+                  }}
+                  onMouseOut={(e) => {
+                    e.currentTarget.style.backgroundColor = '#fff';
+                    e.currentTarget.style.borderColor = '#ddd';
+                  }}
+                >
+                  Cancel
+                </button>
+                <button 
+                  onClick={copyToClipboard}
+                  style={{
+                    padding: '10px 24px',
+                    backgroundColor: '#4CAF50',
+                    color: 'white',
+                    border: 'none',
+                    borderRadius: '6px',
+                    cursor: 'pointer',
+                    fontSize: '14px',
+                    fontWeight: 'bold',
+                    transition: 'all 0.2s',
+                    boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
+                  }}
+                  onMouseOver={(e) => {
+                    e.currentTarget.style.backgroundColor = '#45a049';
+                    e.currentTarget.style.boxShadow = '0 4px 8px rgba(0,0,0,0.2)';
+                  }}
+                  onMouseOut={(e) => {
+                    e.currentTarget.style.backgroundColor = '#4CAF50';
+                    e.currentTarget.style.boxShadow = '0 2px 4px rgba(0,0,0,0.1)';
+                  }}
+                >
+                  📋 Copy to Clipboard
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
