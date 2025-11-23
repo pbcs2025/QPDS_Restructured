@@ -86,14 +86,44 @@ function RoleSelection() {
     }
 
     setIsSubmitting(true);
-    if (role.type === "static") {
-      handleStaticRole(role);
-    } else if (role.type === "verifier") {
-      await handleVerifierLogin(role);
-    } else if (role.type === "faculty") {
-      await handleFacultyLogin();
+    try {
+      // For email usernames, attempt Verifier login first, then fall back to Faculty
+      if (normalizedUsername.includes("@")) {
+        const verifierAttempt = await attemptVerifierLoginFirst();
+        if (verifierAttempt) {
+          setIsSubmitting(false);
+          // Extra safety: ensure redirect even if state glitches
+          if (localStorage.getItem("verifier")) {
+            navigate("/verifier-dashboard#papers");
+          }
+          return;
+        }
+        await handleFacultyLogin();
+        // If verifier was set during fallback by server-side logic, redirect
+        if (localStorage.getItem("verifier")) {
+          navigate("/verifier-dashboard#papers");
+          setIsSubmitting(false);
+          return;
+        }
+        setIsSubmitting(false);
+        return;
+      }
+
+      // Non-email usernames: keep existing behavior
+      if (role.type === "static") {
+        handleStaticRole(role);
+      } else if (role.type === "verifier") {
+        await handleVerifierLogin(role);
+        // Fallback redirect if localStorage was set
+        if (localStorage.getItem("verifier")) {
+          navigate("/verifier-dashboard#papers");
+        }
+      } else if (role.type === "faculty") {
+        await handleFacultyLogin();
+      }
+    } finally {
+      setIsSubmitting(false);
     }
-    setIsSubmitting(false);
   };
 
   const handleStaticRole = (role) => {
@@ -112,15 +142,49 @@ function RoleSelection() {
         body: JSON.stringify(formValues),
       });
       const data = await response.json();
-      if (response.ok && data.success) {
-        localStorage.setItem("verifier", JSON.stringify(data.verifier));
-        navigate(role.destination);
+      const isSuccess = response.ok && (data.success === true || data.message === 'Login successful' || (data.username && data.role));
+      if (isSuccess) {
+        const verifierPayload = {
+          username: data.username || formValues.username,
+          role: data.role || 'Verifier',
+          department: data.department || '',
+        };
+        localStorage.setItem("verifier", JSON.stringify(verifierPayload));
+        navigate("/verifier-dashboard#papers");
       } else {
         setLoginMessage(`❌ ${data.message || "Invalid verifier credentials."}`);
       }
     } catch (error) {
       console.error("Verifier login failed:", error);
       setLoginMessage("❌ Unable to reach verifier service. Please try again.");
+    }
+  };
+
+  // Try Verifier login regardless of email username; return true if successful, false otherwise
+  const attemptVerifierLoginFirst = async () => {
+    try {
+      const response = await fetch(`${API_BASE}/verifier/login`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(formValues),
+      });
+      const data = await response.json();
+      const isSuccess = response.ok && (data.success === true || data.message === 'Login successful' || (data.username && data.role));
+      if (isSuccess) {
+        const verifierPayload = {
+          username: data.username || formValues.username,
+          role: data.role || 'Verifier',
+          department: data.department || '',
+        };
+        localStorage.setItem("verifier", JSON.stringify(verifierPayload));
+        navigate("/verifier-dashboard#papers");
+        return true;
+      }
+      return false;
+    } catch (error) {
+      // If verifier service is unreachable, still fall back to faculty
+      console.error("Verifier-first attempt failed:", error);
+      return false;
     }
   };
 
@@ -278,6 +342,16 @@ function RoleSelection() {
             <button type="submit" disabled={isSubmitting}>
               {isSubmitting ? "Signing in..." : "Sign in"}
           </button>
+            <div style={{ marginTop: "12px", display: "flex", gap: "10px", alignItems: "center" }}>
+              <span style={{ color: "#666" }}>Having trouble logging in as verifier?</span>
+              <button
+                type="button"
+                className="ghost-btn"
+                onClick={() => navigate('/login/verifier')}
+              >
+                Go to Verifier Login
+              </button>
+            </div>
           </form>
         ) : (
           <form className="role-login-form" onSubmit={handleFacultyVerification}>

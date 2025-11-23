@@ -68,6 +68,34 @@ exports.register = async (req, res) => {
 exports.login = async (req, res) => {
   const { username, password } = req.body;
   try {
+    // If the username belongs to a Verifier, authenticate there first to avoid routing as Faculty
+    try {
+      const Verifier = require('../models/Verifier');
+      const MbaVerifier = require('../models/MbaVerifier');
+      const MtechVerifier = require('../models/MtechVerifier');
+
+      // Prefer dedicated Verifier collection; passwords are stored in passwordHash (plain text in this app)
+      let v = await Verifier.findOne({ username }).lean();
+      if (!v) v = await MbaVerifier.findOne({ username }).lean();
+      if (!v) v = await MtechVerifier.findOne({ username }).lean();
+
+      if (v) {
+        const stored = v.passwordHash || v.password;
+        if (String(stored) !== String(password)) {
+          return res.status(401).json({ success: false, message: 'Invalid credentials' });
+        }
+        return res.json({
+          success: true,
+          message: 'Login successful',
+          username: v.username,
+          role: 'Verifier',
+          department: v.department || '',
+        });
+      }
+    } catch (e) {
+      // Non-fatal: if verifier models not found, continue with faculty login
+    }
+
     const user = await User.findOne({ username, password }).lean();
     if (!user) return res.status(401).json({ success: false, message: 'Invalid credentials' });
 

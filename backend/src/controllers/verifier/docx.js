@@ -56,7 +56,9 @@ const {
       const buf = await Packer.toBuffer(doc);
       res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document');
       res.setHeader('Content-Disposition', 'attachment; filename="test.docx"');
-      return res.send(Buffer.from(buf));
+      res.setHeader('Cache-Control', 'no-store');
+      res.setHeader('Content-Length', Buffer.byteLength(buf));
+      return res.end(buf);
     } catch (e) {
       console.error(e);
       return res.status(500).json({ error: e.message });
@@ -99,7 +101,15 @@ const {
   
       if (!papers?.length) return res.status(404).json({ error: 'Paper not found' });
   
-      const dept = papers[0].department || 'N/A';
+      const sanitize = (val) => {
+        const s = String(val == null ? '' : val);
+        // Remove disallowed XML control characters and unpaired surrogates
+        return s
+          .replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g, ' ')
+          .replace(/[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/g, ' ');
+      };
+
+      const dept = sanitize(papers[0].department || 'N/A');
   
       // USN: 10 visible boxes in a single row
       const usnTable = new Table({
@@ -130,16 +140,16 @@ const {
         alignment: AlignmentType.CENTER,
       });
   
-      const deptSemPara = new Paragraph({
-        children: [
-          new TextRun({ text: `Department: ${dept}`, bold: true }),
-          new TextRun({ text: ' '.repeat(30) }),
-          new TextRun({ text: `Semester: ${sem}`, bold: true }),
-        ]
-      });
+  const deptSemPara = new Paragraph({
+    children: [
+      new TextRun({ text: `Department: ${dept}`, bold: true }),
+      new TextRun({ text: ' '.repeat(30) }),
+      new TextRun({ text: `Semester: ${sem}`, bold: true }),
+    ]
+  });
   
       const header = [
-        new Paragraph({ alignment: AlignmentType.RIGHT, children: [new TextRun({ text: subject_code, bold: true })] }),
+        new Paragraph({ alignment: AlignmentType.RIGHT, children: [new TextRun({ text: sanitize(subject_code), bold: true })] }),
         new Paragraph({
           alignment: AlignmentType.CENTER,
           children: [new TextRun({
@@ -150,12 +160,35 @@ const {
         }),
         new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: '(An Autonomous Institute, affiliated to VTU, Belagavi)' })] }),
   
-        new Paragraph({ children: [new TextRun({ text: 'USN: ', bold: true })] }),
-        new Paragraph({ children: [usnTable] }),
+        // Add a blank line above USN for cleaner layout
+        new Paragraph({ children: [new TextRun({ text: ' ' })] }),
+        // USN inline boxes: fixed widths + row height for clear visibility
+        new Table({
+          rows: [
+            new TableRow({
+              height: { value: 600, rule: 'atLeast' },
+              children: [
+                new TableCell({
+                  borders: BORDER,
+                  width: { size: 1000, type: WidthType.DXA }, // ~0.69in
+                  children: [new Paragraph({ children: [new TextRun({ text: 'USN:', bold: true })] })]
+                }),
+                ...Array.from({ length: 10 }, () =>
+                  new TableCell({
+                    borders: BORDER,
+                    width: { size: 836, type: WidthType.DXA }, // 10 boxes fit within page content width
+                    children: [new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: ' ', size: 24 })] })]
+                  })
+                )
+              ]
+            })
+          ],
+          width: { size: 100, type: WidthType.PERCENTAGE },
+        }),
         deptSemPara,
   
         new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: `Semester ${sem} B.E. Degree Second Internal Assessment, April – 2025` })] }),
-        new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: `Subject Name: ${papers[0].subject_name}`, bold: true })] }),
+        new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: `Subject Name: ${sanitize(papers[0].subject_name)}`, bold: true })] }),
         new Paragraph({ children: [new TextRun({ text: 'Time: 3 hrs.', bold: true }), new TextRun({ text: '\t\t\t\t\t\t\t\t' }), new TextRun({ text: 'Max. Marks: 100', bold: true })] }),
         new Paragraph({ children: [new TextRun({ text: 'Note: Answer any five full questions, choosing ONE full question from each module.', italics: true })] }),
         new Paragraph({ children: [new TextRun({ text: ' ' })] }),
@@ -187,15 +220,15 @@ const {
   
         subQuestions.forEach((q, subIndex) => {
           const marks = typeof q.marks === 'number' ? q.marks : 0;
-          const co = q.co ?? '';
-          const level = q.level ?? '';
+          const co = sanitize(q.co ?? '');
+          const level = sanitize(q.level ?? '');
           const info = `${marks} / ${co} / ${level}`;
   
           qRows.push(
             new TableRow({
               children: [
-                new TableCell({ borders: BORDER, children: [new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: String(q.question_number) })] })] }),
-                new TableCell({ borders: BORDER, children: [new Paragraph({ children: [new TextRun({ text: String(q.question_text) })] })] }),
+                new TableCell({ borders: BORDER, children: [new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: sanitize(q.question_number) })] })] }),
+                new TableCell({ borders: BORDER, children: [new Paragraph({ children: [new TextRun({ text: sanitize(q.question_text) })] })] }),
                 new TableCell({ borders: BORDER, children: [new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: info })] })] }),
               ]
             })
@@ -230,23 +263,34 @@ const {
         },
       });
   
-      const footer = [
-        new Paragraph({ children: [new TextRun({ text: ' ' })] }),
-        new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: '* * * * *' })] }),
-      ];
+      // Heuristic: if many rows, likely more than one page → add P.T.O footer
+      const likelyMultiPage = qRows.length > 22;
   
-      const doc = new Document({
-        sections: [{
-          properties: { page: { margin: { top: 1440, right: 1440, bottom: 1440, left: 1440 } } },
-          children: [...header, questionTable, ...footer],
-        }]
-      });
+      const docSections = [{
+        properties: { page: { margin: { top: 1440, right: 1440, bottom: 1440, left: 1440 } } },
+        children: [...header, questionTable],
+      }];
+
+      if (likelyMultiPage) {
+        const { Footer, Paragraph: P, TextRun: T } = require('./helpers');
+        docSections[0].footers = {
+          default: new Footer({
+            children: [
+              new P({ alignment: AlignmentType.RIGHT, children: [new T({ text: 'P.T.O', bold: true })] })
+            ]
+          })
+        };
+      }
+
+      const doc = new Document({ sections: docSections });
   
       const buffer = await Packer.toBuffer(doc);
       const filename = `${subject_code}_${sem}.docx`;
       res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document');
       res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
-      return res.send(Buffer.from(buffer));
+      res.setHeader('Cache-Control', 'no-store');
+      res.setHeader('Content-Length', Buffer.byteLength(buffer));
+      return res.end(buffer);
     } catch (err) {
       console.error('getPaperDocx error:', err);
       return res.status(500).json({ error: err.message });

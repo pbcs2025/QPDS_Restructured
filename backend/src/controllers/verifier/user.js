@@ -87,12 +87,72 @@ const {
     try {
       const { username, password } = req.body;
       if (!username || !password) return res.status(400).json({ error: 'username and password are required' });
-  
-      const user = await User.findOne({ username, password, role: 'Verifier' }).lean();
-      if (!user) return res.status(401).json({ success: false, message: 'Invalid credentials' });
-  
-      const verifier = await Verifier.findOne({ username }).lean();
-      return res.json({ success: true, verifier });
+
+      // Import verifier models lazily to avoid circular deps
+      const MbaVerifier = require('../../models/MbaVerifier');
+      const MtechVerifier = require('../../models/MtechVerifier');
+
+      let found = null;
+      let source = 'Verifier';
+
+      // Prefer dedicated Verifier accounts first
+      const ver = await Verifier.findOne({ username }).lean();
+      if (ver) {
+        // Verifier stores password in passwordHash as plain text in this app
+        found = { username: ver.username, password: ver.passwordHash, role: 'Verifier', department: ver.department || '' };
+        source = 'Verifier';
+      }
+
+      // 2) MBA verifier
+      if (!found) {
+        const mba = await MbaVerifier.findOne({ username }).lean();
+        if (mba) {
+          found = { username: mba.username, password: mba.password, role: 'Verifier', department: mba.department || 'MBA' };
+          source = 'MbaVerifier';
+        }
+      }
+
+      // 3) MTECH verifier
+      if (!found) {
+        const mtech = await MtechVerifier.findOne({ username }).lean();
+        if (mtech) {
+          found = { username: mtech.username, password: mtech.password, role: 'Verifier', department: mtech.department || 'MTECH' };
+          source = 'MtechVerifier';
+        }
+      }
+
+      // 4) Fallback to general User collection (may include Faculty/Admin)
+      if (!found) {
+        const user = await User.findOne({ username }).lean();
+        if (user) {
+          found = { username: user.username, password: user.password, role: user.role || user.usertype || 'User', department: user.deptName || '' };
+          source = 'User';
+        }
+      }
+
+      if (!found) {
+        return res.status(400).json({ message: 'Invalid username' });
+      }
+
+      // Plain text password comparison
+      if (String(found.password) !== String(password)) {
+        return res.status(400).json({ message: 'Invalid password' });
+      }
+
+      // Store user in session if available, otherwise attach to req.user
+      const sessionUser = { username: found.username, role: found.role, department: found.department };
+      if (req.session) {
+        req.session.user = sessionUser;
+      }
+      req.user = sessionUser;
+
+      return res.json({
+        message: 'Login successful',
+        username: found.username,
+        role: found.role,
+        department: found.department,
+        source
+      });
     } catch (err) {
       console.error('Verifier login error:', err);
       return res.status(500).json({ success: false, message: 'Server error' });

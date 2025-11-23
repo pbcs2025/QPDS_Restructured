@@ -25,6 +25,15 @@ function VerifierDashboard() {
     }
   }, [navigate]);
 
+  // Set initial tab from URL hash if provided (e.g., /verifier-dashboard#papers)
+  useEffect(() => {
+    const hash = (window.location && window.location.hash || "").replace("#", "");
+    const tabs = ["dashboard", "faculties", "papers", "subjects", "reports", "settings"];
+    if (tabs.includes(hash)) {
+      setActiveTab(hash);
+    }
+  }, []);
+
   const handleLogoutClick = () => setShowConfirm(true);
   const confirmLogout = () => {
     setShowConfirm(false);

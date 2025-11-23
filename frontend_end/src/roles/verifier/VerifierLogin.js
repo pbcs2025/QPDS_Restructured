@@ -25,9 +25,16 @@ function VerifierLogin() {
         body: JSON.stringify(formValues),
       });
       const data = await res.json();
-      if (res.ok && data.success) {
-        localStorage.setItem("verifier", JSON.stringify(data.verifier));
-        navigate("/verifier-dashboard");
+      // Backend returns { message: 'Login successful', username, role, department }
+      const isSuccess = res.ok && (data.success === true || data.message === 'Login successful' || (data.username && data.role));
+      if (isSuccess) {
+        const verifierPayload = {
+          username: data.username || formValues.username,
+          role: data.role || 'Verifier',
+          department: data.department || '',
+        };
+        localStorage.setItem("verifier", JSON.stringify(verifierPayload));
+        navigate("/verifier-dashboard#papers");
       } else {
         setMessage(data.message || "Invalid credentials");
       }

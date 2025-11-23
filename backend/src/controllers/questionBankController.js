@@ -213,7 +213,10 @@ exports.list = async (_req, res) => {
 
     const withUrls = results.map(q => ({
       ...q,
-      file_url: q.file_name ? `/api/question-bank/file/${q._id}` : null,
+      // Use a relative path (no /api prefix) because the frontend
+      // constructs the absolute URL as `${API_BASE}${file_url}` and
+      // `API_BASE` already includes `/api`.
+      file_url: q.file_name ? `/question-bank/file/${q._id}` : null,
     }));
 
     res.json(withUrls);

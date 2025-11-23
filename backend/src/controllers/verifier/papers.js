@@ -175,7 +175,7 @@ const {
           approved: paper.approved,
           remarks: paper.remarks,
           verified_at: paper.verified_at,
-          file_url: paper.file_name ? `/api/question-bank/file/${paper._id}` : null,
+          file_url: paper.file_name ? `/question-bank/file/${paper._id}` : null,
           file_name: paper.file_name
         });
   
@@ -290,7 +290,27 @@ const {
       return res.status(500).json({ error: 'Server error' });
     }
   }
-  
+
+  // Simple: Filter submitted papers by logged-in user's department (session-based)
+  async function getVerifierPapers(req, res) {
+    try {
+      const sessionUser = (req.session && req.session.user) ? req.session.user : req.user;
+      if (!sessionUser) {
+        return res.status(401).json({ message: 'Not logged in' });
+      }
+      const department = sessionUser.department;
+      if (!department || String(department).trim() === '') {
+        return res.status(400).json({ message: 'Department not found for user' });
+      }
+
+      const papers = await QuestionPaper.find({ department: String(department).trim() }).lean();
+      return res.json(papers);
+    } catch (err) {
+      console.error('Error fetching papers:', err);
+      return res.status(500).json({ message: 'Server error' });
+    }
+  }
+
   // Get verifier corrected papers with remarks for superadmin
   async function getVerifierCorrectedPapers(req, res) {
     try {
@@ -405,5 +425,6 @@ const {
     getPaperByCodeSemester,
     listApprovedPapers,
     listRejectedPapers,
-    getVerifierCorrectedPapers
+    getVerifierCorrectedPapers,
+    getVerifierPapers
   };

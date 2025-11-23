@@ -36,6 +36,7 @@ function SuperAdminDashboard() {
   const [showSentForPrint, setShowSentForPrint] = useState(false);
   const [showArchivedPapers, setShowArchivedPapers] = useState(false);
   const [archivedPapers, setArchivedPapers] = useState([]);
+  const [beSearchQuery, setBeSearchQuery] = useState('');
 
   // Load papers sent for print from localStorage on component mount
   useEffect(() => {
@@ -699,7 +700,23 @@ function SuperAdminDashboard() {
 
         {activeTab === "submitted" && (
           <div>
-            <h1>Submitted Papers</h1>
+            <h1>Submitted BE Papers</h1>
+            <div style={{ marginTop: '10px', marginBottom: '20px' }}>
+              <input
+                type="text"
+                placeholder="Search by subject code or name..."
+                value={beSearchQuery}
+                onChange={(e) => setBeSearchQuery(e.target.value)}
+                style={{
+                  width: '100%',
+                  minWidth: '60%',
+                  padding: '10px',
+                  border: '1px solid #ced4da',
+                  borderRadius: '6px',
+                  fontSize: '14px'
+                }}
+              />
+            </div>
             {openedPaper && (
               <div style={{ marginBottom: '20px', padding: '16px', border: '1px solid #e1e7ef', borderRadius: '10px', background: '#fff' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -708,13 +725,24 @@ function SuperAdminDashboard() {
                     <button
                       onClick={async () => {
                         try {
-                          // Download DOCX file
-                          const response = await fetch(`${API_BASE}/verifier/papers/${encodeURIComponent(openedPaper.subject_code)}/${encodeURIComponent(openedPaper.semester)}/docx`);
+                          // Download DOCX file with validation
+                          const response = await fetch(`${API_BASE}/verifier/papers/${encodeURIComponent(openedPaper.subject_code)}/${encodeURIComponent(openedPaper.semester)}/docx`, {
+                            method: 'GET',
+                            cache: 'no-store'
+                          });
                           if (!response.ok) {
-                            throw new Error(`HTTP error! status: ${response.status}`);
+                            const text = await response.text().catch(() => '');
+                            throw new Error(`Failed to generate DOCX (status ${response.status}). ${text}`);
                           }
-                          
-                          const blob = await response.blob();
+                          const contentType = (response.headers.get('Content-Type') || '').toLowerCase();
+                          const isDocx = contentType.includes('application/vnd.openxmlformats-officedocument.wordprocessingml.document') || contentType.includes('application/octet-stream');
+                          if (!isDocx) {
+                            const text = await response.text().catch(() => '');
+                            alert(`Unexpected response while generating DOCX. Please try again.\nDetails: ${text?.slice(0, 200) || 'no details'}`);
+                            return;
+                          }
+                          const buffer = await response.arrayBuffer();
+                          const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' });
                           const url = window.URL.createObjectURL(blob);
                           const a = document.createElement('a');
                           a.href = url;
@@ -723,7 +751,6 @@ function SuperAdminDashboard() {
                           a.click();
                           window.URL.revokeObjectURL(url);
                           document.body.removeChild(a);
-                          
                           alert('Question paper downloaded successfully!');
                         } catch (err) {
                           console.error('Download error:', err);
@@ -771,7 +798,7 @@ function SuperAdminDashboard() {
                             </div>
                             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                               <span style={{ color: '#fff', fontWeight: 800, minWidth: '44px', textAlign: 'center', backgroundColor: '#fd7e14', borderRadius: '999px', padding: '4px 10px' }}>L</span>
-                              <span>{q.corrected_l || q.l || ''}</span>
+                          <span>{q.corrected_l || q.l || q.level || ''}</span>
                             </div>
                             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                               <span style={{ color: '#084298', fontWeight: 800 }}>Marks</span>
@@ -906,7 +933,7 @@ function SuperAdminDashboard() {
                                 <div style={{ minWidth: '220px', display: 'grid', gridTemplateColumns: 'auto auto auto', gap: '8px', alignItems: 'center', justifyContent: 'end' }}>
                                   <div style={{ textAlign: 'right' }}><strong>Marks:</strong> {typeof q.marks === 'number' ? q.marks : 0}</div>
                                   <div style={{ textAlign: 'right' }}><strong>CO:</strong> {q.co || ''}</div>
-                                  <div style={{ textAlign: 'right' }}><strong>L:</strong> {q.l || ''}</div>
+                                  <div style={{ textAlign: 'right' }}><strong>L:</strong> {q.l || q.level || ''}</div>
                                 </div>
                               </div>
                               {q.file_url && (
@@ -933,7 +960,7 @@ function SuperAdminDashboard() {
                                 <div style={{ minWidth: '220px', display: 'grid', gridTemplateColumns: 'auto auto auto', gap: '8px', alignItems: 'center', justifyContent: 'end' }}>
                                   <div style={{ textAlign: 'right' }}><strong>Marks:</strong> {typeof q.marks === 'number' ? q.marks : 0}</div>
                                   <div style={{ textAlign: 'right' }}><strong>CO:</strong> {q.co || ''}</div>
-                                  <div style={{ textAlign: 'right' }}><strong>L:</strong> {q.l || ''}</div>
+                                  <div style={{ textAlign: 'right' }}><strong>L:</strong> {q.l || q.level || ''}</div>
                                 </div>
                               </div>
                               {q.file_url && (
@@ -1056,14 +1083,32 @@ function SuperAdminDashboard() {
                         </tr>
                       </thead>
                       <tbody>
-                        {papersSentForPrint.length === 0 ? (
+                        {papersSentForPrint
+                          .filter(p => !selectedDepartment || String(p.department || '').trim().toLowerCase() === String(selectedDepartment || '').trim().toLowerCase())
+                          .filter(p => !selectedSemester || p.semester === parseInt(selectedSemester))
+                          .filter(p => {
+                            const q = (beSearchQuery || '').toLowerCase();
+                            const code = (p.subject_code || p.subjectCode || '').toLowerCase();
+                            const name = (p.subject_name || p.subjectName || '').toLowerCase();
+                            return code.includes(q) || name.includes(q);
+                          })
+                          .length === 0 ? (
                           <tr>
                             <td colSpan={5} style={{ textAlign: 'center', padding: '20px' }}>
                               No papers sent for print yet.
                             </td>
                           </tr>
                         ) : (
-                          papersSentForPrint.map((paper, index) => (
+                          papersSentForPrint
+                            .filter(p => !selectedDepartment || String(p.department || '').trim().toLowerCase() === String(selectedDepartment || '').trim().toLowerCase())
+                            .filter(p => !selectedSemester || p.semester === parseInt(selectedSemester))
+                            .filter(p => {
+                              const q = (beSearchQuery || '').toLowerCase();
+                              const code = (p.subject_code || p.subjectCode || '').toLowerCase();
+                              const name = (p.subject_name || p.subjectName || '').toLowerCase();
+                              return code.includes(q) || name.includes(q);
+                            })
+                            .map((paper, index) => (
                             <tr key={index} style={{ backgroundColor: '#e7f3ff' }}>
                               <td style={{ padding: '14px 12px', borderTop: '1px solid #e1e7ef', borderRight: '1px solid #e1e7ef', fontWeight: 600 }}>
                                 {paper.subject_code}
@@ -1113,7 +1158,16 @@ function SuperAdminDashboard() {
                         </tr>
                       </thead>
                       <tbody>
-                        {archivedPapers.length === 0 ? (
+                        {archivedPapers
+                          .filter(p => !selectedDepartment || String(p.department || '').trim().toLowerCase() === String(selectedDepartment || '').trim().toLowerCase())
+                          .filter(p => !selectedSemester || p.semester === parseInt(selectedSemester))
+                          .filter(p => {
+                            const q = (beSearchQuery || '').toLowerCase();
+                            const code = (p.subject_code || p.subjectCode || '').toLowerCase();
+                            const name = (p.subject_name || p.subjectName || '').toLowerCase();
+                            return code.includes(q) || name.includes(q);
+                          })
+                          .length === 0 ? (
                           <tr>
                             <td colSpan={7} style={{ textAlign: 'center', padding: '20px' }}>
                               No archived papers found.
@@ -1121,8 +1175,14 @@ function SuperAdminDashboard() {
                           </tr>
                         ) : (
                           archivedPapers
-                            .filter(p => !selectedDepartment || p.department === selectedDepartment)
+                            .filter(p => !selectedDepartment || String(p.department || '').trim().toLowerCase() === String(selectedDepartment || '').trim().toLowerCase())
                             .filter(p => !selectedSemester || p.semester === parseInt(selectedSemester))
+                            .filter(p => {
+                              const q = (beSearchQuery || '').toLowerCase();
+                              const code = (p.subject_code || p.subjectCode || '').toLowerCase();
+                              const name = (p.subject_name || p.subjectName || '').toLowerCase();
+                              return code.includes(q) || name.includes(q);
+                            })
                             .map((paper, index) => (
                             <tr key={index} style={{ backgroundColor: '#f8d7da', color: '#721c24' }}>
                               <td style={{ padding: '14px 12px', borderTop: '1px solid #e1e7ef', borderRight: '1px solid #e1e7ef', fontWeight: 600 }}>
@@ -1180,8 +1240,8 @@ function SuperAdminDashboard() {
                                     onClick={async () => {
                                       try {
                                         if (!window.confirm('Are you sure you want to restore this paper?')) return;
-                                        
-                                        // Restore the paper
+
+                                        // Restore the paper (backend already handles state)
                                         const response = await fetch(`${API_BASE}/papers/restore`, {
                                           method: 'POST',
                                           headers: {
@@ -1189,17 +1249,29 @@ function SuperAdminDashboard() {
                                           },
                                           body: JSON.stringify({
                                             subject_code: paper.subject_code,
-                                            semester: paper.semester
+                                            semester: paper.semester,
                                           }),
                                         });
-                                        
+
                                         if (!response.ok) {
                                           throw new Error(`HTTP error! status: ${response.status}`);
                                         }
-                                        
-                                        // Remove from archived papers
+
+                                        // Remove from archived list immediately
                                         setArchivedPapers(prev => prev.filter(p => p._id !== paper._id));
-                                        
+
+                                        // Add back to BE submitted papers immediately
+                                        setSubmittedPapers(prev => {
+                                          // Avoid duplicates
+                                          const exists = prev.some(p => p._id === paper._id);
+                                          if (exists) return prev;
+                                          // Use the archived paper object as restored paper; drop archived-only fields
+                                          const restored = { ...paper };
+                                          delete restored.archived_at;
+                                          delete restored.archived_by;
+                                          return [...prev, restored];
+                                        });
+
                                         alert('Paper restored successfully!');
                                       } catch (err) {
                                         console.error('Restore error:', err);
@@ -1228,12 +1300,20 @@ function SuperAdminDashboard() {
                           <th>Subject Name</th>
                           <th>Semester</th>
                           <th>Submitted At</th>
+                          <th>Verifier Remarks</th>
                           <th>Action</th>
                         </tr>
                       </thead>
                       <tbody>
                         {submittedPapers
+                          .filter(p => !selectedDepartment || String(p.department || '').trim().toLowerCase() === String(selectedDepartment || '').trim().toLowerCase())
                           .filter(p => !selectedSemester || p.semester === parseInt(selectedSemester))
+                          .filter(p => {
+                            const q = (beSearchQuery || '').toLowerCase();
+                            const code = (p.subject_code || p.subjectCode || '').toLowerCase();
+                            const name = (p.subject_name || p.subjectName || '').toLowerCase();
+                            return code.includes(q) || name.includes(q);
+                          })
                           .length === 0 && (
                           <tr>
                             <td colSpan={5} style={{ textAlign: 'center', padding: '20px' }}>
@@ -1242,7 +1322,14 @@ function SuperAdminDashboard() {
                           </tr>
                         )}
                         {submittedPapers
+                          .filter(p => !selectedDepartment || String(p.department || '').trim().toLowerCase() === String(selectedDepartment || '').trim().toLowerCase())
                           .filter(p => !selectedSemester || p.semester === parseInt(selectedSemester))
+                          .filter(p => {
+                            const q = (beSearchQuery || '').toLowerCase();
+                            const code = (p.subject_code || p.subjectCode || '').toLowerCase();
+                            const name = (p.subject_name || p.subjectName || '').toLowerCase();
+                            return code.includes(q) || name.includes(q);
+                          })
                           .map((p) => (
                           <tr key={p._id}>
                             <td style={{ padding: '14px 12px', borderTop: '1px solid #e1e7ef', borderRight: '1px solid #e1e7ef', fontWeight: 600 }}>
@@ -1256,6 +1343,9 @@ function SuperAdminDashboard() {
                             </td>
                             <td style={{ padding: '14px 12px', borderTop: '1px solid #e1e7ef', borderRight: '1px solid #e1e7ef' }}>
                               {p.verified_at ? new Date(p.verified_at).toLocaleString() : p.approved_at ? new Date(p.approved_at).toLocaleString() : '-'}
+                            </td>
+                            <td style={{ padding: '14px 12px', borderTop: '1px solid #e1e7ef', borderRight: '1px solid #e1e7ef' }}>
+                              {(p.verifier_remarks || '').trim() ? (p.verifier_remarks.length > 60 ? `${p.verifier_remarks.slice(0, 60)}…` : p.verifier_remarks) : '—'}
                             </td>
                             <td style={{ padding: '14px 12px', textAlign: 'center', borderTop: '1px solid #e1e7ef' }}>
                               <div style={{ display: 'flex', gap: '8px', justifyContent: 'center' }}>
@@ -1285,13 +1375,24 @@ function SuperAdminDashboard() {
                                     try {
                                       console.log('Print button clicked for paper:', p);
                                       
-                                      // Download DOCX file
-                                      const response = await fetch(`${API_BASE}/verifier/papers/${encodeURIComponent(p.subject_code)}/${encodeURIComponent(p.semester)}/docx`);
+                                      // Download DOCX file with validation
+                                      const response = await fetch(`${API_BASE}/verifier/papers/${encodeURIComponent(p.subject_code)}/${encodeURIComponent(p.semester)}/docx`, {
+                                        method: 'GET',
+                                        cache: 'no-store'
+                                      });
                                       if (!response.ok) {
-                                        throw new Error(`HTTP error! status: ${response.status}`);
+                                        const text = await response.text().catch(() => '');
+                                        throw new Error(`Failed to generate DOCX (status ${response.status}). ${text}`);
                                       }
-                                      
-                                      const blob = await response.blob();
+                                      const contentType = (response.headers.get('Content-Type') || '').toLowerCase();
+                                      const isDocx = contentType.includes('application/vnd.openxmlformats-officedocument.wordprocessingml.document') || contentType.includes('application/octet-stream');
+                                      if (!isDocx) {
+                                        const text = await response.text().catch(() => '');
+                                        alert(`Unexpected response while generating DOCX. Please try again.\nDetails: ${text?.slice(0, 200) || 'no details'}`);
+                                        return;
+                                      }
+                                      const buffer = await response.arrayBuffer();
+                                      const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' });
                                       const url = window.URL.createObjectURL(blob);
                                       const a = document.createElement('a');
                                       a.href = url;

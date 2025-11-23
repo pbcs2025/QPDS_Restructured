@@ -21,6 +21,7 @@ let TableCell = null;
 let WidthType = null;
 let BorderStyle = null;
 let AlignmentType = null;
+let Footer = null;
 
 try {
   const docx = require('docx');
@@ -34,6 +35,7 @@ try {
   WidthType = docx.WidthType;
   BorderStyle = docx.BorderStyle;
   AlignmentType = docx.AlignmentType;
+  Footer = docx.Footer;
   console.log('DOCX module loaded successfully');
 } catch (err) {
   console.error('Failed to load docx module:', err.message);
@@ -61,6 +63,7 @@ module.exports = {
   WidthType,
   BorderStyle,
   AlignmentType,
+  Footer,
 
   // Models
   User,

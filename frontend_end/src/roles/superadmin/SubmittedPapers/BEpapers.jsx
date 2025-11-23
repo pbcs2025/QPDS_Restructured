@@ -7,6 +7,7 @@ function BEpapers() {
   const [papers, setPapers] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [searchQuery, setSearchQuery] = useState('');
 
   useEffect(() => {
     let mounted = true;
@@ -28,6 +29,22 @@ function BEpapers() {
   return (
     <div>
       <h1>Submitted BE Papers</h1>
+      <div style={{ marginTop: '10px', marginBottom: '20px' }}>
+        <input
+          type="text"
+          placeholder="Search by subject code or name..."
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+          style={{
+            width: '100%',
+            minWidth: '60%',
+            padding: '10px',
+            border: '1px solid #ced4da',
+            borderRadius: '6px',
+            fontSize: '14px'
+          }}
+        />
+      </div>
       {loading && <p>Loading…</p>}
       {error && <p className="error-msg">{error}</p>}
       {!loading && !error && (
@@ -49,7 +66,14 @@ function BEpapers() {
                   <td colSpan={6} style={{ textAlign: 'center' }}>No papers submitted yet.</td>
                 </tr>
               ) : (
-                papers.map((p) => (
+                (() => {
+                  const q = (searchQuery || '').toLowerCase();
+                  const filteredPapers = (papers || []).filter((p) => {
+                    const code = (p.subject_code || p.subjectCode || '').toLowerCase();
+                    const name = (p.subject_name || p.subjectName || '').toLowerCase();
+                    return code.includes(q) || name.includes(q);
+                  });
+                  return filteredPapers.map((p) => (
                   <tr key={`${p.subject_code}_${p.semester}`}>
                     <td>{p.department || 'N/A'}</td>
                     <td><strong>{p.subject_code}</strong></td>
@@ -65,7 +89,8 @@ function BEpapers() {
                       </a>
                     </td>
                   </tr>
-                ))
+                ));
+                })()
               )}
             </tbody>
           </table>
