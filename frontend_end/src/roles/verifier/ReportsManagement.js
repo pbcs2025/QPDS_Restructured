@@ -80,20 +80,9 @@ function ReportsManagement({ verifier }) {
         axios.get(`${API_BASE}/verifier/rejected-list?department=${encodeURIComponent(verifier.department)}`)
       ]);
 
-      // Filter to ensure we only get papers from the verifier's department
-      const approved = Array.isArray(approvedRes.data) 
-        ? approvedRes.data.filter(paper => 
-            paper.department && 
-            paper.department.trim().toLowerCase() === verifier.department.trim().toLowerCase()
-          )
-        : [];
-        
-      const rejected = Array.isArray(rejectedRes.data) 
-        ? rejectedRes.data.filter(paper => 
-            paper.department && 
-            paper.department.trim().toLowerCase() === verifier.department.trim().toLowerCase()
-          )
-        : [];
+      // Backend already filters by department, so use the data directly
+      const approved = Array.isArray(approvedRes.data) ? approvedRes.data : [];
+      const rejected = Array.isArray(rejectedRes.data) ? rejectedRes.data : [];
 
       setApprovedPapers(approved);
       setRejectedPapers(rejected);

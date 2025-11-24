@@ -8,7 +8,15 @@ const routes = require('./routes');
 const Verifier = require('./models/Verifier');
 
 const app = express();
-app.use(cors());
+
+// Configure CORS to allow credentials
+app.use(cors({
+  origin: process.env.FRONTEND_URL || 'http://localhost:3000',
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'verifier-data']
+}));
+
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(bodyParser.json());

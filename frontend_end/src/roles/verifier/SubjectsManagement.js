@@ -11,6 +11,7 @@ function SubjectsManagement({ verifier }) {
   const [successMessage, setSuccessMessage] = useState(null);
   const [showDialog, setShowDialog] = useState(false);
   const [dialogMessage, setDialogMessage] = useState('');
+  const [selectedSemester, setSelectedSemester] = useState('all');
 
   // Fetch subjects for this department
   const fetchData = async () => {
@@ -58,6 +59,17 @@ function SubjectsManagement({ verifier }) {
     };
   }, []);
 
+  // Helper function to get unique semesters from subjects
+  const getAvailableSemesters = () => {
+    const semesters = [...new Set(subjects.map(subject => subject.semester))];
+    return semesters.sort((a, b) => a - b);
+  };
+
+  // Filter subjects based on selected semester
+  const filteredSubjects = selectedSemester === 'all'
+    ? subjects
+    : subjects.filter(subject => subject.semester === parseInt(selectedSemester));
+
   const assignSubjectToFaculty = async (subjectCode, facultyId) => {
     try {
       const response = await axios.post(`${API_BASE}/verifier/assign-subject`, {
@@ -80,7 +92,15 @@ function SubjectsManagement({ verifier }) {
       setTimeout(() => setSuccessMessage(null), 3000);
     } catch (err) {
       console.error('Error assigning subject:', err);
-      alert('Failed to assign subject: ' + (err.response?.data?.error || err.message));
+
+      // Check if it's a limit exceeded error
+      if (err.response?.data?.error === 'Faculty has reached the maximum limit of 2 papers') {
+        // Show allocation limit modal instead of alert
+        setDialogMessage('Faculty has reached the maximum limit of 2 papers and is allocated.');
+        setShowDialog(true);
+      } else {
+        alert('Failed to assign subject: ' + (err.response?.data?.error || err.message));
+      }
     }
   };
 
@@ -163,6 +183,28 @@ function SubjectsManagement({ verifier }) {
         </div>
 
         <div style={{ padding: '40px' }}>
+          {/* Semester Filter */}
+          <div style={{ marginBottom: '20px', display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '10px' }}>
+            <label style={{ fontWeight: '600', color: '#2c3e50' }}>Filter by Semester:</label>
+            <select
+              value={selectedSemester}
+              onChange={(e) => setSelectedSemester(e.target.value)}
+              style={{
+                padding: '8px 12px',
+                borderRadius: '6px',
+                border: '1px solid #ddd',
+                fontSize: '14px',
+                minWidth: '150px',
+                backgroundColor: 'white'
+              }}
+            >
+              <option value="all">All Semesters</option>
+              {getAvailableSemesters().map(semester => (
+                <option key={semester} value={semester}>Semester {semester}</option>
+              ))}
+            </select>
+          </div>
+
           {/* Success message popup */}
           {successMessage && (
             <div style={{
@@ -230,10 +272,10 @@ function SubjectsManagement({ verifier }) {
                 <div style={{
                   fontSize: '18px',
                   fontWeight: 'bold',
-                  color: '#28a745',
+                  color: '#dc3545',
                   marginBottom: '15px'
                 }}>
-                  ✓ Success!
+                  Alert!
                 </div>
                 <div style={{
                   fontSize: '16px',
@@ -261,60 +303,6 @@ function SubjectsManagement({ verifier }) {
             </div>
           )}
 
-          <div style={{
-            marginBottom: '25px',
-            display: 'flex',
-            justifyContent: 'center',
-            gap: '30px',
-            flexWrap: 'wrap'
-          }}>
-            <div style={{
-              backgroundColor: 'white',
-              padding: '15px 20px',
-              borderRadius: '8px',
-              border: '1px solid #dee2e6',
-              boxShadow: '0 2px 4px rgba(0,0,0,0.05)',
-              textAlign: 'center'
-            }}>
-              <div style={{
-                fontSize: '1.5rem',
-                fontWeight: '700',
-                color: '#17a2b8'
-              }}>
-                {subjects.length}
-              </div>
-              <div style={{
-                fontWeight: '500',
-                color: '#6c757d',
-                fontSize: '0.85rem'
-              }}>
-                Total Subjects
-              </div>
-            </div>
-            <div style={{
-              backgroundColor: 'white',
-              padding: '15px 20px',
-              borderRadius: '8px',
-              border: '1px solid #dee2e6',
-              boxShadow: '0 2px 4px rgba(0,0,0,0.05)',
-              textAlign: 'center'
-            }}>
-              <div style={{
-                fontSize: '1.5rem',
-                fontWeight: '700',
-                color: '#6f42c1'
-              }}>
-                {faculties.length}
-              </div>
-              <div style={{
-                fontWeight: '500',
-                color: '#6c757d',
-                fontSize: '0.85rem'
-              }}>
-                Total Faculties
-              </div>
-            </div>
-          </div>
 
           {/* Subjects List */}
           <div style={{ marginBottom: '30px' }}>
@@ -325,10 +313,23 @@ function SubjectsManagement({ verifier }) {
               fontWeight: '600',
               letterSpacing: '0.3px'
             }}>
-              Department Subjects
+              Department Subjects {selectedSemester !== 'all' && `(Semester ${selectedSemester})`}
             </h2>
+            {filteredSubjects.length === 0 && selectedSemester !== 'all' && (
+              <div style={{
+                textAlign: 'center',
+                padding: '20px',
+                backgroundColor: '#f8f9fa',
+                borderRadius: '8px',
+                border: '1px solid #dee2e6'
+              }}>
+                <div style={{ fontSize: '16px', color: '#6c757d' }}>
+                  No subjects found for Semester {selectedSemester}
+                </div>
+              </div>
+            )}
             <div style={{ display: 'grid', gap: '15px' }}>
-              {subjects.map(subject => (
+              {filteredSubjects.map(subject => (
                 <div
                   key={subject.subject_code}
                   style={{
@@ -416,6 +417,11 @@ function SubjectsManagement({ verifier }) {
                           </option>
                         ))}
                     </select>
+                    {faculties.filter(faculty => !faculty.assignedSubjects?.includes(subject.subject_code)).length === 0 && (
+                      <div style={{ color: '#ff9800', fontSize: '12px', marginTop: '5px' }}>
+                        ⚠️ All available faculty members are already assigned to this subject
+                      </div>
+                    )}
                   </div>
                 </div>
               ))}
@@ -433,6 +439,19 @@ function SubjectsManagement({ verifier }) {
             }}>
               Faculty Assignment Summary
             </h2>
+            {faculties.length === 0 && (
+              <div style={{
+                textAlign: 'center',
+                padding: '20px',
+                backgroundColor: '#f8f9fa',
+                borderRadius: '8px',
+                border: '1px solid #dee2e6'
+              }}>
+                <div style={{ fontSize: '16px', color: '#6c757d' }}>
+                  No faculty members found for this department
+                </div>
+              </div>
+            )}
             <div style={{ display: 'grid', gap: '10px' }}>
               {faculties.map(faculty => (
                 <div

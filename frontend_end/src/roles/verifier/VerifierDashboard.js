@@ -24,8 +24,9 @@ function VerifierDashboard() {
     try {
       const parsed = JSON.parse(raw);
       setVerifier(parsed);
-      // Set default tab based on verifier type
-      if (parsed.role === 'verifier' && parsed.temporary) {
+      // Set default tab based on verifier type - case-insensitive check
+      if (parsed.role && parsed.role.toLowerCase() === 'verifier' && parsed.temporary) {
+        console.log('Setting active tab to papers for temporary verifier');
         setActiveTab("papers");
       }
     } catch {
@@ -33,7 +34,13 @@ function VerifierDashboard() {
     }
   }, [navigate]);
 
-  const isTemporaryVerifier = verifier && verifier.role === 'verifier' && verifier.temporary;
+  const isTemporaryVerifier = verifier && verifier.role && verifier.role.toLowerCase() === 'verifier' && verifier.temporary;
+  console.log('Verifier role check:', {
+    hasVerifier: !!verifier,
+    role: verifier?.role,
+    temporary: verifier?.temporary,
+    isTemporaryVerifier
+  });
 
   const handleLogoutClick = () => setShowConfirm(true);
   const confirmLogout = () => {

@@ -102,14 +102,17 @@ function FacultyLogin() {
         const data = await response.json();
 
         if (response.ok && data.success) {
-          setLoginMessage("✔ Verification code sent to your email.");
-          // Immediate transition to verification step
+          localStorage.setItem("faculty_username", formValues.username);
+          // Store faculty data for dashboard use
+          if (data.faculty) {
+            localStorage.setItem("faculty_data", JSON.stringify(data.faculty));
+          }
+          setLoginMessage("✔ Login successful! Redirecting...");
           setTimeout(() => {
-            setStep(2);
-            setIsLoading(false);
-          }, 500); // Small delay for better UX
+            navigate("/faculty-dashboard");
+          }, 1000);
         } else {
-          setLoginMessage("❌ " + (data.message || "Invalid credentials."));
+          setLoginMessage("❌ " + (data.error || "Invalid credentials."));
           setIsLoading(false);
         }
       } catch (error) {

@@ -133,8 +133,8 @@ exports.loginFaculty = async (req, res) => {
   try {
     // First check user collection for authentication
     const user = await User.findOne({ username, password }).lean();
-    if (!user || user.role !== 'Faculty') {
-      return res.status(401).json({ success: false, message: 'Invalid credentials or not a faculty member' });
+    if (!user || (user.role !== 'Faculty' && user.role !== 'Verifier')) {
+      return res.status(401).json({ success: false, message: 'Invalid credentials or not authorized' });
     }
 
     // Get faculty details
@@ -151,6 +151,9 @@ exports.loginFaculty = async (req, res) => {
       { new: true }
     );
 
+    // Check if faculty is a temporary verifier
+    const isTemporaryVerifier = faculty.verifierExpiresAt && faculty.verifierExpiresAt > new Date();
+
     let emailInfo = null;
     try {
       emailInfo = await sendEmail(
@@ -158,11 +161,11 @@ exports.loginFaculty = async (req, res) => {
         'Faculty Login - Verification Code',
         '',
         `<p>Hello ${faculty.name},</p>
-        
+
         <p>Your verification code for faculty login:</p>
-        
+
         <h2 style="font-size: 24px; font-weight: bold; color: #333; margin: 20px 0;">${code}</h2>
-        
+
         <p>Valid for 10 minutes.</p>`
       );
     } catch (err) {
@@ -171,10 +174,12 @@ exports.loginFaculty = async (req, res) => {
 
     // If email is not configured, also return the code in response for testing
     const emailConfigured = Boolean(process.env.EMAIL_USER && process.env.EMAIL_PASSWORD);
-    res.json({ 
-      success: true, 
+    res.json({
+      success: true,
       message: emailConfigured ? 'Verification code sent to email' : 'Email not configured; code returned in response',
-      code: emailConfigured ? undefined : code
+      code: emailConfigured ? undefined : code,
+      isTemporaryVerifier,
+      verifierExpiresAt: faculty.verifierExpiresAt
     });
   } catch (err) {
     console.error('Error during faculty login:', err);
@@ -193,17 +198,24 @@ exports.verifyFaculty = async (req, res) => {
     if (!faculty || faculty.verificationCode !== code) {
       return res.status(400).json({ success: false, message: 'Invalid verification code' });
     }
+
+    // Check if faculty is a temporary verifier
+    const isTemporaryVerifier = faculty.verifierExpiresAt && faculty.verifierExpiresAt > new Date();
+
     // Clear code after successful verification
     await Faculty.updateOne({ facultyId: user._id }, { $unset: { verificationCode: 1 } });
-    res.json({ 
-      success: true, 
+    res.json({
+      success: true,
       message: 'Verification successful',
       facultyData: {
         id: faculty._id,
         name: faculty.name,
         email: faculty.email,
         department: faculty.department,
-        clgName: faculty.clgName
+        clgName: faculty.clgName,
+        isTemporaryVerifier,
+        verifierExpiresAt: faculty.verifierExpiresAt,
+        assignedSubjects: faculty.assignedSubjects || []
       }
     });
   } catch (err) {
@@ -238,6 +250,39 @@ exports.getFacultyProfile = async (req, res) => {
   } catch (err) {
     console.error('Error fetching faculty profile:', err);
     res.status(500).json({ error: 'Failed to fetch faculty profile' });
+  }
+};
+
+// Get fresh faculty data for dashboard refresh (includes temporary verifier info)
+exports.getFreshFacultyData = async (req, res) => {
+  try {
+    const { email } = req.params;
+    const user = await User.findOne({ username: email }).lean();
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    const faculty = await Faculty.findOne({ facultyId: user._id }).lean();
+    if (!faculty) {
+      return res.status(404).json({ error: 'Faculty profile not found' });
+    }
+
+    // Check if faculty is a temporary verifier
+    const isTemporaryVerifier = faculty.verifierExpiresAt && faculty.verifierExpiresAt > new Date();
+
+    res.json({
+      id: faculty._id,
+      name: faculty.name,
+      email: faculty.email,
+      department: faculty.department,
+      clgName: faculty.clgName,
+      isTemporaryVerifier,
+      verifierExpiresAt: faculty.verifierExpiresAt,
+      assignedSubjects: faculty.assignedSubjects || []
+    });
+  } catch (err) {
+    console.error('Error fetching fresh faculty data:', err);
+    res.status(500).json({ error: 'Failed to fetch fresh faculty data' });
   }
 };
 

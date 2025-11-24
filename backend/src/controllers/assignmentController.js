@@ -159,7 +159,11 @@ exports.getFacultyAssignments = async (req, res) => {
     });
   } catch (err) {
     console.error('Error fetching faculty assignments:', err);
-    res.status(500).json({ error: 'Failed to fetch faculty assignments' });
+    if (err.message === 'Query timeout') {
+      res.status(504).json({ error: 'Request timeout - please try again' });
+    } else {
+      res.status(500).json({ error: 'Failed to fetch faculty assignments' });
+    }
   }
 };
 

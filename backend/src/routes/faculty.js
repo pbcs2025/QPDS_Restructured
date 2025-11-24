@@ -15,6 +15,9 @@ router.post('/reset-password', facultyController.resetFacultyPassword);
 router.get('/profile/:email', facultyController.getFacultyProfile);
 router.put('/profile/:email', facultyController.updateFacultyProfile);
 
+// Get fresh faculty data for dashboard refresh
+router.get('/fresh-data/:email', facultyController.getFreshFacultyData);
+
 // Faculty management routes
 router.get('/all', facultyController.getAllFaculties);
 router.get('/department/:department', facultyController.getFacultiesByDepartment);

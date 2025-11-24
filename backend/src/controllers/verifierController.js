@@ -136,6 +136,9 @@ exports.login = async (req, res) => {
       // This is a temporary verifier
       isTemporary = true;
       assignedSubjects = faculty.assignedSubjects || [];
+      console.log('✅ TEMPORARY VERIFIER LOGIN:', user.username, 'assigned subjects:', assignedSubjects);
+    } else {
+      console.log('❌ NOT A TEMPORARY VERIFIER OR EXPIRED:', user.username);
     }
 
     // Add temporary status and assigned subjects to the response
@@ -328,14 +331,17 @@ exports.getPapers = async (req, res) => {
 
     let filter = {};
 
-    // If verifier is temporary, filter by assigned subjects
-    if (verifier && verifier.temporary && Array.isArray(verifier.assignedSubjects) && verifier.assignedSubjects.length > 0) {
-      filter.subject_code = { $in: verifier.assignedSubjects };
-      console.log('📋 TEMPORARY VERIFIER: Filtering by assigned subjects:', verifier.assignedSubjects);
+    // Always filter by assigned subjects if verifier has them (both temporary and permanent)
+    if (verifier && Array.isArray(verifier.assignedSubjects) && verifier.assignedSubjects.length > 0) {
+      // Use case-insensitive regex matching for subject codes
+      filter.$or = verifier.assignedSubjects.map(code => ({
+        subject_code: { $regex: `^${code}$`, $options: 'i' }
+      }));
+      console.log('📋 VERIFIER: Filtering by assigned subjects (case-insensitive):', verifier.assignedSubjects, '(temporary:', !!verifier.temporary, ')');
     } else {
-      // For permanent verifiers, allow department filtering or show all papers
+      // If no assigned subjects, fall back to department filtering for permanent verifiers
       if (department) filter.department = String(department).trim();
-      console.log('📋 PERMANENT VERIFIER: Using department filter or showing all papers');
+      console.log('📋 VERIFIER: No assigned subjects, using department filter:', department);
     }
 
     if (semester) filter.semester = parseInt(semester, 10);
@@ -665,10 +671,28 @@ exports.getPaperDocx = async (req, res) => {
     return res.status(500).json({ error: 'Server error' });
   }
 };
-// Diagnostics: list approved papers
-exports.listApprovedPapers = async (_req, res) => {
+// Diagnostics: list approved papers with optional department filtering
+exports.listApprovedPapers = async (req, res) => {
   try {
-    const rows = await ApprovedPaper.find({}).sort({ createdAt: -1 }).limit(100).lean();
+    const { department } = req.query;
+    let filter = {};
+
+    if (department) {
+      // Handle case-insensitive department filtering
+      const dept = await Department.findOne({
+        name: { $regex: new RegExp(`^${department}$`, 'i') },
+        isActive: true
+      });
+
+      if (dept) {
+        filter.department = dept.name;
+      } else {
+        // Return empty array if no matching department found
+        return res.json([]);
+      }
+    }
+
+    const rows = await ApprovedPaper.find(filter).sort({ approved_at: -1 }).limit(100).lean();
     return res.json(rows);
   } catch (err) {
     console.error('Verifier listApprovedPapers error:', err);
@@ -677,9 +701,27 @@ exports.listApprovedPapers = async (_req, res) => {
 };
 
 // Diagnostics: list rejected papers
-exports.listRejectedPapers = async (_req, res) => {
+exports.listRejectedPapers = async (req, res) => {
   try {
-    const rows = await RejectedPaper.find({}).sort({ createdAt: -1 }).limit(100).lean();
+    const { department } = req.query;
+    let filter = {};
+
+    if (department) {
+      // Handle case-insensitive department filtering
+      const dept = await Department.findOne({
+        name: { $regex: new RegExp(`^${department}$`, 'i') },
+        isActive: true
+      });
+
+      if (dept) {
+        filter.department = dept.name;
+      } else {
+        // Return empty array if no matching department found
+        return res.json([]);
+      }
+    }
+
+    const rows = await RejectedPaper.find(filter).sort({ rejected_at: -1 }).limit(100).lean();
     return res.json(rows);
   } catch (err) {
     console.error('Verifier listRejectedPapers error:', err);
@@ -1134,11 +1176,13 @@ exports.assignTemporaryVerifier = async (req, res) => {
         usertype: faculty.type,
         role: 'Verifier',
       });
+      console.log('Created new user account for temporary verifier:', username, 'with password:', password);
     } else {
       // Update existing user to Verifier role and set new password
       await User.findByIdAndUpdate(userAccount._id, { role: 'Verifier', password });
       // Use existing username
       username = userAccount.username;
+      console.log('Updated existing user account for temporary verifier:', username, 'with new password:', password);
     }
 
     // Check if Verifier document already exists for this user
@@ -1364,6 +1408,15 @@ exports.assignSubjectToFaculty = async (req, res) => {
     // Check if faculty already has this subject assigned (case sensitive, trimmed)
     if (Array.isArray(faculty.assignedSubjects) && faculty.assignedSubjects.some(s => String(s || '').trim() === subjectCode)) {
       return res.status(400).json({ error: 'Subject already assigned to this faculty' });
+    }
+
+    // Check if faculty has reached the maximum limit of 2 papers
+    const currentAssignments = Array.isArray(faculty.assignedSubjects) ? faculty.assignedSubjects.length : 0;
+    if (currentAssignments >= 2) {
+      return res.status(400).json({
+        error: 'Faculty has reached the maximum limit of 2 papers',
+        details: 'A faculty cannot be assigned more than 2 papers'
+      });
     }
 
     // Add subject to faculty's assigned subjects

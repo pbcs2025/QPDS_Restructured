@@ -81,6 +81,7 @@ const QuestionPapers = () => {
 
       if (verifierData) {
         headers['verifier-data'] = verifierData;
+        console.log('📋 SENDING VERIFIER DATA FOR FILTERING:', JSON.parse(verifierData));
       }
 
       const response = await fetch(url, {
@@ -919,52 +920,83 @@ const QuestionPapers = () => {
             </tr>
           </thead>
           <tbody>
-            {(papers || []).map((paper, index) => (
-              <tr key={paper._id || index} style={{ backgroundColor: '#5f6f81', color: '#ffffff' }}>
-                <td style={{ padding: '14px 12px', borderTop: '1px solid #e1e7ef', borderRight: '1px solid #e1e7ef', fontWeight: 600 }}>
-                  {paper.subject_name}
-                </td>
-                <td style={{ padding: '14px 12px', borderTop: '1px solid #e1e7ef', borderRight: '1px solid #e1e7ef' }}>
-                  {paper.subject_code}
-                </td>
-                <td style={{ padding: '14px 12px', textAlign: 'center', borderTop: '1px solid #e1e7ef', borderRight: '1px solid #e1e7ef' }}>
-                  {paper.semester}
-                </td>
-                <td style={{ padding: '14px 12px', textAlign: 'center', borderTop: '1px solid #e1e7ef', borderRight: '1px solid #e1e7ef' }}>
-                  {paper.questions ? paper.questions.length : 0}
-                </td>
-                <td style={{ padding: '14px 12px', textAlign: 'center', borderTop: '1px solid #e1e7ef', borderRight: '1px solid #e1e7ef' }}>
-                  <span style={{
-                    display: 'inline-block',
-                    padding: '4px 10px',
-                    borderRadius: '999px',
-                    backgroundColor: paper.status === 'approved' ? '#d1f4e0' : paper.status === 'rejected' ? '#ffe0e0' : '#fff3cd',
-                    color: paper.status === 'approved' ? '#0f5132' : paper.status === 'rejected' ? '#842029' : '#664d03',
-                    fontWeight: 700,
-                    letterSpacing: '0.3px'
+            {(papers || []).map((paper, index) => {
+              const isAssignedSubject = paper.subject_code === 'IS102';
+              return (
+                <tr key={paper._id || index} style={{
+                  backgroundColor: isAssignedSubject ? '#e3f2fd' : '#5f6f81',
+                  color: isAssignedSubject ? '#0d47a1' : '#ffffff'
+                }}>
+                  <td style={{
+                    padding: '14px 12px',
+                    borderTop: '1px solid #e1e7ef',
+                    borderRight: '1px solid #e1e7ef',
+                    fontWeight: 600
                   }}>
-                    {paper.status ? paper.status.toUpperCase() : 'PENDING'}
-                  </span>
-                </td>
-                <td style={{ padding: '14px 12px', textAlign: 'center', borderTop: '1px solid #e1e7ef' }}>
-                  <button
-                    onClick={() => handlePaperClick(paper)}
-                    style={{
-                      padding: '10px 18px',
-                      backgroundColor: '#20c997',
-                      color: '#073b2a',
-                      border: '1px solid #17b187',
-                      borderRadius: '8px',
-                      cursor: 'pointer',
+                    {paper.subject_name}
+                  </td>
+                  <td style={{
+                    padding: '14px 12px',
+                    borderTop: '1px solid #e1e7ef',
+                    borderRight: '1px solid #e1e7ef',
+                    fontWeight: isAssignedSubject ? 'bold' : 'normal'
+                  }}>
+                    {paper.subject_code}
+                  </td>
+                  <td style={{
+                    padding: '14px 12px',
+                    textAlign: 'center',
+                    borderTop: '1px solid #e1e7ef',
+                    borderRight: '1px solid #e1e7ef'
+                  }}>
+                    {paper.semester}
+                  </td>
+                  <td style={{
+                    padding: '14px 12px',
+                    textAlign: 'center',
+                    borderTop: '1px solid #e1e7ef',
+                    borderRight: '1px solid #e1e7ef'
+                  }}>
+                    {paper.questions ? paper.questions.length : 0}
+                  </td>
+                  <td style={{
+                    padding: '14px 12px',
+                    textAlign: 'center',
+                    borderTop: '1px solid #e1e7ef',
+                    borderRight: '1px solid #e1e7ef'
+                  }}>
+                    <span style={{
+                      display: 'inline-block',
+                      padding: '4px 10px',
+                      borderRadius: '999px',
+                      backgroundColor: paper.status === 'approved' ? '#d1f4e0' : paper.status === 'rejected' ? '#ffe0e0' : '#fff3cd',
+                      color: paper.status === 'approved' ? '#0f5132' : paper.status === 'rejected' ? '#842029' : '#664d03',
                       fontWeight: 700,
-                      boxShadow: '0 2px 6px rgba(0,0,0,0.08)'
-                    }}
-                  >
-                    View Details
-                  </button>
-                </td>
-              </tr>
-            ))}
+                      letterSpacing: '0.3px'
+                    }}>
+                      {paper.status ? paper.status.toUpperCase() : 'PENDING'}
+                    </span>
+                  </td>
+                  <td style={{ padding: '14px 12px', textAlign: 'center', borderTop: '1px solid #e1e7ef' }}>
+                    <button
+                      onClick={() => handlePaperClick(paper)}
+                      style={{
+                        padding: '10px 18px',
+                        backgroundColor: isAssignedSubject ? '#1976d2' : '#20c997',
+                        color: isAssignedSubject ? '#ffffff' : '#073b2a',
+                        border: isAssignedSubject ? '1px solid #1565c0' : '1px solid #17b187',
+                        borderRadius: '8px',
+                        cursor: 'pointer',
+                        fontWeight: 700,
+                        boxShadow: '0 2px 6px rgba(0,0,0,0.08)'
+                      }}
+                    >
+                      View Details
+                    </button>
+                  </td>
+                </tr>
+              );
+            })}
           </tbody>
         </table>
         </>
