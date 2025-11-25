@@ -14,6 +14,8 @@ function VerifierDashboard() {
   const [verifier, setVerifier] = useState(null);
   const [activeTab, setActiveTab] = useState("dashboard");
   const [showConfirm, setShowConfirm] = useState(false);
+  const [timeRemaining, setTimeRemaining] = useState(0);
+  const [isExpired, setIsExpired] = useState(false);
 
   useEffect(() => {
     const raw = localStorage.getItem("verifier");
