@@ -32,6 +32,15 @@ const {
             questions: []
           };
         }
+        
+        // Convert image buffer to base64 if exists
+        let imageData = null;
+        if (r.question_file && Buffer.isBuffer(r.question_file)) {
+          const base64Image = r.question_file.toString('base64');
+          const mimeType = r.file_type || 'image/png';
+          imageData = `data:${mimeType};base64,${base64Image}`;
+        }
+        
         // Add question to the group
         groupedPapers[key].questions.push({
           question_number: r.question_number,
@@ -39,10 +48,39 @@ const {
           marks: r.marks,
           co: r.co,
           level: r.level,
-          remarks: r.remarks
+          remarks: r.remarks,
+          file_url: imageData,
+          file_name: r.file_name
         });
       });
   
+      // Sort questions within each paper by question_number (natural sort)
+      Object.values(groupedPapers).forEach(paper => {
+        if (paper.questions && paper.questions.length > 0) {
+          paper.questions.sort((a, b) => {
+            const parseQuestionNumber = (qNum) => {
+              const match = String(qNum).match(/^(\d+)([a-z]*)$/i);
+              if (match) {
+                return {
+                  num: parseInt(match[1], 10),
+                  letter: match[2].toLowerCase()
+                };
+              }
+              return { num: parseInt(qNum, 10) || 0, letter: '' };
+            };
+            
+            const aParsed = parseQuestionNumber(a.question_number);
+            const bParsed = parseQuestionNumber(b.question_number);
+            
+            if (aParsed.num !== bParsed.num) {
+              return aParsed.num - bParsed.num;
+            }
+            
+            return aParsed.letter.localeCompare(bParsed.letter);
+          });
+        }
+      });
+      
       // Return unique papers (one entry per paper)
       const detailed = Object.values(groupedPapers);
   
@@ -80,6 +118,15 @@ const {
             questions: []
           };
         }
+        
+        // Convert image buffer to base64 if exists
+        let imageData = null;
+        if (a.question_file && Buffer.isBuffer(a.question_file)) {
+          const base64Image = a.question_file.toString('base64');
+          const mimeType = a.file_type || 'image/png';
+          imageData = `data:${mimeType};base64,${base64Image}`;
+        }
+        
         // Add question to the group
         groupedPapers[key].questions.push({
           question_number: a.question_number,
@@ -87,10 +134,39 @@ const {
           marks: a.marks,
           co: a.co,
           level: a.level,
-          remarks: a.remarks
+          remarks: a.remarks,
+          file_url: imageData,
+          file_name: a.file_name
         });
       });
   
+      // Sort questions within each paper by question_number (natural sort)
+      Object.values(groupedPapers).forEach(paper => {
+        if (paper.questions && paper.questions.length > 0) {
+          paper.questions.sort((a, b) => {
+            const parseQuestionNumber = (qNum) => {
+              const match = String(qNum).match(/^(\d+)([a-z]*)$/i);
+              if (match) {
+                return {
+                  num: parseInt(match[1], 10),
+                  letter: match[2].toLowerCase()
+                };
+              }
+              return { num: parseInt(qNum, 10) || 0, letter: '' };
+            };
+            
+            const aParsed = parseQuestionNumber(a.question_number);
+            const bParsed = parseQuestionNumber(b.question_number);
+            
+            if (aParsed.num !== bParsed.num) {
+              return aParsed.num - bParsed.num;
+            }
+            
+            return aParsed.letter.localeCompare(bParsed.letter);
+          });
+        }
+      });
+      
       // Return unique papers (one entry per paper)
       const detailed = Object.values(groupedPapers);
   
@@ -165,6 +241,14 @@ const {
             status: 'pending'
           };
         }
+        // Convert image buffer to base64 if exists
+        let imageData = null;
+        if (paper.question_file && Buffer.isBuffer(paper.question_file)) {
+          const base64Image = paper.question_file.toString('base64');
+          const mimeType = paper.file_type || 'image/png';
+          imageData = `data:${mimeType};base64,${base64Image}`;
+        }
+
         groupedPapers[key].questions.push({
           _id: paper._id,
           question_number: paper.question_number,
@@ -175,7 +259,7 @@ const {
           approved: paper.approved,
           remarks: paper.remarks,
           verified_at: paper.verified_at,
-          file_url: paper.file_name ? `/question-bank/file/${paper._id}` : null,
+          file_url: imageData,
           file_name: paper.file_name
         });
   
@@ -183,6 +267,37 @@ const {
         else if (paper.status === 'rejected') groupedPapers[key].status = 'rejected';
       });
   
+      // Sort questions within each paper by question_number (natural sort)
+      Object.values(groupedPapers).forEach(paper => {
+        if (paper.questions && paper.questions.length > 0) {
+          paper.questions.sort((a, b) => {
+            // Extract numeric and alphabetic parts from question numbers
+            const parseQuestionNumber = (qNum) => {
+              const match = String(qNum).match(/^(\d+)([a-z]*)$/i);
+              if (match) {
+                return {
+                  num: parseInt(match[1], 10),
+                  letter: match[2].toLowerCase()
+                };
+              }
+              // Fallback for non-standard formats
+              return { num: parseInt(qNum, 10) || 0, letter: '' };
+            };
+            
+            const aParsed = parseQuestionNumber(a.question_number);
+            const bParsed = parseQuestionNumber(b.question_number);
+            
+            // First compare by number
+            if (aParsed.num !== bParsed.num) {
+              return aParsed.num - bParsed.num;
+            }
+            
+            // If numbers are equal, compare by letter (a, b, c, etc.)
+            return aParsed.letter.localeCompare(bParsed.letter);
+          });
+        }
+      });
+      
       // NO ADDITIONAL FILTERING - SHOW ALL PAPERS
       let result = Object.values(groupedPapers);
       
@@ -397,11 +512,23 @@ const {
         });
       });
       
-      // Combine corrected and approved papers
-      const allPapers = {
-        ...groupedCorrected,
-        ...groupedApproved
-      };
+      // Combine corrected and approved papers, preserving verifier_remarks from corrected papers
+      const allPapers = { ...groupedCorrected };
+      
+      // Merge approved papers, but preserve verifier_remarks if it exists
+      Object.keys(groupedApproved).forEach(key => {
+        if (allPapers[key]) {
+          // Paper exists in both - merge questions and preserve verifier_remarks
+          allPapers[key] = {
+            ...groupedApproved[key],
+            verifier_remarks: allPapers[key].verifier_remarks || groupedApproved[key].verifier_remarks,
+            questions: [...allPapers[key].questions, ...groupedApproved[key].questions]
+          };
+        } else {
+          // Paper only in approved
+          allPapers[key] = groupedApproved[key];
+        }
+      });
       
       const result = Object.values(allPapers).sort((a, b) => 
         new Date(b.verified_at || b.approved_at) - new Date(a.verified_at || a.approved_at)

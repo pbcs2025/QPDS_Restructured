@@ -160,9 +160,19 @@ const {
         }),
         new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: '(An Autonomous Institute, affiliated to VTU, Belagavi)' })] }),
   
-        // Add a blank line above USN for cleaner layout
+        // Add a blank line
         new Paragraph({ children: [new TextRun({ text: ' ' })] }),
-        // USN inline boxes: fixed widths + row height for clear visibility
+        
+        // Department and Semester line
+        new Paragraph({
+          children: [
+            new TextRun({ text: `Department: ${dept}`, bold: true }),
+            new TextRun({ text: ' '.repeat(30) }),
+            new TextRun({ text: `Semester: ${sem}`, bold: true }),
+          ]
+        }),
+        
+        // USN boxes - 11 columns table (1 for label + 10 for boxes)
         new Table({
           rows: [
             new TableRow({
@@ -170,14 +180,20 @@ const {
               children: [
                 new TableCell({
                   borders: BORDER,
-                  width: { size: 1000, type: WidthType.DXA }, // ~0.69in
-                  children: [new Paragraph({ children: [new TextRun({ text: 'USN:', bold: true })] })]
+                  width: { size: 1000, type: WidthType.DXA },
+                  children: [new Paragraph({ 
+                    alignment: AlignmentType.CENTER,
+                    children: [new TextRun({ text: 'USN', bold: true, size: 20 })] 
+                  })]
                 }),
                 ...Array.from({ length: 10 }, () =>
                   new TableCell({
                     borders: BORDER,
-                    width: { size: 836, type: WidthType.DXA }, // 10 boxes fit within page content width
-                    children: [new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: ' ', size: 24 })] })]
+                    width: { size: 836, type: WidthType.DXA },
+                    children: [new Paragraph({ 
+                      alignment: AlignmentType.CENTER, 
+                      children: [new TextRun({ text: ' ', size: 24 })] 
+                    })]
                   })
                 )
               ]
@@ -185,11 +201,20 @@ const {
           ],
           width: { size: 100, type: WidthType.PERCENTAGE },
         }),
-        deptSemPara,
-  
+        
+        new Paragraph({ children: [new TextRun({ text: ' ' })] }),
         new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: `Semester ${sem} B.E. Degree Second Internal Assessment, April – 2025` })] }),
-        new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: `Subject Name: ${sanitize(papers[0].subject_name)}`, bold: true })] }),
-        new Paragraph({ children: [new TextRun({ text: 'Time: 3 hrs.', bold: true }), new TextRun({ text: '\t\t\t\t\t\t\t\t' }), new TextRun({ text: 'Max. Marks: 100', bold: true })] }),
+        new Paragraph({ 
+          alignment: AlignmentType.CENTER, 
+          children: [new TextRun({ text: `Subject Name: ${sanitize(papers[0].subject_name)}`, bold: true, size: 28 })] 
+        }),
+        new Paragraph({ 
+          children: [
+            new TextRun({ text: 'Time: 3 hrs.', bold: true }),
+            new TextRun({ text: '\t\t\t\t\t\t\t\t' }),
+            new TextRun({ text: 'Max. Marks: 100', bold: true })
+          ]
+        }),
         new Paragraph({ children: [new TextRun({ text: 'Note: Answer any five full questions, choosing ONE full question from each module.', italics: true })] }),
         new Paragraph({ children: [new TextRun({ text: ' ' })] }),
       ];
@@ -215,8 +240,37 @@ const {
         grouped[mainQ].push(q);
       });
   
-      Object.keys(grouped).forEach((mainQ, groupIndex, arr) => {
+      // Determine module structure (questions 1-2 = Module 1, 3-4 = Module 2, etc.)
+      const getModuleNumber = (questionNum) => {
+        const num = parseInt(questionNum);
+        return Math.ceil(num / 2);
+      };
+      
+      let currentModule = 0;
+      
+      Object.keys(grouped).sort((a, b) => parseInt(a) - parseInt(b)).forEach((mainQ, groupIndex, arr) => {
         const subQuestions = grouped[mainQ];
+        const questionNum = parseInt(mainQ);
+        const moduleNum = getModuleNumber(questionNum);
+        
+        // Add module header if this is a new module
+        if (moduleNum !== currentModule) {
+          currentModule = moduleNum;
+          qRows.push(
+            new TableRow({
+              children: [
+                new TableCell({ 
+                  borders: BORDER, 
+                  columnSpan: 3,
+                  children: [new Paragraph({ 
+                    alignment: AlignmentType.CENTER,
+                    children: [new TextRun({ text: `Module ${moduleNum}`, bold: true, size: 24 })] 
+                  })] 
+                }),
+              ]
+            })
+          );
+        }
   
         subQuestions.forEach((q, subIndex) => {
           const marks = typeof q.marks === 'number' ? q.marks : 0;
@@ -235,15 +289,23 @@ const {
           );
         });
   
-        // EMPTY ROW ONLY AFTER FULL QUESTION (last sub‑question)
-        if (groupIndex < arr.length - 1) {
+        // Add OR separator between odd and even questions in the same module
+        const nextQuestionNum = groupIndex < arr.length - 1 ? parseInt(arr[groupIndex + 1]) : null;
+        const nextModuleNum = nextQuestionNum ? getModuleNumber(nextQuestionNum) : null;
+        
+        if (questionNum % 2 === 1 && nextModuleNum === moduleNum) {
+          // Add OR row between question 1 and 2, 3 and 4, etc.
           qRows.push(
             new TableRow({
-              height: { value: 400, rule: 'atLeast' },
               children: [
-                new TableCell({ borders: BORDER, children: [new Paragraph({ children: [new TextRun({ text: '' })] })] }),
-                new TableCell({ borders: BORDER, children: [new Paragraph({ children: [new TextRun({ text: '' })] })] }),
-                new TableCell({ borders: BORDER, children: [new Paragraph({ children: [new TextRun({ text: '' })] })] }),
+                new TableCell({ 
+                  borders: BORDER, 
+                  columnSpan: 3,
+                  children: [new Paragraph({ 
+                    alignment: AlignmentType.CENTER,
+                    children: [new TextRun({ text: 'OR', bold: true, size: 22 })] 
+                  })] 
+                }),
               ]
             })
           );

@@ -443,9 +443,13 @@ const QuestionPapers = () => {
                   {question.file_url && (
                     <div style={{ marginTop: '10px' }}>
                       <img
-                        src={`${API_BASE}${question.file_url}`}
+                        src={question.file_url}
                         alt={question.file_name || 'attachment'}
-                        style={{ maxWidth: '100%', borderRadius: '8px', border: '1px solid #e9edf3' }}
+                        style={{ maxWidth: '100%', maxHeight: '400px', borderRadius: '8px', border: '1px solid #e9edf3', objectFit: 'contain' }}
+                        onError={(e) => {
+                          console.error('Image load error:', question.file_name);
+                          e.target.style.display = 'none';
+                        }}
                       />
                     </div>
                   )}

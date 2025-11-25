@@ -14,6 +14,21 @@ function MBAPapers() {
   const [showArchived, setShowArchived] = useState(false);
   const [sentForPrint, setSentForPrint] = useState([]);
   const [archived, setArchived] = useState([]);
+  const [mbaDepartments, setMbaDepartments] = useState([]);
+
+  // Fetch MBA departments from database
+  useEffect(() => {
+    axios
+      .get(`${API_BASE}/mba-departments/active`)
+      .then((res) => {
+        const depts = Array.isArray(res.data) ? res.data : [];
+        setMbaDepartments(depts);
+      })
+      .catch((err) => {
+        console.error('Failed to load MBA departments:', err);
+        setMbaDepartments([]);
+      });
+  }, []);
 
   useEffect(() => {
     let mounted = true;
@@ -49,10 +64,10 @@ function MBAPapers() {
     try { localStorage.setItem('archivedPapers_MBA', JSON.stringify(archived)); } catch (_) {}
   }, [archived]);
 
+  // Use MBA departments from database instead of extracting from papers
   const departments = useMemo(() => {
-    const set = new Set((papers || []).map(p => p.department).filter(Boolean));
-    return Array.from(set).sort();
-  }, [papers]);
+    return mbaDepartments.map(d => d.name).sort();
+  }, [mbaDepartments]);
   const semesters = useMemo(() => {
     const set = new Set((papers || []).map(p => p.semester).filter(Boolean));
     return Array.from(set).sort((a,b) => Number(a) - Number(b));

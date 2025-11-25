@@ -101,7 +101,7 @@ exports.create = async (req, res) => {
       question_text,
       co: co || '',
       level: level || '',
-      marks: typeof marks === 'number' ? marks : 0,
+      marks: typeof marks === 'number' ? marks : (parseInt(marks, 10) || 0),
       department: derivedDept || '',
       file_name: file ? file.originalname : null,
       file_type: file ? file.mimetype : null,

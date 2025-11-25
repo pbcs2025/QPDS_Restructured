@@ -6,6 +6,8 @@ router.use('/api/faculty', require('./faculty'));
 router.use('/api/question-bank', require('./questionBank'));
 router.use('/api/subjects', require('./subjects'));
 router.use('/api/departments', require('./departments'));
+router.use('/api/mba-departments', require('./mbaDepartments'));
+router.use('/api/mba-semesters', require('./mbaSemester'));
 router.use('/api/colleges', require('./colleges'));
 router.use('/api/verifier', require('./verifier'));
 router.use('/api', require('./papers')); // Question Paper Approval System routes
