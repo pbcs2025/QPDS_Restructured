@@ -215,6 +215,40 @@ exports.updateAssignmentStatus = async (req, res) => {
   }
 };
 
+// Get recent assignments for notifications
+exports.getRecentAssignments = async (req, res) => {
+  try {
+    const assignments = await Assignment.aggregate([
+      { $lookup: { from: 'users', localField: 'email', foreignField: 'email', as: 'user' } },
+      { $unwind: '$user' },
+      { $sort: { assigned_at: -1 } },
+      { $limit: 50 },
+      { $project: {
+        _id: 1,
+        subjectCode: '$subject_code',
+        submitDate: '$submit_date',
+        assignedDate: { $dateToString: { format: '%Y-%m-%d', date: '$assigned_at' } },
+        completedAt: { $cond: { if: { $eq: ['$status', 'submitted'] }, then: { $dateToString: { format: '%Y-%m-%d', date: '$submitted_at' } }, else: null } },
+        status: {
+          $cond: {
+            if: { $eq: ['$status', 'submitted'] },
+            then: 'Completed',
+            else: 'Pending'
+          }
+        },
+        facultyNames: ['$user.name'],
+        department: '$user.deptName',
+        deadline: { $dateToString: { format: '%Y-%m-%d', date: '$submit_date' } }
+      } }
+    ]);
+
+    res.json(assignments);
+  } catch (err) {
+    console.error('Error fetching recent assignments:', err);
+    res.status(500).json({ error: 'Failed to fetch recent assignments' });
+  }
+};
+
 
 
 

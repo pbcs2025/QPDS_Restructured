@@ -332,6 +332,7 @@ function App() {
                       onChange={handleChange}
                       placeholder="Enter your full name"
                       style={{
+                        marginLeft:"1px",
                         width: '100%',
                         padding: '10px 14px',
                         border: `2px solid ${formErrors.username ? '#e74c3c' : '#e1e8ed'}`,

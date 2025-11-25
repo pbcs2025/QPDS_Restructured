@@ -38,8 +38,20 @@ function SessionManagement() {
       const data = await response.json();
       
       if (data.success) {
-        setFacultyActivities(data.data.faculty || []);
-        setVerifierActivities(data.data.verifier || []);
+        // Combine B.Tech/M.Tech and MBA faculties
+        const allFaculties = [
+          ...(data.data.faculty || []).map(act => ({ ...act, from: 'B.Tech/M.Tech' })),
+          ...(data.data.mbaFaculty || []).map(act => ({ ...act, from: 'MBA' }))
+        ].sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+        
+        // Combine B.Tech/M.Tech and MBA verifiers
+        const allVerifiers = [
+          ...(data.data.verifier || []).map(act => ({ ...act, from: 'B.Tech/M.Tech' })),
+          ...(data.data.mbaVerifier || []).map(act => ({ ...act, from: 'MBA' }))
+        ].sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+        
+        setFacultyActivities(allFaculties);
+        setVerifierActivities(allVerifiers);
         setLastUpdate(new Date());
       } else {
         throw new Error(data.message || 'Failed to fetch activities');
@@ -80,11 +92,15 @@ function SessionManagement() {
     socket.on('activity_logged', (activity) => {
       console.log('New activity received:', activity);
       
+      // Determine "From" field based on role
+      const from = (activity.role === 'MBAFaculty' || activity.role === 'MBAVerifier') ? 'MBA' : 'B.Tech/M.Tech';
+      const activityWithFrom = { ...activity, from };
+      
       // Add to appropriate list based on role
-      if (activity.role === 'Faculty') {
-        setFacultyActivities(prev => [activity, ...prev].slice(0, 25));
-      } else if (activity.role === 'Verifier') {
-        setVerifierActivities(prev => [activity, ...prev].slice(0, 25));
+      if (activity.role === 'Faculty' || activity.role === 'MBAFaculty') {
+        setFacultyActivities(prev => [activityWithFrom, ...prev].slice(0, 100));
+      } else if (activity.role === 'Verifier' || activity.role === 'MBAVerifier') {
+        setVerifierActivities(prev => [activityWithFrom, ...prev].slice(0, 100));
       }
       
       setLastUpdate(new Date());
@@ -139,79 +155,10 @@ function SessionManagement() {
     return icons[type] || '📌';
   };
 
-  // Render activity table
-  const renderActivityTable = (activities, title, emptyMessage) => (
-    <div className="section" style={{ marginBottom: '30px' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px' }}>
-        <h3 style={{ margin: 0 }}>{title}</h3>
-        <span style={{ 
-          fontSize: '12px', 
-          color: '#6c757d',
-          background: '#f8f9fa',
-          padding: '4px 12px',
-          borderRadius: '12px',
-          fontWeight: 600
-        }}>
-          {activities.length} {activities.length === 1 ? 'activity' : 'activities'}
-        </span>
-      </div>
-      
-      {activities.length === 0 ? (
-        <div style={{ 
-          textAlign: 'center', 
-          padding: '40px 20px',
-          background: '#f8f9fa',
-          borderRadius: '8px',
-          color: '#6c757d'
-        }}>
-          {emptyMessage}
-        </div>
-      ) : (
-        <div style={{ overflowX: 'auto' }}>
-          <table className="user-table" style={{ width: '100%' }}>
-            <thead>
-              <tr>
-                <th style={{ width: '25%' }}>Name</th>
-                <th style={{ width: '45%' }}>Activity</th>
-                <th style={{ width: '30%' }}>Time</th>
-              </tr>
-            </thead>
-            <tbody>
-              {activities.map((activity, index) => (
-                <tr key={activity._id || index}>
-                  <td style={{ fontWeight: 600 }}>
-                    {activity.name}
-                    {activity.usertype === 'external' && (
-                      <span style={{
-                        marginLeft: '6px',
-                        fontSize: '10px',
-                        background: '#e3f2fd',
-                        color: '#1976d2',
-                        padding: '2px 6px',
-                        borderRadius: '8px',
-                        fontWeight: 700
-                      }}>
-                        EXT
-                      </span>
-                    )}
-                  </td>
-                  <td>
-                    <span style={{ marginRight: '8px' }}>
-                      {getActivityIcon(activity.activityType)}
-                    </span>
-                    {activity.description}
-                  </td>
-                  <td style={{ color: '#ffffff', fontSize: '14px' }}>
-                    {formatTime(activity.timestamp)}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
-    </div>
-  );
+  // Determine "From" value based on role
+  const getFromValue = (role) => {
+    return (role === 'MBAFaculty' || role === 'MBAVerifier') ? 'MBA' : 'B.Tech/M.Tech';
+  };
 
   return (
     <div>
@@ -296,19 +243,193 @@ function SessionManagement() {
       )}
 
       {!loading && !error && (
-        <>
-          {renderActivityTable(
-            facultyActivities,
-            '👩‍🏫 Faculty Activity',
-            'No faculty activity in the selected time range'
-          )}
+        <div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+            <h2 style={{ margin: '0 0 8px 0', color: '#1e40af', fontSize: 24, fontWeight: 700 }}>
+              📋 Recent Login/Logout Activities
+            </h2>
+            <span style={{ 
+              fontSize: '12px', 
+              color: '#6c757d',
+              background: '#f8f9fa',
+              padding: '4px 12px',
+              borderRadius: '12px',
+              fontWeight: 600
+            }}>
+              {facultyActivities.length + verifierActivities.length} {facultyActivities.length + verifierActivities.length === 1 ? 'activity' : 'activities'}
+            </span>
+          </div>
           
-          {renderActivityTable(
-            verifierActivities,
-            '✅ Verifier Activity',
-            'No verifier activity in the selected time range'
-          )}
-        </>
+          <div style={{
+            background: '#eff6ff',
+            border: '1px solid #bfdbfe',
+            borderRadius: 8,
+            padding: '8px 12px',
+            marginBottom: 20,
+            fontSize: 13,
+            color: '#1e40af'
+          }}>
+            ℹ️ <strong>Note:</strong> Activities are automatically removed after 30 days.
+          </div>
+
+          {/* Faculties Table */}
+          <div style={{
+            background: 'linear-gradient(135deg, #f8fafc 0%, #eef2ff 100%)',
+            border: '1px solid #e2e8f0',
+            borderRadius: 16,
+            padding: 20,
+            boxShadow: '0 6px 18px rgba(0,0,0,0.06)',
+            marginBottom: 20
+          }}>
+            <h3 style={{ margin: '0 0 16px 0', color: '#1e40af', fontSize: 18, fontWeight: 700 }}>
+              👥 Faculties - Activity({facultyActivities.length})
+            </h3>
+            <div style={{
+              background: 'white',
+              borderRadius: 12,
+              border: '1px solid #e2e8f0',
+              maxHeight: '250px',
+              overflowY: 'auto',
+              padding: '12px',
+            }}>
+              {facultyActivities.length === 0 ? (
+                <div style={{
+                  padding: '20px',
+                  textAlign: 'center',
+                  color: '#64748b'
+                }}>
+                  <p style={{ margin: 0, fontSize: 14 }}>No faculty activities found</p>
+                </div>
+              ) : (
+                <table className="user-table" style={{ width: '100%' }}>
+                  <thead>
+                    <tr>
+                      <th style={{ width: '20%' }}>Name</th>
+                      <th style={{ width: '15%' }}>From</th>
+                      <th style={{ width: '40%' }}>Activity</th>
+                      <th style={{ width: '25%' }}>Time</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {facultyActivities.map((activity, index) => (
+                      <tr key={activity._id || `faculty-${index}`}>
+                        <td style={{ fontWeight: 600 }}>
+                          {activity.name}
+                          {activity.usertype === 'external' && (
+                            <span style={{
+                              marginLeft: '6px',
+                              fontSize: '10px',
+                              background: '#e3f2fd',
+                              color: '#1976d2',
+                              padding: '2px 6px',
+                              borderRadius: '8px',
+                              fontWeight: 700
+                            }}>
+                              EXT
+                            </span>
+                          )}
+                        </td>
+                        <td>
+                          <span style={{
+                            padding: '4px 8px',
+                            borderRadius: 6,
+                            fontSize: 12,
+                            fontWeight: 600,
+                            background: activity.from === 'MBA' ? '#fef3c7' : '#dbeafe',
+                            color: activity.from === 'MBA' ? '#d97706' : '#1e40af'
+                          }}>
+                            {activity.from || getFromValue(activity.role)}
+                          </span>
+                        </td>
+                        <td>
+                          <span style={{ marginRight: '8px' }}>
+                            {getActivityIcon(activity.activityType)}
+                          </span>
+                          {activity.description}
+                        </td>
+                        <td style={{ color: '#ffffff', fontSize: '14px' }}>
+                          {formatTime(activity.timestamp)}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+            </div>
+          </div>
+
+          {/* Verifiers Table */}
+          <div style={{
+            background: 'linear-gradient(135deg, #f8fafc 0%, #eef2ff 100%)',
+            border: '1px solid #e2e8f0',
+            borderRadius: 16,
+            padding: 20,
+            boxShadow: '0 6px 18px rgba(0,0,0,0.06)'
+          }}>
+            <h3 style={{ margin: '0 0 16px 0', color: '#1e40af', fontSize: 18, fontWeight: 700 }}>
+              ✅ Verifiers - Activity({verifierActivities.length})
+            </h3>
+            <div style={{
+              background: 'white',
+              borderRadius: 12,
+              border: '1px solid #e2e8f0',
+              maxHeight: '250px',
+              overflowY: 'auto',
+              padding: '12px'
+            }}>
+              {verifierActivities.length === 0 ? (
+                <div style={{
+                  padding: '20px',
+                  textAlign: 'center',
+                  color: '#64748b'
+                }}>
+                  <p style={{ margin: 0, fontSize: 14 }}>No verifier activities found</p>
+                </div>
+              ) : (
+                <table className="user-table" style={{ width: '100%' }}>
+                  <thead>
+                    <tr>
+                      <th style={{ width: '20%' }}>Name</th>
+                      <th style={{ width: '15%' }}>From</th>
+                      <th style={{ width: '40%' }}>Activity</th>
+                      <th style={{ width: '25%' }}>Time</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {verifierActivities.map((activity, index) => (
+                      <tr key={activity._id || `verifier-${index}`}>
+                        <td style={{ fontWeight: 600 }}>
+                          {activity.name}
+                        </td>
+                        <td>
+                          <span style={{
+                            padding: '4px 8px',
+                            borderRadius: 6,
+                            fontSize: 12,
+                            fontWeight: 600,
+                            background: activity.from === 'MBA' ? '#fef3c7' : '#dbeafe',
+                            color: activity.from === 'MBA' ? '#d97706' : '#1e40af'
+                          }}>
+                            {activity.from || getFromValue(activity.role)}
+                          </span>
+                        </td>
+                        <td>
+                          <span style={{ marginRight: '8px' }}>
+                            {getActivityIcon(activity.activityType)}
+                          </span>
+                          {activity.description}
+                        </td>
+                        <td style={{ color: '#ffffff', fontSize: '14px' }}>
+                          {formatTime(activity.timestamp)}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

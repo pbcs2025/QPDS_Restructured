@@ -52,7 +52,7 @@ exports.authorize = (...allowedRoles) => {
   };
   
   /**
-   * Check if user is faculty (internal or external)
+   * Check if user is faculty (internal or external, including MBA)
    */
   exports.isFaculty = (req, res, next) => {
     if (!req.user) {
@@ -61,19 +61,19 @@ exports.authorize = (...allowedRoles) => {
         error: 'Authentication required' 
       });
     }
-  
-    if (req.user.role !== 'Faculty') {
+
+    if (!['Faculty', 'MBAFaculty'].includes(req.user.role)) {
       return res.status(403).json({ 
         success: false,
         error: 'Faculty access required' 
       });
     }
-  
+
     next();
   };
   
   /**
-   * Check if user is verifier
+   * Check if user is verifier (including MBA)
    */
   exports.isVerifier = (req, res, next) => {
     if (!req.user) {
@@ -82,14 +82,14 @@ exports.authorize = (...allowedRoles) => {
         error: 'Authentication required' 
       });
     }
-  
-    if (req.user.role !== 'Verifier') {
+
+    if (!['Verifier', 'MBAVerifier'].includes(req.user.role)) {
       return res.status(403).json({ 
         success: false,
         error: 'Verifier access required' 
       });
     }
-  
+
     next();
   };
   
@@ -120,7 +120,7 @@ exports.authorize = (...allowedRoles) => {
   };
   
   /**
-   * Check if user is SuperAdmin or Faculty
+   * Check if user is SuperAdmin or Faculty (including MBA)
    * Common pattern for routes that need elevated access
    */
   exports.isSuperAdminOrFaculty = (req, res, next) => {
@@ -130,13 +130,13 @@ exports.authorize = (...allowedRoles) => {
         error: 'Authentication required' 
       });
     }
-  
-    if (!['SuperAdmin', 'Faculty'].includes(req.user.role)) {
+
+    if (!['SuperAdmin', 'Faculty', 'MBAFaculty'].includes(req.user.role)) {
       return res.status(403).json({ 
         success: false,
         error: 'SuperAdmin or Faculty access required' 
       });
     }
-  
+
     next();
   };

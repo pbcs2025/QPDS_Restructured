@@ -20,7 +20,7 @@ const sessionActivitySchema = new mongoose.Schema({
   role: {
     type: String,
     required: true,
-    enum: ['SuperAdmin', 'Faculty', 'Verifier', 'Admin'],
+    enum: ['SuperAdmin', 'Faculty', 'Verifier', 'Admin', 'MBAFaculty', 'MBAVerifier'],
     index: true
   },
   usertype: {

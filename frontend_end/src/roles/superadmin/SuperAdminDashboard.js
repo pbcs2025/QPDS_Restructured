@@ -7,8 +7,14 @@ import ManageUsers from "./ManageUsers";
 import ViewAssignees from "./ViewAssignees";
 import SubjectsPage from "./SubjectsPage";
 import DepartmentsPage from "./DepartmentsPage";
+import MBADepartmentsPage from "./mbaDepartmentsPage";
+import MBASubjectsPage from "./mbaSubjectsPage";
 import AdminManageFacultyPage from "./AdminManageFacultyPage";
 import VerifierManagement from "../verifier/VerifierManagement";
+import MBAManageFacultyPage from "./MBAManageFacultyPage";
+import MBAVerifierManagement from "./MBAVerifierManagement";
+import MBAManageQPSetters from "./MBAManageQPSetters";
+import MBAViewAssignees from "./MBAViewAssignees";
 import SessionManagement from "./SessionManagement";
 import { io } from "socket.io-client";
 
@@ -34,6 +40,52 @@ function SuperAdminDashboard() {
   const [showSentForPrint, setShowSentForPrint] = useState(false);
   const [showArchivedPapers, setShowArchivedPapers] = useState(false);
   const [archivedPapers, setArchivedPapers] = useState([]);
+  const [openDropdowns, setOpenDropdowns] = useState({
+    manageUsers: false,
+    departments: false,
+    subjects: false,
+    qpSetters: false,
+    viewAssignees: false,
+    submittedPapers: false
+  });
+
+  const toggleDropdown = (dropdownName) => {
+    setOpenDropdowns(prev => ({
+      ...prev,
+      [dropdownName]: !prev[dropdownName]
+    }));
+  };
+
+  const sidebarLinkStyle = (isActive = false) => ({
+    color: '#f8fafc',
+    fontWeight: 600,
+    textDecoration: 'none',
+    padding: '10px 14px',
+    borderRadius: '10px',
+    display: 'block',
+    background: isActive ? 'rgba(255,255,255,0.15)' : 'transparent',
+    transition: 'background 0.2s ease'
+  });
+
+  const renderCaret = (open) => (
+    <span
+      style={{
+        display: 'inline-flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        width: '22px',
+        height: '22px',
+        borderRadius: '999px',
+        background: 'rgba(255,255,255,0.15)',
+        color: '#ffffff',
+        fontSize: '12px',
+        transform: open ? 'rotate(180deg)' : 'rotate(0deg)',
+        transition: 'transform 0.3s ease'
+      }}
+    >
+      ▾
+    </span>
+  );
 
   useEffect(() => {
     const savedPapers = localStorage.getItem('papersSentForPrint');
@@ -122,6 +174,39 @@ function SuperAdminDashboard() {
   }, [activeTab, manageUsersView, API_BASE]);
 
   useEffect(() => {
+    if (activeTab === "mbaManageUsers" && manageUsersView === "cards") {
+      setUsersLoading(true);
+      setUsersError(null);
+      const fetchCounts = async () => {
+        try {
+          const token = localStorage.getItem('token');
+          const [facultyRes, verListRes] = await Promise.all([
+            fetch(`${API_BASE}/mbafaculty/all`, {
+              headers: { 'Authorization': `Bearer ${token}` }
+            }),
+            fetch(`${API_BASE}/mbaverifier/all/list`, {
+              headers: { 'Authorization': `Bearer ${token}` }
+            }),
+          ]);
+          const faculties = facultyRes.ok ? await facultyRes.json() : [];
+          const verList = verListRes.ok ? await verListRes.json() : [];
+          const facultyCount = Array.isArray(faculties) ? faculties.length : 0;
+          setFacultyCount(facultyCount);
+          setVerifierCount(Array.isArray(verList) ? verList.length : 0);
+        } catch (err) {
+          console.error("MBA Count fetch error:", err);
+          setUsersError("Failed to load MBA user counts");
+          setFacultyCount(0);
+          setVerifierCount(0);
+        } finally {
+          setUsersLoading(false);
+        }
+      };
+      fetchCounts();
+    }
+  }, [activeTab, manageUsersView, API_BASE]);
+
+  useEffect(() => {
     if (activeTab === "manageFaculty" && manageUsersView === "verifiers") {
       setUsersLoading(true);
       setUsersError(null);
@@ -141,6 +226,32 @@ function SuperAdminDashboard() {
         .catch((err) => {
           console.error("Fetch verifiers error:", err);
           setUsersError("Failed to load verifiers");
+          setVerifiers([]);
+        })
+        .finally(() => setUsersLoading(false));
+    }
+  }, [activeTab, manageUsersView, API_BASE]);
+
+  useEffect(() => {
+    if (activeTab === "mbaManageUsers" && manageUsersView === "verifiers") {
+      setUsersLoading(true);
+      setUsersError(null);
+      const token = localStorage.getItem('token');
+      fetch(`${API_BASE}/mbaverifier/all/list`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      })
+        .then((res) => {
+          if (!res.ok) throw new Error(`Status ${res.status}`);
+          return res.json();
+        })
+        .then((data) => {
+          const rows = Array.isArray(data) ? data : [];
+          setVerifiers(rows);
+          setVerifierCount(rows.length);
+        })
+        .catch((err) => {
+          console.error("Fetch MBA verifiers error:", err);
+          setUsersError("Failed to load MBA verifiers");
           setVerifiers([]);
         })
         .finally(() => setUsersLoading(false));
@@ -426,61 +537,291 @@ function SuperAdminDashboard() {
 
   return (
     <div className="dashboard-container">
-      <div className="sidebar">
-        <h2>Super Admin</h2>
+      <div
+        className="sidebar"
+        style={{
+          background: 'linear-gradient(180deg, #0f172a 0%, #1e293b 100%)',
+          color: '#f8fafc'
+        }}
+      >
+        <h2 style={{ color: '#f8fafc', letterSpacing: '0.5px' }}>Super Admin</h2>
         <a
           href="#"
           className={activeTab === "dashboard" ? "active-tab" : ""}
           onClick={(e) => { e.preventDefault(); setActiveTab("dashboard"); }}
+          style={sidebarLinkStyle(activeTab === "dashboard")}
         >
           🏠 Dashboard
         </a>
-        <a
-          href="#"
-          className={activeTab === "manageFaculty" ? "active-tab" : ""}
-          onClick={(e) => {
-            e.preventDefault();
-            setActiveTab("manageFaculty");
-            setManageUsersView("cards");
-          }}
-        >
-          👥 Manage Users
-        </a>
-        <a
-          href="#"
-          className={activeTab === "departments" ? "active-tab" : ""}
-          onClick={(e) => { e.preventDefault(); setActiveTab("departments"); }}
-        >
-          🏢 Departments
-        </a>
-        <a
-          href="#"
-          className={activeTab === "subjects" ? "active-tab" : ""}
-          onClick={(e) => { e.preventDefault(); setActiveTab("subjects"); }}
-        >
-          📚 Subjects
-        </a>
-        <a
-          href="#"
-          className={activeTab === "manageUsers" ? "active-tab" : ""}
-          onClick={(e) => { e.preventDefault(); setActiveTab("manageUsers"); }}
-        >
-          👩‍🏫 Select QP Setters
-        </a>
-        <a
-          href="#"
-          className={activeTab === "viewAssignees" ? "active-tab" : ""}
-          onClick={(e) => { e.preventDefault(); setActiveTab("viewAssignees"); }}
-        >
-          📋 View Assignees
-        </a>
-        <a
-          href="#"
-          className={activeTab === "submitted" ? "active-tab" : ""}
-          onClick={(e) => { e.preventDefault(); setActiveTab("submitted"); }}
-        >
-          📄 Submitted Papers
-        </a>
+        <div className="sidebar-dropdown">
+          <a
+            href="#"
+            className={activeTab === "manageFaculty" ? "active-tab" : ""}
+            onClick={(e) => {
+              e.preventDefault();
+              toggleDropdown('manageUsers');
+            }}
+            style={{
+              ...sidebarLinkStyle(activeTab === "manageFaculty" || activeTab === "mbaManageUsers"),
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              color: '#ffffff'
+            }}
+          >
+            <span style={{ color: '#ffffff' }}>👥 Manage Users</span>
+            {renderCaret(openDropdowns.manageUsers)}
+          </a>
+          {openDropdowns.manageUsers && (
+            <div className="dropdown-menu">
+              <a
+                href="#"
+                onClick={(e) => {
+                  e.preventDefault();
+                  setActiveTab("manageFaculty");
+                  setManageUsersView("cards");
+                }}
+                style={{ color: '#ffffff', fontWeight: 600 }}
+              >
+                B.Tech/M.Tech
+              </a>
+              <a
+                href="#"
+                onClick={(e) => {
+                  e.preventDefault();
+                  setActiveTab("mbaManageUsers");
+                  setManageUsersView("cards");
+                }}
+                style={{ color: '#ffffff', fontWeight: 600 }}
+              >
+                MBA
+              </a>
+            </div>
+          )}
+        </div>
+        
+        <div className="sidebar-dropdown">
+          <a
+            href="#"
+            className={activeTab === "departments" ? "active-tab" : ""}
+            onClick={(e) => {
+              e.preventDefault();
+              toggleDropdown('departments');
+            }}
+            style={{
+              ...sidebarLinkStyle(activeTab === "departments" || activeTab === "mbaDepartments"),
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center'
+            }}
+          >
+            <span style={{ color: '#ffffff' }}>🏢 Departments</span>
+            {renderCaret(openDropdowns.departments)}
+          </a>
+          {openDropdowns.departments && (
+            <div className="dropdown-menu">
+              <a
+                href="#"
+                onClick={(e) => {
+                  e.preventDefault();
+                  setActiveTab("departments");
+                }}
+                style={{ color: '#ffffff', fontWeight: 600 }}
+              >
+                B.Tech/M.Tech
+              </a>
+              <a
+                href="#"
+                onClick={(e) => {
+                  e.preventDefault();
+                  setActiveTab("mbaDepartments");
+                }}
+                style={{ color: '#ffffff', fontWeight: 600 }}
+              >
+                MBA
+              </a>
+            </div>
+          )}
+        </div>
+        
+        <div className="sidebar-dropdown">
+          <a
+            href="#"
+            className={activeTab === "subjects" ? "active-tab" : ""}
+            onClick={(e) => {
+              e.preventDefault();
+              toggleDropdown('subjects');
+            }}
+            style={{
+              ...sidebarLinkStyle(activeTab === "subjects" || activeTab === "mbaSubjects"),
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center'
+            }}
+          >
+            <span style={{ color: '#ffffff' }}>📚 Subjects</span>
+            {renderCaret(openDropdowns.subjects)}
+          </a>
+          {openDropdowns.subjects && (
+            <div className="dropdown-menu">
+              <a
+                href="#"
+                onClick={(e) => {
+                  e.preventDefault();
+                  setActiveTab("subjects");
+                }}
+                style={{ color: '#ffffff', fontWeight: 600 }}
+              >
+                B.Tech/M.Tech
+              </a>
+              <a
+                href="#"
+                onClick={(e) => {
+                  e.preventDefault();
+                  setActiveTab("mbaSubjects");
+                }}
+                style={{ color: '#ffffff', fontWeight: 600 }}
+              >
+                MBA
+              </a>
+            </div>
+          )}
+        </div>
+        
+        <div className="sidebar-dropdown">
+          <a
+            href="#"
+            className={activeTab === "manageUsers" ? "active-tab" : ""}
+            onClick={(e) => {
+              e.preventDefault();
+              toggleDropdown('qpSetters');
+            }}
+            style={{
+              ...sidebarLinkStyle(activeTab === "manageUsers" || activeTab === "mbaQPSetters"),
+              display: 'flex',
+              justifyContent: 'space-between',
+              color: '#ffffff',
+              alignItems: 'center'
+            }}
+          >
+            <span style={{ color: '#ffffff' }}>👩‍🏫 Select QP Setters</span>
+            {renderCaret(openDropdowns.qpSetters)}
+          </a>
+          {openDropdowns.qpSetters && (
+            <div className="dropdown-menu">
+              <a
+                href="#"
+                onClick={(e) => {
+                  e.preventDefault();
+                  setActiveTab("manageUsers");
+                }}
+                style={{ color: '#ffffff', fontWeight: 600 }}
+              >
+                B.Tech/M.Tech
+              </a>
+              <a
+                href="#"
+                onClick={(e) => {
+                  e.preventDefault();
+                  setActiveTab("mbaQPSetters");
+                }}
+                style={{ color: '#ffffff', fontWeight: 600 }}
+              >
+                MBA
+              </a>
+            </div>
+          )}
+        </div>
+        
+        <div className="sidebar-dropdown">
+          <a
+            href="#"
+            className={activeTab === "viewAssignees" ? "active-tab" : ""}
+            onClick={(e) => {
+              e.preventDefault();
+              toggleDropdown('viewAssignees');
+            }}
+            style={{
+              ...sidebarLinkStyle(activeTab === "viewAssignees" || activeTab === "mbaViewAssignees"),
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              color: '#ffffff !important'
+            }}
+          >
+            <span style={{ color: '#ffffff' }}>📋 View Assignees</span>
+            {renderCaret(openDropdowns.viewAssignees)}
+          </a>
+          {openDropdowns.viewAssignees && (
+            <div className="dropdown-menu">
+              <a
+                href="#"
+                onClick={(e) => {
+                  e.preventDefault();
+                  setActiveTab("viewAssignees");
+                }}
+                style={{ color: '#ffffff', fontWeight: 600 }}
+              >
+                B.Tech/M.Tech
+              </a>
+              <a
+                href="#"
+                onClick={(e) => {
+                  e.preventDefault();
+                  setActiveTab("mbaViewAssignees");
+                }}
+                style={{ color: '#ffffff', fontWeight: 600 }}
+              >
+                MBA
+              </a>
+            </div>
+          )}
+        </div>
+        
+        <div className="sidebar-dropdown">
+          <a
+            href="#"
+            className={activeTab === "submitted" ? "active-tab" : ""}
+            onClick={(e) => {
+              e.preventDefault();
+              toggleDropdown('submittedPapers');
+            }}
+            style={{
+              ...sidebarLinkStyle(activeTab === "submitted" || activeTab === "mbaSubmittedPapers"),
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center'
+            }}
+          >
+            <span style={{ color: '#ffffff' }}>📄 Submitted Papers</span>
+            {renderCaret(openDropdowns.submittedPapers)}
+          </a>
+          {openDropdowns.submittedPapers && (
+            <div className="dropdown-menu">
+              <a
+                href="#"
+                onClick={(e) => {
+                  e.preventDefault();
+                  setActiveTab("submitted");
+                }}
+                style={{ color: '#ffffff', fontWeight: 600 }}
+              >
+                B.Tech/M.Tech
+              </a>
+              <a
+                href="#"
+                onClick={(e) => {
+                  e.preventDefault();
+                  setActiveTab("mbaSubmittedPapers");
+                }}
+                style={{ color: '#ffffff', fontWeight: 600,opacity: 0.6, cursor: 'not-allowed' }}
+                // style={{ opacity: 0.6, cursor: 'not-allowed' }}
+              >
+                MBA (Coming Soon)
+              </a>
+            </div>
+          )}
+        </div>
         <a
           href="#"
           className={activeTab === "settings" ? "active-tab" : ""}
@@ -494,7 +835,32 @@ function SuperAdminDashboard() {
       </div>
 
       <div className="dashboard-content">
-        {activeTab === "dashboard" && <SessionManagement />}
+        {activeTab === "dashboard" && (
+          <>
+            <div
+              style={{
+                background: 'linear-gradient(135deg, #eef2ff 0%, #e0e7ff 100%)',
+                border: '1px solid #c7d2fe',
+                borderRadius: '20px',
+                padding: '28px',
+                marginBottom: '24px',
+                boxShadow: '0 12px 30px rgba(79,70,229,0.15)'
+              }}
+            >
+              <p style={{ margin: 0, color: '#6366f1', fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase' }}>
+                Welcome, Super Admin
+              </p>
+              <h1 style={{ margin: '12px 0', fontSize: '32px', color: '#0f172a' }}>
+                Super Admin Control Center
+              </h1>
+              <p style={{ margin: 0, color: '#475569', maxWidth: '720px' }}>
+                Quickly check recent activities, manage users, and audit submissions in real time.
+                Everything you need to orchestrate the examination workflow lives here.
+              </p>
+            </div>
+            <SessionManagement />
+          </>
+        )}
 
         {activeTab === "manageUsers" && <ManageUsers userType="superadmin" userpage="qp" />}
 
@@ -928,6 +1294,174 @@ function SuperAdminDashboard() {
           <div>
             <h1>Settings</h1>
             <p>Settings section coming soon...</p>
+          </div>
+        )}
+
+        {/* MBA Manage Users */}
+        {activeTab === "mbaManageUsers" && (
+          <>
+            {manageUsersView === "cards" && (
+              <>
+                <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: '14px' }}>
+                  <div>
+                    <h1 style={{ margin: 0 }}>Manage MBA Users</h1>
+                    <p style={{ margin: '6px 0 0 0', color: '#64748b' }}>Quickly navigate to manage MBA Faculty and Verifiers</p>
+                  </div>
+                  {!usersLoading && (
+                    <div style={{ display: 'flex', gap: '8px' }}>
+                      <span style={{ background: '#eef2ff', color: '#4f46e5', padding: '6px 10px', borderRadius: '9999px', fontWeight: 600 }}>
+                        MBA Faculty:&nbsp;{facultyCount}
+                      </span>
+                      <span style={{ background: '#ecfeff', color: '#0891b2', padding: '6px 10px', borderRadius: '9999px', fontWeight: 600 }}>
+                        MBA Verifiers: {verifierCount}
+                      </span>
+                    </div>
+                  )}
+                </div>
+                {usersError && <p className="error-msg">{usersError}</p>}
+
+                <div className="departments-grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(360px, 1fr))', gap: '24px', width: '100%' }}>
+                  <div
+                    className="department-card"
+                    onClick={() => setManageUsersView("faculty")}
+                    role="button"
+                    tabIndex={0}
+                    onKeyDown={(e) => { if (e.key === "Enter") setManageUsersView("faculty"); }}
+                    style={{
+                      background: 'linear-gradient(135deg, #eef2ff 0%, #e0e7ff 100%)',
+                      border: '1px solid #c7d2fe',
+                      boxShadow: '0 8px 18px rgba(79,70,229,0.12)',
+                      transition: 'transform .12s ease, box-shadow .12s ease',
+                      cursor: 'pointer',
+                      padding: '22px',
+                      minHeight: '220px',
+                      borderRadius: '16px',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      justifyContent: 'space-between',
+                      boxSizing: 'border-box',
+                      overflow: 'hidden'
+                    }}
+                    onMouseEnter={(e) => { e.currentTarget.style.transform = 'translateY(-2px)'; e.currentTarget.style.boxShadow = '0 10px 22px rgba(79,70,229,0.16)'; }}
+                    onMouseLeave={(e) => { e.currentTarget.style.transform = 'none'; e.currentTarget.style.boxShadow = '0 8px 18px rgba(79,70,229,0.12)'; }}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                      <div style={{ fontSize: '20px', fontWeight: 800, color: '#1f2937' }}>
+                        <i className="fa fa-users" style={{ marginRight: 8, color: '#4f46e5' }}></i>
+                        MBA Faculty
+                      </div>
+                      <span style={{ background: '#4f46e5', color: 'white', padding: '6px 12px', borderRadius: 10, fontSize: 13, fontWeight: 800 }}>
+                        {usersLoading ? '…' : `${facultyCount}`}
+                      </span>
+                    </div>
+                    <p style={{ margin: '12px 0 18px 0', color: '#475569', lineHeight: 1.5, wordBreak: 'break-word' }}>Manage internal and external MBA faculty users</p>
+                    <button
+                      type="button"
+                      className="no-bg-btn"
+                      onClick={() => setManageUsersView('faculty')}
+                      style={{
+                        background: '#4f46e5',
+                        color: 'black',
+                        borderRadius: 10,
+                        padding: '12px 16px',
+                        fontWeight: 800,
+                        fontSize: '15px',
+                        width: 'fit-content'
+                      }}
+                    >
+                      Manage MBA Faculty
+                    </button>
+                  </div>
+
+                  <div
+                    className="department-card"
+                    onClick={() => setManageUsersView("verifiers")}
+                    role="button"
+                    tabIndex={0}
+                    onKeyDown={(e) => { if (e.key === "Enter") setManageUsersView("verifiers"); }}
+                    style={{
+                      background: 'linear-gradient(135deg, #ecfeff 0%, #cffafe 100%)',
+                      border: '1px solid #a5f3fc',
+                      boxShadow: '0 8px 18px rgba(8,145,178,0.12)',
+                      transition: 'transform .12s ease, box-shadow .12s ease',
+                      cursor: 'pointer',
+                      padding: '22px',
+                      minHeight: '220px',
+                      borderRadius: '16px',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      justifyContent: 'space-between',
+                      boxSizing: 'border-box',
+                      overflow: 'hidden'
+                    }}
+                    onMouseEnter={(e) => { e.currentTarget.style.transform = 'translateY(-2px)'; e.currentTarget.style.boxShadow = '0 10px 22px rgba(8,145,178,0.16)'; }}
+                    onMouseLeave={(e) => { e.currentTarget.style.transform = 'none'; e.currentTarget.style.boxShadow = '0 8px 18px rgba(8,145,178,0.12)'; }}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                      <div style={{ fontSize: '20px', fontWeight: 800, color: '#1f2937' }}>
+                        <i className="fa fa-check-circle" style={{ marginRight: 8, color: '#0891b2' }}></i>
+                        MBA Verifiers
+                      </div>
+                      <span style={{ background: '#0891b2', color: 'white', padding: '6px 12px', borderRadius: 10, fontSize: 13, fontWeight: 800 }}>
+                        {usersLoading ? '…' : `${verifierCount}`}
+                      </span>
+                    </div>
+                    <p style={{ margin: '12px 0 18px 0', color: '#475569', lineHeight: 1.5, wordBreak: 'break-word' }}>Register and manage MBA department verifiers</p>
+                    <button
+                      type="button"
+                      className="no-bg-btn"
+                      onClick={() => setManageUsersView('verifiers')}
+                      style={{
+                        background: '#0891b2',
+                        color: 'black',
+                        borderRadius: 10,
+                        padding: '12px 16px',
+                        fontWeight: 800,
+                        fontSize: '15px',
+                        width: 'fit-content'
+                      }}
+                    >
+                      Manage MBA Verifiers
+                    </button>
+                  </div>
+                </div>
+              </>
+            )}
+
+            {manageUsersView === "faculty" && (
+              <>
+                <button className="back-btn" onClick={() => setManageUsersView("cards")}>
+                  ← Back to Manage MBA Users
+                </button>
+                <MBAManageFacultyPage />
+              </>
+            )}
+
+            {manageUsersView === "verifiers" && (
+              <>
+                <button className="back-btn" onClick={() => setManageUsersView("cards")}>
+                  ← Back to Manage MBA Users
+                </button>
+                <MBAVerifierManagement />
+              </>
+            )}
+          </>
+        )}
+
+        {activeTab === "mbaDepartments" && <MBADepartmentsPage />}
+
+        {activeTab === "mbaSubjects" && <MBASubjectsPage />}
+
+        {activeTab === "mbaQPSetters" && <MBAManageQPSetters />}
+
+        {activeTab === "mbaViewAssignees" && <MBAViewAssignees />}
+
+        {activeTab === "mbaSubmittedPapers" && (
+          <div style={{ padding: '40px', textAlign: 'center' }}>
+            <h1>MBA Submitted Papers</h1>
+            <p style={{ color: '#64748b', fontSize: '18px', marginTop: '20px' }}>
+              This feature will be implemented soon.
+            </p>
           </div>
         )}
       </div>

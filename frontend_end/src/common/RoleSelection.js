@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from "react";
+import React, { useState } from "react";
 import "./Main.css";
 import { Link, useNavigate } from "react-router-dom";
 import validateLogin from "./validateLogin";
@@ -50,16 +50,11 @@ function RoleSelection() {
   const [authStep, setAuthStep] = useState("credentials"); // credentials | faculty-verification
   const [verificationCode, setVerificationCode] = useState(Array(6).fill(""));
   const [isVerifying, setIsVerifying] = useState(false);
+  const [isMBAFaculty, setIsMBAFaculty] = useState(false); // Track if using MBA faculty login
 
   const normalizedUsername = formValues.username.trim().toLowerCase();
 
   const resolveRole = (username) => ROLE_RULES.find((role) => role.matcher(username));
-
-  const activeRoleLabel = useMemo(() => {
-    if (!normalizedUsername) return "";
-    const role = resolveRole(normalizedUsername);
-    return role?.label || "";
-  }, [normalizedUsername]);
 
   const handleChange = (e) => {
     const { name, value } = e.target;
@@ -67,7 +62,62 @@ function RoleSelection() {
     if (name === "username") {
       setAuthStep("credentials");
       setVerificationCode(Array(6).fill(""));
+      setIsMBAFaculty(false); // Reset MBA faculty flag
     }
+  };
+
+  // Helper function to try verifier login for email addresses
+  const tryVerifierLoginForEmail = async () => {
+    // Try regular verifier login first
+    let regularVerifierFailed = false;
+    try {
+      const response = await fetch(`${API_BASE}/verifier/login`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(formValues),
+      });
+      const data = await response.json();
+      if (response.ok && data.success) {
+        localStorage.setItem("verifier", JSON.stringify(data.verifierData));
+        if (data.token) {
+          localStorage.setItem("token", data.token);
+        }
+        navigate("/verifier-dashboard");
+        return true;
+      } else {
+        regularVerifierFailed = true;
+        console.log("Regular verifier login failed:", data.message || data.error);
+      }
+    } catch (error) {
+      console.error("Regular verifier login error:", error);
+      regularVerifierFailed = true;
+    }
+
+    // If regular verifier fails, try MBA verifier
+    if (regularVerifierFailed) {
+      try {
+        const response = await fetch(`${API_BASE}/mbaverifier/login`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(formValues),
+        });
+        const data = await response.json();
+        if (response.ok && data.success) {
+          localStorage.setItem("verifier", JSON.stringify(data.verifierData));
+          if (data.token) {
+            localStorage.setItem("token", data.token);
+          }
+          navigate("/verifier-dashboard");
+          return true;
+        } else {
+          console.log("MBA Verifier login failed:", data.message || data.error);
+        }
+      } catch (error) {
+        console.error("MBA Verifier login error:", error);
+      }
+    }
+    
+    return false; // Verifier login failed
   };
 
   const handleSubmit = async (e) => {
@@ -78,21 +128,34 @@ function RoleSelection() {
     if (Object.keys(errors).length > 0) return;
 
     const role = resolveRole(normalizedUsername);
-    if (!role) {
-      setLoginMessage("We couldn't determine your role from the username. Please retry.");
-      return;
-    }
-
+    
     setIsSubmitting(true);
-    if (role.type === "static") {
-      handleStaticRole(role);
-    } else if (role.type === "super-admin") {
-      await handleSuperAdminLogin(role);
-    } else if (role.type === "verifier") {
-      await handleVerifierLogin(role);
-    } else if (role.type === "faculty") {
-      await handleFacultyLogin();
+    
+    // If username is an email, try verifier login first (since verifiers can have email usernames)
+    // Then fall back to faculty login if verifier fails
+    if (role?.type === "faculty" || (!role && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizedUsername))) {
+      // Try verifier login first for email addresses
+      const verifierSuccess = await tryVerifierLoginForEmail();
+      if (!verifierSuccess) {
+        // If verifier login failed, try faculty login
+        if (role?.type === "faculty") {
+          await handleFacultyLogin();
+        } else {
+          setLoginMessage("❌ We couldn't determine your role from the username. Please check your credentials and try again.");
+        }
+      }
+    } else if (role) {
+      if (role.type === "static") {
+        handleStaticRole(role);
+      } else if (role.type === "super-admin") {
+        await handleSuperAdminLogin(role);
+      } else if (role.type === "verifier") {
+        await handleVerifierLogin(role);
+      }
+    } else {
+      setLoginMessage("We couldn't determine your role from the username. Please retry.");
     }
+    
     setIsSubmitting(false);
   };
 
@@ -131,6 +194,8 @@ function RoleSelection() {
   };
 
   const handleVerifierLogin = async (role) => {
+    // Try regular verifier login first
+    let regularVerifierFailed = false;
     try {
       const response = await fetch(`${API_BASE}/verifier/login`, {
         method: "POST",
@@ -139,18 +204,68 @@ function RoleSelection() {
       });
       const data = await response.json();
       if (response.ok && data.success) {
-        localStorage.setItem("verifier", JSON.stringify(data.verifier));
+        // Both regular and MBA verifier return verifierData
+        localStorage.setItem("verifier", JSON.stringify(data.verifierData));
+        if (data.token) {
+          localStorage.setItem("token", data.token);
+        }
         navigate(role.destination);
+        return;
       } else {
-        setLoginMessage(`❌ ${data.message || "Invalid verifier credentials."}`);
+        regularVerifierFailed = true;
+        console.log("Regular verifier login failed:", data.message || data.error);
       }
     } catch (error) {
-      console.error("Verifier login failed:", error);
-      setLoginMessage("❌ Unable to reach verifier service. Please try again.");
+      console.error("Regular verifier login error:", error);
+      regularVerifierFailed = true;
+    }
+
+    // If regular verifier fails, try MBA verifier
+    if (regularVerifierFailed) {
+      try {
+        const response = await fetch(`${API_BASE}/mbaverifier/login`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(formValues),
+        });
+        const data = await response.json();
+        if (response.ok && data.success) {
+          // MBA verifier returns verifierData
+          localStorage.setItem("verifier", JSON.stringify(data.verifierData));
+          if (data.token) {
+            localStorage.setItem("token", data.token);
+          }
+          navigate(role.destination);
+        } else {
+          setLoginMessage(`❌ ${data.message || data.error || "Invalid verifier credentials."}`);
+        }
+      } catch (error) {
+        console.error("MBA Verifier login error:", error);
+        setLoginMessage("❌ Unable to reach verifier service. Please try again.");
+      }
     }
   };
 
   const handleFacultyLogin = async () => {
+    // Try MBA faculty login first
+    try {
+      const response = await fetch(`${API_BASE}/mbafaculty/login`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(formValues),
+      });
+      const data = await response.json();
+      if (response.ok && data.success) {
+        setIsMBAFaculty(true);
+        setLoginMessage("✔ Verification code sent to your email.");
+        setAuthStep("faculty-verification");
+        return;
+      }
+    } catch (error) {
+      console.error("MBA Faculty login failed:", error);
+    }
+
+    // If MBA faculty login fails, try regular faculty login
     try {
       const response = await fetch(`${API_BASE}/faculty/login`, {
         method: "POST",
@@ -159,6 +274,7 @@ function RoleSelection() {
       });
       const data = await response.json();
       if (response.ok && data.success) {
+        setIsMBAFaculty(false);
         setLoginMessage("✔ Verification code sent to your email.");
         setAuthStep("faculty-verification");
       } else {
@@ -178,15 +294,25 @@ function RoleSelection() {
       return;
     }
     setIsVerifying(true);
+    
+    // Use appropriate endpoint based on whether it's MBA faculty or regular faculty
+    const endpoint = isMBAFaculty ? `${API_BASE}/mbafaculty/verify` : `${API_BASE}/faculty/verify`;
+    
     try {
-      const response = await fetch(`${API_BASE}/faculty/verify`, {
+      const response = await fetch(endpoint, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email: formValues.username, code }),
       });
       const data = await response.json();
       if (response.ok && data.success) {
-        persistFacultySession(data.facultyData || { email: formValues.username });
+        // Store token if provided
+        if (data.token) {
+          localStorage.setItem("token", data.token);
+        }
+        // Store faculty data
+        const facultyData = data.facultyData || { email: formValues.username };
+        persistFacultySession(facultyData);
         navigate("/faculty-dashboard");
       } else {
         setLoginMessage(`❌ ${data.message || "Invalid verification code."}`);
@@ -238,35 +364,26 @@ function RoleSelection() {
     setAuthStep("credentials");
     setVerificationCode(Array(6).fill(""));
     setLoginMessage("");
+    setIsMBAFaculty(false);
   };
 
   return (
     <div className="role-selection-page">
-      <div className="role-selection-hero">
+      <div className="role-selection-hero" style={{ backgroundColor: 'rgba(179, 13, 112, 0.3)' }}>
         <div className="hero-content">
           <p className="hero-eyebrow">Global Academy of Technology</p>
-          <h1>Official Digital Question Paper Management System</h1>
+          <h1>Digital Question Paper Management System</h1>
           <p className="hero-description">
-            “Welcome to GAT’s authorized portal for examination paper creation and delivery.
+            "Welcome to GAT's authorized portal for examination paper creation and delivery.
             This platform ensures secure, confidential, and streamlined handling of all question paper submissions
-            by faculty and approved external examiners. Please log in to access your dashboard.”
+            by faculty and approved external examiners. Please log in to access your dashboard."
           </p>
-          <div className="quick-role-badges">
-            {ROLE_RULES.map((role) => (
-              <span
-                key={role.key}
-                className={`role-badge ${activeRoleLabel === role.label ? "active-role" : ""}`}
-              >
-                {role.label}
-              </span>
-            ))}
-          </div>
         </div>
       </div>
 
       <div className="role-selection-card">
         <div className="card-header">
-          <p className="card-eyebrow">Welcome back</p>
+          {/* <p className="card-eyebrow">Welcome back</p> */}
           <h2>{authStep === "credentials" ? "Sign in to continue" : "Verify your faculty login"}</h2>
           <p className="card-subtitle">
             {authStep === "credentials"
@@ -284,7 +401,7 @@ function RoleSelection() {
                 name="username"
                 value={formValues.username}
                 onChange={handleChange}
-                placeholder="e.g. superadmin or user@college.edu"
+                placeholder="Enter your username"
                 autoComplete="username"
               />
               {formErrors.username && <p className="form-error">{formErrors.username}</p>}

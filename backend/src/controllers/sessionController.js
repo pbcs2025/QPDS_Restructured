@@ -11,17 +11,30 @@ exports.getGroupedActivities = async (req, res) => {
   try {
     const hours = parseInt(req.query.hours) || 24;
     
-    // Fetch activities for Faculty and Verifier roles
-    const [facultyActivities, verifierActivities] = await Promise.all([
+    // Fetch activities for all Faculty and Verifier roles (including MBA)
+    const [facultyActivities, verifierActivities, mbaFacultyActivities, mbaVerifierActivities] = await Promise.all([
       SessionActivity.getRecentByRole('Faculty', hours),
-      SessionActivity.getRecentByRole('Verifier', hours)
+      SessionActivity.getRecentByRole('Verifier', hours),
+      SessionActivity.getRecentByRole('MBAFaculty', hours),
+      SessionActivity.getRecentByRole('MBAVerifier', hours)
     ]);
+
+    // Combine all activities into a single array with "From" field
+    const allActivities = [
+      ...(facultyActivities || []).map(act => ({ ...act, from: 'B.Tech/M.Tech' })),
+      ...(verifierActivities || []).map(act => ({ ...act, from: 'B.Tech/M.Tech' })),
+      ...(mbaFacultyActivities || []).map(act => ({ ...act, from: 'MBA' })),
+      ...(mbaVerifierActivities || []).map(act => ({ ...act, from: 'MBA' }))
+    ].sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
 
     res.json({
       success: true,
       data: {
+        all: allActivities,
         faculty: facultyActivities || [],
-        verifier: verifierActivities || []
+        verifier: verifierActivities || [],
+        mbaFaculty: mbaFacultyActivities || [],
+        mbaVerifier: mbaVerifierActivities || []
       }
     });
   } catch (error) {

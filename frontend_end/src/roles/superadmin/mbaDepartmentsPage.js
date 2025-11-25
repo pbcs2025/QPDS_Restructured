@@ -4,7 +4,7 @@ import "../../common/dashboard.css";
 
 const API_BASE = process.env.REACT_APP_API_BASE_URL || 'http://localhost:5001/api';
 
-function DepartmentsPage() {
+function MBADepartmentsPage() {
   const [departments, setDepartments] = useState([]);
   const [newDept, setNewDept] = useState("");
   const [newDeptColor, setNewDeptColor] = useState("#6c757d");
@@ -15,7 +15,7 @@ function DepartmentsPage() {
   const [error, setError] = useState(null);
   const [success, setSuccess] = useState(null);
 
-  // Fetch all departments
+  // Fetch all MBA departments
   const fetchDepartments = async () => {
     try {
       setLoading(true);
@@ -27,14 +27,10 @@ function DepartmentsPage() {
         return;
       }
       
-      const res = await axios.get(`${API_BASE}/departments/active`, {
+      const res = await axios.get(`${API_BASE}/mbadepartments/active`, {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       
-      console.log("Departments API response:", res.data);
-      console.log("Response status:", res.status);
-      
-      // Backend returns direct array: [{ id, name, color, createdAt, isActive }, ...]
       let rows = [];
       if (Array.isArray(res.data)) {
         rows = res.data;
@@ -44,59 +40,18 @@ function DepartmentsPage() {
         rows = res.data.departments;
       }
       
-      console.log("Processed departments count:", rows.length);
-      if (rows.length > 0) {
-        console.log("First department sample (raw):", rows[0]);
-        console.log("First department fields:", {
-          id: rows[0].id,
-          _id: rows[0]._id,
-          name: rows[0].name,
-          color: rows[0].color,
-          createdAt: rows[0].createdAt,
-          isActive: rows[0].isActive
-        });
-      }
+      const normalizedRows = rows.map((dept, index) => ({
+        id: dept.id || (dept._id ? dept._id.toString() : null) || `temp-${index}`,
+        name: dept.name || "Unknown Department",
+        color: dept.color || "#6c757d",
+        isActive: dept.isActive !== undefined ? dept.isActive : true,
+        createdAt: dept.createdAt || null
+      }));
       
-      // Filter out any MBA departments that might accidentally be in the regular Department collection
-      // MBA departments: Finance Management, Human Resource Management, Marketing Management, 
-      // Operations & Logistics Management, Business Analytics / IT Management
-      const mbaDepartmentNames = [
-        'Finance Management',
-        'Human Resource Management',
-        'Marketing Management',
-        'Operations & Logistics Management',
-        'Business Analytics / IT Management',
-        'Business Analytics',
-        'IT Management'
-      ];
-      
-      const filteredRows = rows.filter(dept => {
-        const deptName = (dept.name || '').trim();
-        return !mbaDepartmentNames.some(mbaName => 
-          deptName.toLowerCase() === mbaName.toLowerCase()
-        );
-      });
-      
-      // Backend already returns: { id, name, color, createdAt, isActive }
-      // Just ensure we have fallbacks for missing fields
-      const normalizedRows = filteredRows.map((dept, index) => {
-        // Backend returns id as string from _id.toString()
-        const normalized = {
-          id: dept.id || (dept._id ? dept._id.toString() : null) || `temp-${index}`,
-          name: dept.name || "Unknown Department",
-          color: dept.color || "#6c757d",
-          isActive: dept.isActive !== undefined ? dept.isActive : true,
-          createdAt: dept.createdAt || null
-        };
-        console.log(`Department ${index} normalized:`, normalized);
-        return normalized;
-      });
-      
-      console.log("Final normalized departments:", normalizedRows);
       setDepartments(normalizedRows);
     } catch (err) {
-      console.error("Error fetching departments:", err);
-      const errorMessage = err.response?.data?.error || err.message || "Failed to fetch departments";
+      console.error("Error fetching MBA departments:", err);
+      const errorMessage = err.response?.data?.error || err.message || "Failed to fetch MBA departments";
       setError(errorMessage);
       setDepartments([]);
     } finally {
@@ -126,9 +81,7 @@ function DepartmentsPage() {
         return;
       }
 
-      console.log("Adding department:", { name: newDept.trim(), color: newDeptColor });
-      
-      const response = await axios.post(`${API_BASE}/departments`, { 
+      const response = await axios.post(`${API_BASE}/mbadepartments`, { 
         name: newDept.trim(), 
         color: newDeptColor 
       }, {
@@ -138,26 +91,17 @@ function DepartmentsPage() {
         }
       });
       
-      console.log("Add department response:", response.data);
-      console.log("Response status:", response.status);
-      
       if (response.status === 201 || response.status === 200) {
         setSuccess(`Department "${newDept.trim()}" added successfully!`);
         setNewDept("");
         setNewDeptColor("#6c757d");
-        // Clear success message after 3 seconds
         setTimeout(() => setSuccess(null), 3000);
-        // Refresh the list
         await fetchDepartments();
       } else {
         setError("Unexpected response from server");
       }
     } catch (err) {
       console.error("Error adding department:", err);
-      console.error("Error response:", err.response);
-      console.error("Error response data:", err.response?.data);
-      console.error("Error status:", err.response?.status);
-      
       let errorMessage = "Failed to add department";
       if (err.response?.data?.error) {
         errorMessage = err.response.data.error;
@@ -167,7 +111,6 @@ function DepartmentsPage() {
         errorMessage = err.message;
       }
       
-      // Handle specific error cases
       if (err.response?.status === 400) {
         errorMessage = errorMessage || "Invalid request. Please check the department name.";
       } else if (err.response?.status === 401) {
@@ -193,7 +136,7 @@ function DepartmentsPage() {
     try {
       setError(null);
       const token = localStorage.getItem('token');
-      await axios.put(`${API_BASE}/departments/${id}`, { 
+      await axios.put(`${API_BASE}/mbadepartments/${id}`, { 
         newDepartment: updatedDept.trim(),
         color: updatedDeptColor || undefined
       }, {
@@ -217,7 +160,7 @@ function DepartmentsPage() {
     try {
       setError(null);
       const token = localStorage.getItem('token');
-      await axios.delete(`${API_BASE}/departments/${id}`, {
+      await axios.delete(`${API_BASE}/mbadepartments/${id}`, {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       fetchDepartments();
@@ -230,7 +173,7 @@ function DepartmentsPage() {
 
   return (
     <div>
-      <h1>Departments Management</h1>
+      <h1>MBA Departments Management</h1>
 
       <div className="form-inline" style={{ margin: "10px" }}>
         <input
@@ -298,22 +241,15 @@ function DepartmentsPage() {
             {departments.length === 0 ? (
               <tr>
                 <td colSpan="4" style={{ textAlign: "center", padding: "40px", color: "#64748b" }}>
-                  No departments found. Add a new department using the form above.
+                  No MBA departments found. Add a new department using the form above.
                 </td>
               </tr>
             ) : (
               departments.map((dept) => {
-                // Ensure we have all fields with proper fallbacks
                 const deptId = dept.id || dept._id || null;
                 const deptName = dept.name || "Unknown Department";
                 const deptColor = dept.color || "#6c757d";
                 const deptCreatedAt = dept.createdAt || null;
-                
-                console.log("Rendering department:", { deptId, deptName, deptColor, deptCreatedAt });
-                
-                if (!deptId) {
-                  console.warn("Department missing ID:", dept);
-                }
                 
                 return (
                   <tr key={deptId || `dept-${deptName}`}>
@@ -420,4 +356,5 @@ function DepartmentsPage() {
   );
 }
 
-export default DepartmentsPage;
+export default MBADepartmentsPage;
+
