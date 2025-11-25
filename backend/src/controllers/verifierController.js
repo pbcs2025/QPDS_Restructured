@@ -1410,14 +1410,8 @@ exports.assignSubjectToFaculty = async (req, res) => {
       return res.status(400).json({ error: 'Subject already assigned to this faculty' });
     }
 
-    // Check if faculty has reached the maximum limit of 2 papers
-    const currentAssignments = Array.isArray(faculty.assignedSubjects) ? faculty.assignedSubjects.length : 0;
-    if (currentAssignments >= 2) {
-      return res.status(400).json({
-        error: 'Faculty has reached the maximum limit of 2 papers',
-        details: 'A faculty cannot be assigned more than 2 papers'
-      });
-    }
+    // Note: Maximum limit of 2 papers constraint removed as per requirement
+    // Faculty can now be assigned unlimited subjects
 
     // Add subject to faculty's assigned subjects
     const updatedFaculty = await Faculty.findByIdAndUpdate(

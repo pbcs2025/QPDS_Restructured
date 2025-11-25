@@ -18,10 +18,12 @@ function ReportsManagement({ verifier }) {
     try {
       setLoading(true);
       setError(null);
-      
+
       if (!verifier || !verifier.department) {
         throw new Error('Department information not available');
       }
+
+      console.log('Fetching department report for:', verifier.department);
 
       // Use the correct endpoints with department filter
       const [approvedRes, rejectedRes] = await Promise.all([
@@ -29,25 +31,26 @@ function ReportsManagement({ verifier }) {
         axios.get(`${API_BASE}/verifier/rejected-list?department=${encodeURIComponent(verifier.department)}`)
       ]);
 
-      // Filter to ensure we only get papers from the verifier's department
-      const approved = Array.isArray(approvedRes.data) 
-        ? approvedRes.data.filter(paper => 
-            paper.department && 
-            paper.department.trim().toLowerCase() === verifier.department.trim().toLowerCase()
-          )
-        : [];
-        
-      const rejected = Array.isArray(rejectedRes.data) 
-        ? rejectedRes.data.filter(paper => 
-            paper.department && 
-            paper.department.trim().toLowerCase() === verifier.department.trim().toLowerCase()
-          )
-        : [];
+      console.log('Approved response:', approvedRes.data);
+      console.log('Rejected response:', rejectedRes.data);
+
+      // The backend already filters by department, so use the data directly
+      const approved = Array.isArray(approvedRes.data) ? approvedRes.data : [];
+      const rejected = Array.isArray(rejectedRes.data) ? rejectedRes.data : [];
+
+      console.log('Filtered approved papers:', approved.length);
+      console.log('Filtered rejected papers:', rejected.length);
 
       setApprovedPapers(approved);
       setRejectedPapers(rejected);
 
       setDepartmentData({
+        approved: approved.length,
+        rejected: rejected.length,
+        total: approved.length + rejected.length
+      });
+
+      console.log('Department data set:', {
         approved: approved.length,
         rejected: rejected.length,
         total: approved.length + rejected.length
@@ -129,6 +132,8 @@ function ReportsManagement({ verifier }) {
       });
 
       setSubjectData(Object.values(subjectStats));
+
+      console.log('Subject data processed:', Object.values(subjectStats));
     } catch (err) {
       console.error('Error fetching subject report:', err);
       setError('Failed to load subject report');
@@ -284,6 +289,7 @@ function ReportsManagement({ verifier }) {
   };
 
   const renderDepartmentReport = () => {
+    console.log('renderDepartmentReport called with departmentData:', departmentData);
     if (!departmentData) return null;
 
     const approvalRate = departmentData.total > 0 ?
@@ -1008,6 +1014,24 @@ function ReportsManagement({ verifier }) {
           <>
             {reportType === 'department' && renderDepartmentReport()}
             {reportType === 'subject' && renderSubjectReport()}
+            {reportType === 'department' && !departmentData && (
+              <div style={{ textAlign: 'center', padding: '40px', color: '#6c757d' }}>
+                <div style={{ fontSize: '3rem', marginBottom: '10px' }}>📊</div>
+                <div style={{ fontSize: '1.2rem', fontWeight: '600' }}>No Data Available</div>
+                <div style={{ fontSize: '0.9rem', marginTop: '8px' }}>
+                  No approved or rejected papers found for your department.
+                </div>
+              </div>
+            )}
+            {reportType === 'subject' && (!subjectData || subjectData.length === 0) && (
+              <div style={{ textAlign: 'center', padding: '40px', color: '#6c757d' }}>
+                <div style={{ fontSize: '3rem', marginBottom: '10px' }}>📊</div>
+                <div style={{ fontSize: '1.2rem', fontWeight: '600' }}>No Data Available</div>
+                <div style={{ fontSize: '0.9rem', marginTop: '8px' }}>
+                  No subject-wise data found for your department.
+                </div>
+              </div>
+            )}
           </>
         )}
         </div>

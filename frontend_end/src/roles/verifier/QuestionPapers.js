@@ -16,8 +16,10 @@ const QuestionPapers = () => {
   const [showApprovedPapers, setShowApprovedPapers] = useState(false);
   const [approvedPapers, setApprovedPapers] = useState([]);
   const [verifierRemarks, setVerifierRemarks] = useState('');
+  const [isTemporaryVerifier, setIsTemporaryVerifier] = useState(false);
+  const [assignedSubjects, setAssignedSubjects] = useState([]);
 
-  // Initialize department from logged-in verifier
+  // Initialize department from logged-in verifier and set verifier state
   useEffect(() => {
     try {
       const raw = localStorage.getItem('verifier');
@@ -25,6 +27,12 @@ const QuestionPapers = () => {
         const parsed = JSON.parse(raw);
         if (parsed && parsed.department) {
           setSelectedDepartment(parsed.department);
+        }
+        if (parsed && parsed.temporary !== undefined) {
+          setIsTemporaryVerifier(parsed.temporary);
+        }
+        if (parsed && parsed.assignedSubjects) {
+          setAssignedSubjects(parsed.assignedSubjects);
         }
       }
     } catch {}
@@ -37,12 +45,10 @@ const QuestionPapers = () => {
       // Get verifier info to determine filtering
       const verifierData = localStorage.getItem('verifier');
       let verifier = null;
-      let isTemporaryVerifier = false;
       let verifierDepartment = '';
 
       if (verifierData) {
         verifier = JSON.parse(verifierData);
-        isTemporaryVerifier = verifier.temporary;
         verifierDepartment = verifier.department;
       }
 
@@ -103,15 +109,30 @@ const QuestionPapers = () => {
       }
 
       // Ensure data is an array - if it's wrapped in an object, extract the papers array
+      let papersData = [];
       if (data && data.papers) {
-        setPapers(data.papers);
+        papersData = data.papers;
       } else if (Array.isArray(data)) {
-        setPapers(data);
+        papersData = data;
       } else {
         // If neither format is valid, set to empty array
         console.error('Unexpected data format:', data);
-        setPapers([]);
+        papersData = [];
       }
+
+      // Apply frontend filtering for temporary verifiers if needed
+      if (verifier?.temporary && Array.isArray(verifier?.assignedSubjects) && verifier.assignedSubjects.length > 0) {
+        // Filter papers to only show assigned subjects (case-insensitive)
+        const assignedSubjectsLower = assignedSubjects.map(code => code.toLowerCase().trim());
+        papersData = papersData.filter(paper =>
+          assignedSubjectsLower.includes(paper.subject_code?.toLowerCase().trim())
+        );
+        console.log('📋 TEMPORARY VERIFIER: Frontend filtering applied. Showing only assigned subjects:', verifier.assignedSubjects, 'Filtered papers count:', papersData.length);
+      } else {
+        console.log('📋 PERMANENT VERIFIER OR NO ASSIGNED SUBJECTS: Showing all papers. Papers count:', papersData.length);
+      }
+
+      setPapers(papersData);
       setError(null);
     } catch (err) {
       console.error('Error fetching papers:', err);
@@ -921,11 +942,27 @@ const QuestionPapers = () => {
           </thead>
           <tbody>
             {(papers || []).map((paper, index) => {
-              const isAssignedSubject = paper.subject_code === 'IS102';
+              // Get verifier info to determine if this is a temporary verifier and highlight assigned subjects
+              const verifierData = localStorage.getItem('verifier');
+              let isTemporaryVerifier = false;
+              let assignedSubjects = [];
+
+              if (verifierData) {
+                try {
+                  const verifier = JSON.parse(verifierData);
+                  isTemporaryVerifier = verifier.temporary || false;
+                  assignedSubjects = verifier.assignedSubjects || [];
+                } catch (e) {
+                  // Ignore parse errors
+                }
+              }
+
+              const isAssignedSubject = isTemporaryVerifier && assignedSubjects.includes(paper.subject_code);
+
               return (
                 <tr key={paper._id || index} style={{
-                  backgroundColor: isAssignedSubject ? '#e3f2fd' : '#5f6f81',
-                  color: isAssignedSubject ? '#0d47a1' : '#ffffff'
+                  backgroundColor: isAssignedSubject ? '#e3f2fd' : '#ffffff',
+                  color: isAssignedSubject ? '#0d47a1' : '#333333'
                 }}>
                   <td style={{
                     padding: '14px 12px',
@@ -982,9 +1019,9 @@ const QuestionPapers = () => {
                       onClick={() => handlePaperClick(paper)}
                       style={{
                         padding: '10px 18px',
-                        backgroundColor: isAssignedSubject ? '#1976d2' : '#20c997',
-                        color: isAssignedSubject ? '#ffffff' : '#073b2a',
-                        border: isAssignedSubject ? '1px solid #1565c0' : '1px solid #17b187',
+                        backgroundColor: isAssignedSubject ? '#1976d2' : '#007bff',
+                        color: 'white',
+                        border: 'none',
                         borderRadius: '8px',
                         cursor: 'pointer',
                         fontWeight: 700,

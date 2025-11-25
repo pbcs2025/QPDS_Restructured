@@ -65,10 +65,17 @@ function SubjectsManagement({ verifier }) {
     return semesters.sort((a, b) => a - b);
   };
 
+  // For temporary verifiers, only show subjects that are assigned to them specifically
+  const baseSubjects = verifier.temporary
+    ? subjects.filter(subject =>
+        verifier.assignedSubjects?.includes(subject.subject_code)
+      )
+    : subjects;
+
   // Filter subjects based on selected semester
   const filteredSubjects = selectedSemester === 'all'
-    ? subjects
-    : subjects.filter(subject => subject.semester === parseInt(selectedSemester));
+    ? baseSubjects
+    : baseSubjects.filter(subject => subject.semester === parseInt(selectedSemester));
 
   const assignSubjectToFaculty = async (subjectCode, facultyId) => {
     try {
@@ -93,14 +100,8 @@ function SubjectsManagement({ verifier }) {
     } catch (err) {
       console.error('Error assigning subject:', err);
 
-      // Check if it's a limit exceeded error
-      if (err.response?.data?.error === 'Faculty has reached the maximum limit of 2 papers') {
-        // Show allocation limit modal instead of alert
-        setDialogMessage('Faculty has reached the maximum limit of 2 papers and is allocated.');
-        setShowDialog(true);
-      } else {
-        alert('Failed to assign subject: ' + (err.response?.data?.error || err.message));
-      }
+      // Show error message
+      alert('Failed to assign subject: ' + (err.response?.data?.error || err.message));
     }
   };
 
@@ -307,48 +308,147 @@ function SubjectsManagement({ verifier }) {
           {/* Subjects List */}
           <div style={{ marginBottom: '30px' }}>
             <h2 style={{
-              marginBottom: '20px',
+              marginBottom: '25px',
               color: '#2c3e50',
-              fontSize: '1.5rem',
-              fontWeight: '600',
-              letterSpacing: '0.3px'
+              fontSize: '1.6rem',
+              fontWeight: '700',
+              letterSpacing: '0.5px',
+              textAlign: 'center',
+              position: 'relative'
             }}>
               Department Subjects {selectedSemester !== 'all' && `(Semester ${selectedSemester})`}
+              <div style={{
+                width: '60px',
+                height: '3px',
+                background: 'linear-gradient(90deg, #007bff, #28a745)',
+                borderRadius: '2px',
+                margin: '8px auto 0'
+              }}></div>
             </h2>
             {filteredSubjects.length === 0 && selectedSemester !== 'all' && (
               <div style={{
                 textAlign: 'center',
-                padding: '20px',
+                padding: '30px',
                 backgroundColor: '#f8f9fa',
-                borderRadius: '8px',
-                border: '1px solid #dee2e6'
+                borderRadius: '12px',
+                border: '1px solid #dee2e6',
+                margin: '20px 0'
               }}>
-                <div style={{ fontSize: '16px', color: '#6c757d' }}>
+                <div style={{ fontSize: '3rem', marginBottom: '10px', color: '#6c757d' }}>📭</div>
+                <div style={{ fontSize: '18px', color: '#6c757d', fontWeight: '600' }}>
                   No subjects found for Semester {selectedSemester}
+                </div>
+                <div style={{ fontSize: '14px', color: '#adb5bd', marginTop: '5px' }}>
+                  Try selecting "All Semesters" to view all subjects
                 </div>
               </div>
             )}
-            <div style={{ display: 'grid', gap: '15px' }}>
+            <div style={{
+              display: 'grid',
+              gap: '20px',
+              gridTemplateColumns: 'repeat(auto-fit, minmax(350px, 1fr))'
+            }}>
               {filteredSubjects.map(subject => (
                 <div
                   key={subject.subject_code}
                   style={{
-                    border: '1px solid #ddd',
-                    borderRadius: '8px',
-                    padding: '15px',
-                    backgroundColor: '#f9f9f9'
+                    border: '1px solid #e9ecef',
+                    borderRadius: '12px',
+                    padding: '20px',
+                    backgroundColor: 'white',
+                    boxShadow: '0 4px 6px rgba(0, 0, 0, 0.05)',
+                    transition: 'all 0.3s ease',
+                    position: 'relative',
+                    overflow: 'hidden'
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.transform = 'translateY(-2px)';
+                    e.currentTarget.style.boxShadow = '0 8px 25px rgba(0, 0, 0, 0.15)';
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.transform = 'translateY(0)';
+                    e.currentTarget.style.boxShadow = '0 4px 6px rgba(0, 0, 0, 0.05)';
                   }}
                 >
-                  <div style={{ fontWeight: 'bold', fontSize: '16px' }}>
-                    {subject.subject_code} - {subject.subject_name}
+                  {/* Subject Header */}
+                  <div style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    marginBottom: '12px',
+                    paddingBottom: '10px',
+                    borderBottom: '2px solid #f8f9fa'
+                  }}>
+                    <div style={{
+                      width: '40px',
+                      height: '40px',
+                      borderRadius: '50%',
+                      background: 'linear-gradient(45deg, #007bff, #6610f2)',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      color: 'white',
+                      fontWeight: 'bold',
+                      fontSize: '14px',
+                      marginRight: '12px'
+                    }}>
+                      {subject.subject_code.substring(0, 2).toUpperCase()}
+                    </div>
+                    <div style={{ flex: 1 }}>
+                      <div style={{
+                        fontWeight: '700',
+                        fontSize: '16px',
+                        color: '#2c3e50',
+                        marginBottom: '2px'
+                      }}>
+                        {subject.subject_code}
+                      </div>
+                      <div style={{
+                        fontSize: '14px',
+                        color: '#6c757d',
+                        fontWeight: '500'
+                      }}>
+                        {subject.subject_name}
+                      </div>
+                    </div>
                   </div>
-                  <div style={{ color: '#666', margin: '5px 0' }}>
-                    Semester: {subject.semester} | Department: {subject.department}
+
+                  {/* Subject Details */}
+                  <div style={{
+                    display: 'flex',
+                    gap: '15px',
+                    marginBottom: '15px',
+                    flexWrap: 'wrap'
+                  }}>
+                    <div style={{
+                      backgroundColor: '#e7f3ff',
+                      color: '#0066cc',
+                      padding: '4px 10px',
+                      borderRadius: '20px',
+                      fontSize: '12px',
+                      fontWeight: '600'
+                    }}>
+                      Semester {subject.semester}
+                    </div>
                   </div>
 
                   {/* Assigned Faculties */}
-                  <div style={{ marginTop: '10px' }}>
-                    <strong>Assigned to:</strong>
+                  <div style={{ marginBottom: '15px' }}>
+                    <div style={{
+                      fontWeight: '600',
+                      color: '#495057',
+                      fontSize: '14px',
+                      marginBottom: '8px',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '6px'
+                    }}>
+                      Assigned Faculty ({(() => {
+                        const assignedFaculties = faculties.filter(faculty =>
+                          faculty.assignedSubjects?.includes(subject.subject_code)
+                        );
+                        return assignedFaculties.length;
+                      })()})
+                    </div>
                     {(() => {
                       // Find assignments for this subject
                       const assignedFaculties = faculties.filter(faculty =>
@@ -356,70 +456,149 @@ function SubjectsManagement({ verifier }) {
                       );
 
                       return assignedFaculties.length > 0 ? (
-                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '5px', marginTop: '5px' }}>
+                        <div style={{
+                          display: 'flex',
+                          flexWrap: 'wrap',
+                          gap: '8px',
+                          marginTop: '8px'
+                        }}>
                           {assignedFaculties.map(faculty => (
-                            <span
+                            <div
                               key={faculty._id}
                               style={{
-                                backgroundColor: '#e8f5e8',
-                                color: '#2e7d32',
-                                padding: '2px 6px',
-                                borderRadius: '4px',
-                                fontSize: '12px'
+                                background: 'linear-gradient(45deg, #28a745, #20c997)',
+                                color: 'white',
+                                padding: '6px 12px',
+                                borderRadius: '25px',
+                                fontSize: '13px',
+                                fontWeight: '500',
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '6px',
+                                boxShadow: '0 2px 4px rgba(40, 167, 69, 0.2)',
+                                transition: 'all 0.2s ease'
+                              }}
+                              onMouseEnter={(e) => {
+                                e.currentTarget.style.transform = 'scale(1.05)';
+                              }}
+                              onMouseLeave={(e) => {
+                                e.currentTarget.style.transform = 'scale(1)';
                               }}
                             >
-                              {faculty.name}
+                              <span>{faculty.name}</span>
                               <button
                                 onClick={() => removeSubjectFromFaculty(subject.subject_code, faculty._id)}
                                 style={{
-                                  marginLeft: '5px',
                                   background: 'none',
                                   border: 'none',
-                                  color: '#d32f2f',
+                                  color: 'white',
                                   cursor: 'pointer',
-                                  fontSize: '12px'
+                                  fontSize: '16px',
+                                  padding: '0',
+                                  marginLeft: '4px',
+                                  borderRadius: '50%',
+                                  width: '20px',
+                                  height: '20px',
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  justifyContent: 'center',
+                                  transition: 'all 0.2s ease'
                                 }}
                                 title="Remove assignment"
+                                onMouseEnter={(e) => {
+                                  e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.2)';
+                                }}
+                                onMouseLeave={(e) => {
+                                  e.currentTarget.style.backgroundColor = 'transparent';
+                                }}
                               >
                                 ×
                               </button>
-                            </span>
+                            </div>
                           ))}
                         </div>
                       ) : (
-                        <span style={{ color: '#999', fontStyle: 'italic' }}> Not assigned</span>
+                        <div style={{
+                          color: '#6c757d',
+                          fontStyle: 'italic',
+                          fontSize: '14px',
+                          padding: '8px 0'
+                        }}>
+                          🤔 Not assigned to any faculty yet
+                        </div>
                       );
                     })()}
                   </div>
 
                   {/* Assign to Faculty Dropdown */}
-                  <div style={{ marginTop: '10px' }}>
-                    <select
-                      onChange={(e) => {
-                        if (e.target.value) {
-                          assignSubjectToFaculty(subject.subject_code, e.target.value);
-                          e.target.value = ''; // Reset dropdown
-                        }
-                      }}
-                      style={{
-                        padding: '5px 10px',
-                        borderRadius: '4px',
-                        border: '1px solid #ccc',
-                        fontSize: '14px'
-                      }}
-                    >
-                      <option value="">Assign to faculty...</option>
-                      {faculties
-                        .filter(faculty => !faculty.assignedSubjects?.includes(subject.subject_code))
-                        .map(faculty => (
-                          <option key={faculty._id} value={faculty._id}>
-                            {faculty.name} ({faculty.email})
-                          </option>
-                        ))}
-                    </select>
+                  <div>
+                    <label style={{
+                      fontWeight: '600',
+                      color: '#495057',
+                      fontSize: '14px',
+                      marginBottom: '8px',
+                      display: 'block'
+                    }}>
+                      Assign New Faculty
+                    </label>
+                    <div style={{ position: 'relative' }}>
+                      <select
+                        onChange={(e) => {
+                          if (e.target.value) {
+                            assignSubjectToFaculty(subject.subject_code, e.target.value);
+                            e.target.value = ''; // Reset dropdown
+                          }
+                        }}
+                        style={{
+                          width: '100%',
+                          padding: '10px 15px',
+                          borderRadius: '8px',
+                          border: '2px solid #e9ecef',
+                          fontSize: '14px',
+                          backgroundColor: 'white',
+                          color: '#495057',
+                          cursor: 'pointer',
+                          transition: 'all 0.3s ease',
+                          appearance: 'none',
+                          backgroundImage: 'url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns=\'http://www.w3.org/2000/svg\' viewBox=\'0 0 24 24\' fill=\'none\' stroke=\'%236c757d\' stroke-width=\'2\' stroke-linecap=\'round\' stroke-linejoin=\'round\'%3e%3cpolyline points=\'6,9 12,15 18,9\'%3e%3c/polyline%3e%3c/svg%3e")',
+                          backgroundRepeat: 'no-repeat',
+                          backgroundPosition: 'right 10px center',
+                          backgroundSize: '16px',
+                          paddingRight: '40px'
+                        }}
+                        onMouseEnter={(e) => {
+                          e.target.style.borderColor = '#007bff';
+                          e.target.style.boxShadow = '0 0 0 3px rgba(0, 123, 255, 0.1)';
+                        }}
+                        onMouseLeave={(e) => {
+                          e.target.style.borderColor = '#e9ecef';
+                          e.target.style.boxShadow = 'none';
+                        }}
+                      >
+                        <option value="">Select faculty to assign...</option>
+                        {faculties
+                          .filter(faculty => !faculty.assignedSubjects?.includes(subject.subject_code))
+                          .map(faculty => (
+                            <option key={faculty._id} value={faculty._id}>
+                              {faculty.name} ({faculty.type}) - {faculty.email}
+                            </option>
+                          ))}
+                      </select>
+                    </div>
                     {faculties.filter(faculty => !faculty.assignedSubjects?.includes(subject.subject_code)).length === 0 && (
-                      <div style={{ color: '#ff9800', fontSize: '12px', marginTop: '5px' }}>
-                        ⚠️ All available faculty members are already assigned to this subject
+                      <div style={{
+                        color: '#ffc107',
+                        fontSize: '13px',
+                        marginTop: '8px',
+                        padding: '8px 12px',
+                        backgroundColor: '#fff3cd',
+                        borderRadius: '6px',
+                        border: '1px solid #ffeaa7',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '6px'
+                      }}>
+                        All available faculty members are already assigned to this subject
                       </div>
                     )}
                   </div>
@@ -431,65 +610,201 @@ function SubjectsManagement({ verifier }) {
           {/* Faculty Assignment Summary */}
           <div>
             <h2 style={{
-              marginBottom: '20px',
+              marginBottom: '25px',
               color: '#2c3e50',
-              fontSize: '1.5rem',
-              fontWeight: '600',
-              letterSpacing: '0.3px'
+              fontSize: '1.6rem',
+              fontWeight: '700',
+              letterSpacing: '0.5px',
+              textAlign: 'center',
+              position: 'relative'
             }}>
               Faculty Assignment Summary
+              <div style={{
+                width: '60px',
+                height: '3px',
+                background: 'linear-gradient(90deg, #28a745, #ffc107)',
+                borderRadius: '2px',
+                margin: '8px auto 0'
+              }}></div>
             </h2>
             {faculties.length === 0 && (
               <div style={{
                 textAlign: 'center',
-                padding: '20px',
+                padding: '30px',
                 backgroundColor: '#f8f9fa',
-                borderRadius: '8px',
-                border: '1px solid #dee2e6'
+                borderRadius: '12px',
+                border: '1px solid #dee2e6',
+                margin: '20px 0'
               }}>
-                <div style={{ fontSize: '16px', color: '#6c757d' }}>
-                  No faculty members found for this department
+                <div style={{ fontSize: '3rem', marginBottom: '10px', color: '#6c757d' }}>👨‍🏫</div>
+                <div style={{ fontSize: '18px', color: '#6c757d', fontWeight: '600' }}>
+                  No faculty members found
+                </div>
+                <div style={{ fontSize: '14px', color: '#adb5bd', marginTop: '5px' }}>
+                  No faculty members are available for this department
                 </div>
               </div>
             )}
-            <div style={{ display: 'grid', gap: '10px' }}>
+            <div style={{
+              display: 'grid',
+              gap: '20px',
+              gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))'
+            }}>
               {faculties.map(faculty => (
                 <div
                   key={faculty._id}
                   style={{
-                    border: '1px solid #ddd',
-                    borderRadius: '8px',
-                    padding: '15px',
-                    backgroundColor: '#f9f9f9'
+                    border: '1px solid #e9ecef',
+                    borderRadius: '12px',
+                    padding: '20px',
+                    backgroundColor: 'white',
+                    boxShadow: '0 4px 6px rgba(0, 0, 0, 0.05)',
+                    transition: 'all 0.3s ease',
+                    position: 'relative',
+                    overflow: 'hidden'
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.transform = 'translateY(-2px)';
+                    e.currentTarget.style.boxShadow = '0 8px 25px rgba(0, 0, 0, 0.15)';
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.transform = 'translateY(0)';
+                    e.currentTarget.style.boxShadow = '0 4px 6px rgba(0, 0, 0, 0.05)';
                   }}
                 >
-                  <div style={{ fontWeight: 'bold', fontSize: '16px' }}>
-                    {faculty.name}
+                  {/* Faculty Header */}
+                  <div style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    marginBottom: '15px',
+                    paddingBottom: '12px',
+                    borderBottom: '2px solid #f8f9fa'
+                  }}>
+                    <div style={{
+                      width: '45px',
+                      height: '45px',
+                      borderRadius: '50%',
+                      background: 'linear-gradient(45deg, #17a2b8, #138496)',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      color: 'white',
+                      fontWeight: 'bold',
+                      fontSize: '16px',
+                      marginRight: '12px'
+                    }}>
+                      {faculty.name.charAt(0).toUpperCase()}
+                    </div>
+                    <div style={{ flex: 1 }}>
+                      <div style={{
+                        fontWeight: '700',
+                        fontSize: '17px',
+                        color: '#2c3e50',
+                        marginBottom: '2px'
+                      }}>
+                        {faculty.name}
+                      </div>
+                      <div style={{
+                        fontSize: '13px',
+                        color: '#6c757d',
+                        fontWeight: '500'
+                      }}>
+                        {faculty.type}
+                      </div>
+                    </div>
                   </div>
-                  <div style={{ color: '#666', margin: '5px 0' }}>
-                    {faculty.email} | {faculty.type}
+
+                  {/* Faculty Contact */}
+                  <div style={{
+                    marginBottom: '15px',
+                    padding: '10px 12px',
+                    backgroundColor: '#f8f9fa',
+                    borderRadius: '8px',
+                    border: '1px solid #e9ecef'
+                  }}>
+                    <div style={{
+                      fontSize: '14px',
+                      color: '#495057',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '6px'
+                    }}>
+                      📧 {faculty.email}
+                    </div>
                   </div>
-                  <div style={{ fontSize: '14px' }}>
-                    <strong>Assigned Subjects:</strong> {faculty.assignedSubjects?.length || 0}
-                    {faculty.assignedSubjects?.length > 0 && (
-                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '5px', marginTop: '5px' }}>
+
+                  {/* Assigned Subjects Section */}
+                  <div>
+                    <div style={{
+                      fontWeight: '600',
+                      color: '#495057',
+                      fontSize: '14px',
+                      marginBottom: '8px',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between'
+                    }}>
+                      <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        Assigned Subjects
+                      </span>
+                      <span style={{
+                        backgroundColor: faculty.assignedSubjects?.length > 0 ? '#28a745' : '#6c757d',
+                        color: 'white',
+                        padding: '2px 8px',
+                        borderRadius: '12px',
+                        fontSize: '12px',
+                        fontWeight: '600'
+                      }}>
+                        {faculty.assignedSubjects?.length || 0}
+                      </span>
+                    </div>
+
+                    {faculty.assignedSubjects?.length > 0 ? (
+                      <div style={{
+                        display: 'flex',
+                        flexWrap: 'wrap',
+                        gap: '6px',
+                        marginTop: '10px'
+                      }}>
                         {faculty.assignedSubjects.map(subjectCode => (
                           <span
                             key={subjectCode}
                             style={{
-                              backgroundColor: '#e3f2fd',
-                              color: '#1976d2',
-                              padding: '2px 6px',
-                              borderRadius: '4px',
-                              fontSize: '12px'
+                              background: 'linear-gradient(45deg, #007bff, #6610f2)',
+                              color: 'white',
+                              padding: '4px 10px',
+                              borderRadius: '18px',
+                              fontSize: '12px',
+                              fontWeight: '500',
+                              boxShadow: '0 2px 4px rgba(0, 123, 255, 0.2)',
+                              transition: 'all 0.2s ease'
+                            }}
+                            onMouseEnter={(e) => {
+                              e.currentTarget.style.transform = 'scale(1.05)';
+                            }}
+                            onMouseLeave={(e) => {
+                              e.currentTarget.style.transform = 'scale(1)';
                             }}
                           >
                             {subjectCode}
                           </span>
                         ))}
                       </div>
+                    ) : (
+                      <div style={{
+                        color: '#6c757d',
+                        fontStyle: 'italic',
+                        fontSize: '14px',
+                        padding: '8px 0',
+                        textAlign: 'center',
+                        backgroundColor: '#f8f9fa',
+                        borderRadius: '6px'
+                      }}>
+                        No subjects assigned yet
+                      </div>
                     )}
                   </div>
+
                 </div>
               ))}
             </div>

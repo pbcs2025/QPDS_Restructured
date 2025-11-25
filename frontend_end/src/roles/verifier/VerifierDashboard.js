@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import "../../common/dashboard.css";
 import QuestionPapers from "./QuestionPapers";
@@ -42,12 +42,68 @@ function VerifierDashboard() {
     isTemporaryVerifier
   });
 
+  // Timer for temporary verifier expiration
+  const formatTimeRemaining = useCallback((seconds) => {
+    const hours = Math.floor(seconds / 3600);
+    const minutes = Math.floor((seconds % 3600) / 60);
+    const secs = seconds % 60;
+    return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+  }, []);
+
+  useEffect(() => {
+    if (isTemporaryVerifier && verifier?.expiresAt) {
+      const expiryTime = new Date(verifier.expiresAt).getTime();
+
+      const updateTimer = () => {
+        const now = Date.now();
+        const remaining = Math.max(0, Math.floor((expiryTime - now) / 1000));
+
+        if (remaining > 0) {
+          setTimeRemaining(remaining);
+          setIsExpired(false);
+        } else {
+          setTimeRemaining(0);
+          setIsExpired(true);
+          // Auto-logout when expired
+          console.log('Temporary verifier session expired, logging out...');
+          alert('Your temporary verifier session has expired. You will be logged out.');
+          localStorage.removeItem("verifier");
+          navigate("/login/verifier");
+          return;
+        }
+      };
+
+      // Update immediately
+      updateTimer();
+
+      // Set up interval to update every second
+      const timerId = setInterval(updateTimer, 1000);
+
+      return () => clearInterval(timerId);
+    }
+  }, [isTemporaryVerifier, verifier?.expiresAt, navigate]);
+
   const handleLogoutClick = () => setShowConfirm(true);
   const confirmLogout = () => {
     setShowConfirm(false);
     localStorage.removeItem("verifier");
     navigate("/");
   };
+
+  // Check if session has expired on component mount
+  useEffect(() => {
+    if (isTemporaryVerifier && verifier?.expiresAt) {
+      const now = Date.now();
+      const expiryTime = new Date(verifier.expiresAt).getTime();
+
+      if (now >= expiryTime) {
+        console.log('Session already expired on load, logging out...');
+        localStorage.removeItem("verifier");
+        navigate("/login/verifier");
+        return;
+      }
+    }
+  }, [isTemporaryVerifier, verifier?.expiresAt, navigate]);
   const cancelLogout = () => setShowConfirm(false);
 
   if (!verifier) {
@@ -81,6 +137,26 @@ function VerifierDashboard() {
         <h2>Verifier</h2>
         <div style={{ marginBottom: "10px", opacity: 0.9 }}>{verifier.username}</div>
         <div style={{ marginBottom: "20px", opacity: 0.8 }}>{verifier.department}</div>
+
+        {/* Show countdown timer for temporary verifiers */}
+        {isTemporaryVerifier && (
+          <div style={{
+            marginBottom: "20px",
+            padding: "10px",
+            backgroundColor: timeRemaining < 1800 ? "#ffebee" : "#e8f5e8", // Red if < 30 min
+            borderRadius: "5px",
+            border: timeRemaining < 1800 ? "1px solid #f44336" : "1px solid #4caf50",
+            color: timeRemaining < 1800 ? "#c62828" : "#2e7d32",
+            fontSize: "14px",
+            fontWeight: "bold",
+            textAlign: "center"
+          }}>
+            <div style={{ fontSize: "12px", marginBottom: "5px" }}>Session Expires In:</div>
+            <div style={{ fontSize: "16px", fontFamily: "monospace" }}>
+              {formatTimeRemaining(timeRemaining)}
+            </div>
+          </div>
+        )}
 
         <a href="#" className={activeTab === "dashboard" ? "active-tab" : ""} onClick={(e) => { e.preventDefault(); setActiveTab("dashboard"); }}>🏠 Dashboard</a>
         <a href="#" className={activeTab === "faculties" ? "active-tab" : ""} onClick={(e) => { e.preventDefault(); setActiveTab("faculties"); }}>👩‍🏫 Manage Faculties</a>

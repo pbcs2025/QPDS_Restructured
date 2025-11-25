@@ -1,0 +1,9 @@
+stash@{0}: WIP on rachana: 5b53e6f Updated verifier faculties
+stash@{1}: WIP on rachana: fd1215a chore(gitignore): ignore backend/node_modules
+stash@{2}: On rachana: local backup before updating rachana
+stash@{3}: On main: temp-backup-before-merge
+stash@{4}: On main: backup-before-syncing-main
+stash@{5}: On rachana: backup of current broken backend
+stash@{6}: On verify/backup: temp save before switching to main
+stash@{7}: On rachana: temp before switching to verify/backup
+stash@{8}: WIP on rachana: 5478684 Resolved merge conflict in SuperAdminDashboard.js and added Department Analytics
