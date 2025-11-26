@@ -23,23 +23,65 @@ function FacultyDashboard() {
   const [showOld, setShowOld] = useState(false);
   const [showNew, setShowNew] = useState(false);
   
+  const API_BASE = process.env.REACT_APP_API_BASE_URL || 'http://localhost:5001/api';
 
   const handleLogoutClick = () => setShowConfirm(true);
-  const confirmLogout = () => {
+  const confirmLogout = async () => {
     setShowConfirm(false);
+    
+    // Call logout API endpoint
+    try {
+      const token = localStorage.getItem("token");
+      
+      if (token) {
+        await fetch(`${API_BASE}/faculty/logout`, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          }
+        });
+      }
+    } catch (error) {
+      console.error('Logout API error:', error);
+      // Continue with logout even if API call fails
+    }
+    
+    // Clear local storage
     localStorage.removeItem("faculty_username");
     localStorage.removeItem("faculty_data");
+    localStorage.removeItem("faculty_role");
+    localStorage.removeItem("token");
     navigate("/");
   };
   const cancelLogout = () => setShowConfirm(false);
 
   // Fetch faculty assignments
-  const fetchAssignments = async (email) => {
+  const fetchAssignments = async (email, role = 'Faculty') => {
+    if (!email) return;
     try {
       setAssignmentsLoading(true);
-      console.log(`📥 Fetching assignments for: ${email}`);
-      const response = await axios.get(`${API_BASE}/faculty/assignments/${email}`);
-      console.log('✅ Assignments fetched:', response.data);
+      
+//commented due to Conflicts 
+//       console.log(`📥 Fetching assignments for: ${email}`);
+//       const response = await axios.get(`${API_BASE}/faculty/assignments/${email}`);
+//       console.log('✅ Assignments fetched:', response.data);
+
+      const token = localStorage.getItem("token");
+      if (!token) {
+        throw new Error("Missing authentication token");
+      }
+
+      const routePrefix = role === 'MBAFaculty' ? 'mbafaculty' : 'faculty';
+      const response = await axios.get(
+        `${API_BASE}/${routePrefix}/assignments/${encodeURIComponent(email)}`,
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        }
+      );
+
       setAssignments(response.data.assignments || []);
     } catch (error) {
       console.error('❌ Error fetching assignments:', error.response?.data || error.message);
@@ -53,11 +95,13 @@ function FacultyDashboard() {
   useEffect(() => {
     const storedFacultyData = localStorage.getItem("faculty_data");
     if (storedFacultyData) {
-      const data = JSON.parse(storedFacultyData);
-      setFacultyData(data);
+      const parsed = JSON.parse(storedFacultyData);
+      const storedRole = parsed.role || localStorage.getItem("faculty_role") || 'Faculty';
+      const normalizedData = { ...parsed, role: storedRole };
+      setFacultyData(normalizedData);
       // Fetch assignments for this faculty member
-      if (data.email) {
-        fetchAssignments(data.email);
+      if (normalizedData.email) {
+        fetchAssignments(normalizedData.email, storedRole);
       }
     } else {
       // If no stored data, redirect to login

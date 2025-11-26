@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from "react";
 import "./viewAssignees.css";
 
-const API_BASE = process.env.REACT_APP_API_BASE_URL;
+const API_BASE = process.env.REACT_APP_API_BASE_URL || 'http://localhost:5001/api';
 
 function ViewAssignees() {
   const [subjects, setSubjects] = useState([]);
@@ -37,15 +37,33 @@ function ViewAssignees() {
 
   // Fetch departments
   useEffect(() => {
-    fetch(`${API_BASE}/departments`)
-      .then((res) => res.json())
+    const token = localStorage.getItem('token');
+    if (!token) {
+      console.error("No authentication token found");
+      return;
+    }
+    
+    fetch(`${API_BASE}/departments/active`, {
+      headers: { 'Authorization': `Bearer ${token}` }
+    })
+      .then((res) => {
+        if (!res.ok) throw new Error(`Status ${res.status}`);
+        return res.json();
+      })
       .then((data) => {
+        console.log("Departments fetched:", data);
         if (Array.isArray(data)) {
-          const deptNames = data.map(d => typeof d === "string" ? d : (d.department || d.name));
-          setDepartments(deptNames.filter(Boolean));
+          // Backend returns: { id, name, color, createdAt }
+          const deptNames = data.map(d => typeof d === "string" ? d : (d.name || d.department || ""));
+          const uniqueDepts = [...new Set(deptNames.filter(Boolean))].sort();
+          console.log("Processed departments:", uniqueDepts);
+          setDepartments(uniqueDepts);
         }
       })
-      .catch((err) => console.error("Error fetching departments:", err));
+      .catch((err) => {
+        console.error("Error fetching departments:", err);
+        setDepartments([]);
+      });
   }, []);
   
   // Close dropdowns when clicking outside
@@ -67,13 +85,87 @@ function ViewAssignees() {
   // Fetch all assigned subjects on mount
   useEffect(() => {
     setLoading(true);
-    fetch(`${API_BASE}/assignedSubjects`)
+    const token = localStorage.getItem('token');
+    if (!token) {
+      setError("No authentication token found. Please login again.");
+      setLoading(false);
+      return;
+    }
+    
+    fetch(`${API_BASE}/assignedSubjects`, {
+      headers: { 'Authorization': `Bearer ${token}` }
+    })
       .then((res) => {
         if (!res.ok) throw new Error(`Status ${res.status}`);
         return res.json();
       })
-      .then((data) => {
-        setSubjects(data || []);
+      .then(async (data) => {
+        console.log("Assigned subjects fetched (raw):", data);
+        
+        // Backend returns: [{ subject_code, submit_date, assigned_at, assignees: [{ deptName, ... }] }]
+        // We need to enrich with department and semester from Subject model
+        if (Array.isArray(data)) {
+          // Fetch subject details to get department and semester
+          try {
+            const subjectsRes = await fetch(`${API_BASE}/subjects`, {
+              headers: { 'Authorization': `Bearer ${token}` }
+            });
+            
+            if (subjectsRes.ok) {
+              const subjectsData = await subjectsRes.json();
+              console.log("Subjects data fetched:", subjectsData);
+              
+              // Create a map of subject_code to subject details
+              const subjectMap = {};
+              if (Array.isArray(subjectsData)) {
+                subjectsData.forEach(sub => {
+                  if (sub.subject_code) {
+                    subjectMap[sub.subject_code] = {
+                      department: sub.department || '',
+                      semester: sub.semester || null,
+                      subject_name: sub.subject_name || ''
+                    };
+                  }
+                });
+              }
+              
+              // Enrich assigned subjects with department and semester
+              const enrichedData = data.map(assigned => {
+                const subjectInfo = subjectMap[assigned.subject_code] || {};
+                return {
+                  ...assigned,
+                  department: subjectInfo.department || (assigned.assignees && assigned.assignees[0]?.deptName) || '',
+                  semester: subjectInfo.semester || null,
+                  subject_name: subjectInfo.subject_name || assigned.subject_code
+                };
+              });
+              
+              console.log("Enriched assigned subjects:", enrichedData);
+              setSubjects(enrichedData);
+            } else {
+              // If subject fetch fails, use assignee departments
+              const enrichedData = data.map(assigned => ({
+                ...assigned,
+                department: (assigned.assignees && assigned.assignees[0]?.deptName) || '',
+                semester: null,
+                subject_name: assigned.subject_code
+              }));
+              setSubjects(enrichedData);
+            }
+          } catch (err) {
+            console.error("Error fetching subject details:", err);
+            // Fallback: use assignee departments
+            const enrichedData = data.map(assigned => ({
+              ...assigned,
+              department: (assigned.assignees && assigned.assignees[0]?.deptName) || '',
+              semester: null,
+              subject_name: assigned.subject_code
+            }));
+            setSubjects(enrichedData);
+          }
+        } else {
+          setSubjects([]);
+        }
         setLoading(false);
       })
       .catch((err) => {
@@ -110,7 +202,10 @@ function ViewAssignees() {
   const handleCardClick = (subjectCode) => {
     setSelectedSubject(subjectCode);
     setTableLoading(true);
-    fetch(`${API_BASE}/assignments/${encodeURIComponent(subjectCode)}`)
+    const token = localStorage.getItem('token');
+    fetch(`${API_BASE}/assignments/${encodeURIComponent(subjectCode)}`, {
+      headers: { 'Authorization': `Bearer ${token}` }
+    })
       .then((res) => {
        // console.log(res.json());
         if (!res.ok) throw new Error(`Status ${res.status}`);
@@ -143,6 +238,9 @@ function ViewAssignees() {
     setDeptSearchTerm("");
     setSemesterSearchTerm("");
     setSubjectSearchTerm("");
+    setShowDeptDropdown(false);
+    setShowSemesterDropdown(false);
+    setShowSubjectDropdown(false);
   };
   
   // Fixed semesters list (Semester 1 to Semester 8)

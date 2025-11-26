@@ -1,14 +1,16 @@
+// backend/src/controllers/verifierController.js
 const crypto = require('crypto');
 const mongoose = require('mongoose');
 const User = require('../models/User');
 const Verifier = require('../models/Verifier');
-
 const QuestionPaper = require('../models/QuestionPaper');
 const ApprovedPaper = require('../models/ApprovedPaper');
 const RejectedPaper = require('../models/RejectedPaper');
 const VerifierCorrectedQuestions = require('../models/VerifierCorrectedQuestions');
-
 const Department = require('../models/Department');
+const sendEmail = require('../utils/mailer');
+const jwt = require('jsonwebtoken');
+
 const { Document, Packer, Paragraph, TextRun } = (() => {
   try {
     return require('docx');
@@ -27,6 +29,239 @@ function generateRandomAlphanumeric(length) {
   return result;
 }
 
+/**
+ * Verifier Login - Direct login with JWT token (No email verification)
+ * POST /api/verifier/login
+ */
+exports.login = async (req, res) => {
+  try {
+    const { username, password } = req.body;
+    
+    if (!username || !password) {
+      return res.status(400).json({ error: 'username and password are required' });
+    }
+
+    // Check user collection for authentication
+    const user = await User.findOne({ username, password, role: 'Verifier' }).lean();
+    if (!user) {
+      return res.status(401).json({ success: false, message: 'Invalid credentials' });
+    }
+
+    // Get verifier details
+    const verifier = await Verifier.findOne({ username }).lean();
+    if (!verifier) {
+      return res.status(401).json({ success: false, message: 'Verifier account not found' });
+    }
+
+    // 🔥 GENERATE JWT TOKEN DIRECTLY
+    const token = jwt.sign(
+      {
+        id: user._id.toString(),
+        username: user.username,
+        email: user.email || verifier.email,
+        role: user.role,
+        usertype: user.usertype || 'admin',
+        name: user.name || verifier.verifierName,
+        department: verifier.department || user.deptName
+      },
+      process.env.JWT_SECRET || 'your-secret-key',
+      { expiresIn: '24h' }
+    );
+
+    // 🔥 LOG LOGIN ACTIVITY
+    const { logLogin } = require('../middleware/activityLogger');
+    await logLogin({
+      id: user._id.toString(),
+      username: user.username,
+      name: user.name || verifier.verifierName || username,
+      role: user.role,
+      usertype: user.usertype || 'admin'
+    }, req);
+
+    // Return verifier data with TOKEN
+    return res.json({
+      success: true,
+      message: 'Login successful',
+      token: token,
+      verifierData: {
+        id: verifier._id,
+        verifierId: verifier.verifierId,
+        name: verifier.verifierName || user.name,
+        username: verifier.username,
+        email: verifier.email || user.email,
+        department: verifier.department || user.deptName,
+        role: verifier.role
+      }
+    });
+  } catch (err) {
+    console.error('Verifier login error:', err);
+    return res.status(500).json({ success: false, message: 'Server error' });
+  }
+};
+
+/**
+ * Verify verifier login code - DEPRECATED (Not needed anymore)
+ * POST /api/verifier/verify
+ */
+exports.verify = async (req, res) => {
+  return res.status(410).json({ 
+    success: false, 
+    message: 'This endpoint is deprecated. Use /api/verifier/login directly to get token.' 
+  });
+};
+
+/**
+ * Verifier Logout - log activity
+ * POST /api/verifier/logout
+ */
+exports.logout = async (req, res) => {
+  try {
+    const userId = req.user?.id || req.user?._id;
+    const username = req.user?.username;
+    const role = req.user?.role;
+    const name = req.user?.name;
+
+    console.log(`Verifier logout: ${username} (${userId}) - Role: ${role}`);
+
+    // Update Verifier collection with last logout time
+    if (userId) {
+      await Verifier.findOneAndUpdate(
+        { verifierId: userId },
+        { lastLogout: new Date() }
+      );
+    }
+
+    // 🔥 LOG THE LOGOUT ACTIVITY (this will emit to Socket.io)
+    const { logLogout } = require('../middleware/activityLogger');
+    await logLogout(req);
+
+    res.json({
+      success: true,
+      message: 'Logged out successfully'
+    });
+  } catch (error) {
+    console.error('Verifier logout error:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Logout failed'
+    });
+  }
+};
+
+/**
+ * Forgot verifier password
+ * POST /api/verifier/forgot-password
+ */
+exports.forgotPassword = async (req, res) => {
+  try {
+    const { username } = req.body;
+
+    if (!username) {
+      return res.status(400).json({ error: 'Username is required' });
+    }
+
+    const user = await User.findOne({ username, role: 'Verifier' }).lean();
+    if (!user) {
+      return res.status(401).json({ success: false, message: 'Verifier account not found' });
+    }
+
+    const verifier = await Verifier.findOne({ username }).lean();
+    if (!verifier) {
+      return res.status(401).json({ success: false, message: 'Verifier profile not found' });
+    }
+
+    // Get email address
+    const emailAddress = verifier.email || user.email;
+    
+    if (!emailAddress || !emailAddress.includes('@')) {
+      return res.status(400).json({ 
+        success: false, 
+        message: 'No valid email address found for this account' 
+      });
+    }
+
+    try {
+      await sendEmail(
+        emailAddress,
+        'GAT Portal - Verifier Password Recovery',
+        '',
+        `
+          <!DOCTYPE html>
+          <html>
+          <body style="font-family: Arial, sans-serif; padding: 20px;">
+            <h2 style="color: #2c3e50;">Password Recovery</h2>
+            <p>Hello ${verifier.verifierName || username},</p>
+            <p>Your temporary password is:</p>
+            <div style="background-color: #f8f9fa; padding: 15px; border-left: 4px solid #dc3545; margin: 20px 0;">
+              <h2 style="color: #dc3545; margin: 0;">${user.password}</h2>
+            </div>
+            <p style="color: #dc3545;">⚠️ Important: Please login and change your password immediately for security reasons.</p>
+            <p>If you have any questions, contact the examination cell at support@gat.ac.in.</p>
+            <br>
+            <p>Best regards,<br>Examination Cell<br>Global Academy of Technology</p>
+          </body>
+          </html>
+        `
+      );
+    } catch (err) {
+      console.error('Email error:', err.message);
+      return res.status(500).json({ 
+        success: false, 
+        message: 'Failed to send email' 
+      });
+    }
+
+    res.json({
+      success: true,
+      message: 'Password sent to your email'
+    });
+  } catch (err) {
+    console.error('Verifier forgot-password error:', err);
+    res.status(500).json({ success: false, message: 'Server error' });
+  }
+};
+
+/**
+ * Reset verifier password
+ * POST /api/verifier/reset-password
+ */
+exports.resetPassword = async (req, res) => {
+  try {
+    const { username, oldPassword, newPassword } = req.body;
+
+    if (!username || !oldPassword || !newPassword) {
+      return res.status(400).json({ error: 'All fields are required' });
+    }
+
+    // Verify in users collection
+    const user = await User.findOne({ username, password: oldPassword, role: 'Verifier' });
+    if (!user) {
+      return res.status(401).json({ error: 'Old password is incorrect or not a verifier' });
+    }
+
+    // Update password in both collections
+    user.password = newPassword;
+    await user.save();
+
+    await Verifier.findOneAndUpdate(
+      { username },
+      { passwordHash: newPassword }
+    );
+
+    res.status(200).json({
+      success: true,
+      message: 'Password updated successfully'
+    });
+  } catch (err) {
+    console.error('Verifier password update error:', err);
+    res.status(500).json({ error: 'Failed to update password' });
+  }
+};
+
+/**
+ * Register new verifier
+ * POST /api/verifier/register
+ */
 exports.register = async (req, res) => {
   try {
     const { department, email, verifierName } = req.body;
@@ -49,7 +284,6 @@ exports.register = async (req, res) => {
     const nextId = countForDept + 1;
     const usernameBase = `${deptAbbr}Adminid${nextId}`;
 
-    const randomSuffix = generateRandomAlphanumeric(3);
     const username = usernameBase;
     const password = generateRandomAlphanumeric(8);
 
@@ -85,41 +319,7 @@ exports.register = async (req, res) => {
   }
 };
 
-// Danger: delete all verifiers and associated verifier users
-exports.deleteAll = async (_req, res) => {
-  try {
-    const verifiers = await Verifier.find({}).select('verifierId').lean();
-    const userIds = verifiers.map(v => v.verifierId).filter(Boolean);
-
-    const delVerifiers = await Verifier.deleteMany({});
-    let delUsers = { deletedCount: 0 };
-    if (userIds.length > 0) {
-      delUsers = await User.deleteMany({ _id: { $in: userIds } });
-    }
-
-    return res.json({ success: true, verifiersDeleted: delVerifiers.deletedCount || 0, usersDeleted: delUsers.deletedCount || 0 });
-  } catch (err) {
-    console.error('Verifier deleteAll error:', err);
-    return res.status(500).json({ error: 'Server error' });
-  }
-};
-
-exports.login = async (req, res) => {
-  try {
-    const { username, password } = req.body;
-    if (!username || !password) return res.status(400).json({ error: 'username and password are required' });
-
-    const user = await User.findOne({ username, password, role: 'Verifier' }).lean();
-    if (!user) return res.status(401).json({ success: false, message: 'Invalid credentials' });
-
-    const verifier = await Verifier.findOne({ username }).lean();
-    return res.json({ success: true, verifier });
-  } catch (err) {
-    console.error('Verifier login error:', err);
-    return res.status(500).json({ success: false, message: 'Server error' });
-  }
-};
-
+// Get verifier by ID
 exports.getById = async (req, res) => {
   try {
     const { id } = req.params;
@@ -132,6 +332,7 @@ exports.getById = async (req, res) => {
   }
 };
 
+// List all verifiers
 exports.listAll = async (_req, res) => {
   try {
     const rows = await Verifier.find({}).sort({ department: 1 }).lean();
@@ -169,7 +370,6 @@ exports.getRejectedPapers = async (req, res) => {
           questions: []
         };
       }
-      // Only add unique questions to avoid duplicates
       const existingQuestion = groupedPapers[key].questions.find(q => q.question_number === r.question_number);
       if (!existingQuestion) {
         groupedPapers[key].questions.push({
@@ -184,7 +384,6 @@ exports.getRejectedPapers = async (req, res) => {
     });
 
     const detailed = Object.values(groupedPapers);
-
     return res.json(detailed);
   } catch (err) {
     console.error('Get rejected papers error:', err);
@@ -219,7 +418,6 @@ exports.getApprovedPapers = async (req, res) => {
           questions: []
         };
       }
-      // Only add unique questions to avoid duplicates
       const existingQuestion = groupedPapers[key].questions.find(q => q.question_number === a.question_number);
       if (!existingQuestion) {
         groupedPapers[key].questions.push({
@@ -234,7 +432,6 @@ exports.getApprovedPapers = async (req, res) => {
     });
 
     const detailed = Object.values(groupedPapers);
-
     return res.json(detailed);
   } catch (err) {
     console.error('Get approved papers error:', err);
@@ -251,9 +448,6 @@ exports.getPapers = async (req, res) => {
 
     // REMOVE ALL FILTERING - SHOW ALL PAPERS
     const filter = {};
-    // if (department) filter.department = String(department).trim();
-    // if (semester) filter.semester = parseInt(semester, 10);
-    
     console.log('No filter applied - showing all papers');
 
     // Exclude papers already stored in rejected
@@ -271,23 +465,6 @@ exports.getPapers = async (req, res) => {
     }).sort({ subject_code: 1, semester: 1, question_number: 1 }).lean();
     
     console.log('📋 TOTAL PAPERS FOUND:', allPapers.length);
-
-    console.log('📄 Sample papers:', allPapers.slice(0, 3).map(p => ({
-      subject_code: p.subject_code,
-      semester: p.semester,
-      department: p.department,
-      status: p.status
-    })));
-    
-    // Debug: Log all papers with their department values
-    if (allPapers.length > 0) {
-      console.log('All papers department values:', allPapers.map(p => ({
-        subject_code: p.subject_code,
-        department: p.department,
-        departmentType: typeof p.department,
-        departmentLength: p.department ? p.department.length : 0
-      })));
-    }
 
     const papers = allPapers.filter(p => !rejectedKeys.has(`${p.subject_code}_${p.semester}`));
     console.log('Papers after filtering rejected:', papers.length);
@@ -324,23 +501,10 @@ exports.getPapers = async (req, res) => {
       else if (paper.status === 'rejected') groupedPapers[key].status = 'rejected';
     });
 
-    // NO ADDITIONAL FILTERING - SHOW ALL PAPERS
     let result = Object.values(groupedPapers);
+    result = result.sort((a, b) => a.subject_code.localeCompare(b.subject_code));
     
     console.log('🎯 FINAL RESULT - ALL PAPERS:', result.length, 'grouped papers');
-    
-    result = result.sort((a, b) => a.subject_code.localeCompare(b.subject_code));
-    console.log('Final result for verifier (pending papers only):', result.length, 'grouped papers');
-    
-    // Debug: Log final result structure
-    if (result.length > 0) {
-      console.log('Final result sample:', result.slice(0, 2).map(r => ({
-        subject_code: r.subject_code,
-        department: r.department,
-        questionsCount: r.questions ? r.questions.length : 0
-      })));
-    }
-    
     return res.json(result);
   } catch (err) {
     console.error('Get papers error:', err);
@@ -348,6 +512,7 @@ exports.getPapers = async (req, res) => {
   }
 };
 
+// Remove one verifier
 exports.removeOne = async (req, res) => {
   try {
     const { verifierId } = req.params;
@@ -357,16 +522,14 @@ exports.removeOne = async (req, res) => {
 
     let verifier = null;
     if (mongoose.Types.ObjectId.isValid(verifierId)) {
-      // Try by Verifier _id or by stored verifierId (linked User _id)
       verifier = await Verifier.findOne({
         $or: [
           { _id: new mongoose.Types.ObjectId(verifierId) },
           { verifierId: new mongoose.Types.ObjectId(verifierId) },
         ],
-        }).lean();
+      }).lean();
     }
     if (!verifier) {
-      // Fallback: try direct match on verifierId field (string form)
       verifier = await Verifier.findOne({ verifierId }).lean();
     }
 
@@ -374,10 +537,8 @@ exports.removeOne = async (req, res) => {
       return res.status(404).json({ error: 'Verifier not found' });
     }
 
-    // Delete the verifier document
     await Verifier.deleteOne({ _id: verifier._id });
 
-    // Delete the linked user if present
     if (verifier.verifierId) {
       const linkedId = mongoose.Types.ObjectId.isValid(verifier.verifierId)
         ? new mongoose.Types.ObjectId(verifier.verifierId)
@@ -392,6 +553,7 @@ exports.removeOne = async (req, res) => {
   }
 };
 
+// Update paper
 exports.updatePaper = async (req, res) => {
   try {
     const { subject_code: pCode, semester: pSem } = req.params;
@@ -409,7 +571,6 @@ exports.updatePaper = async (req, res) => {
 
     const normalizedCode = subject_code;
     
-    // Update each question in the paper
     const updatePromises = questions.map(async (question) => {
       const updateData = {
         approved: !!question.approved,
@@ -443,7 +604,6 @@ exports.updatePaper = async (req, res) => {
     
     await Promise.all(updatePromises);
 
-    // Enforce final status across all questions for this paper if provided
     if (finalStatus === 'approved') {
       await QuestionPaper.updateMany(
         { subject_code: { $regex: `^${normalizedCode}$`, $options: 'i' }, semester },
@@ -482,7 +642,6 @@ exports.updatePaper = async (req, res) => {
   }
 };
 
-
 // Get a single grouped paper by subject_code and semester
 exports.getPaperByCodeSemester = async (req, res) => {
   try {
@@ -499,7 +658,6 @@ exports.getPaperByCodeSemester = async (req, res) => {
       .lean();
 
     if (!papers || papers.length === 0) {
-      // Fallback: case-insensitive match
       papers = await QuestionPaper.find({ subject_code: { $regex: `^${normalizedCode}$`, $options: 'i' }, semester: sem })
         .sort({ question_number: 1 })
         .lean();
@@ -578,6 +736,7 @@ exports.getPaperDocx = async (req, res) => {
     return res.status(500).json({ error: 'Server error' });
   }
 };
+
 // Diagnostics: list approved papers
 exports.listApprovedPapers = async (_req, res) => {
   try {
@@ -600,10 +759,6 @@ exports.listRejectedPapers = async (_req, res) => {
   }
 };
 
-
-
-
-
 // Save corrected questions by verifier
 exports.saveCorrectedQuestions = async (req, res) => {
   try {
@@ -614,7 +769,6 @@ exports.saveCorrectedQuestions = async (req, res) => {
       return res.status(400).json({ error: 'subject_code, semester, corrected_questions, and verified_by are required' });
     }
 
-    // Find original questions
     const originalQuestions = await QuestionPaper.find({ 
       subject_code, 
       semester: parseInt(semester) 
@@ -624,7 +778,6 @@ exports.saveCorrectedQuestions = async (req, res) => {
       return res.status(404).json({ error: 'Original questions not found' });
     }
 
-    // Create corrected questions record
     const correctedRecord = new VerifierCorrectedQuestions({
       subject_code,
       subject_name: originalQuestions[0].subject_name,
@@ -677,13 +830,11 @@ exports.approveCorrectedQuestions = async (req, res) => {
       return res.status(400).json({ error: 'subject_code, semester, corrected_questions, and verified_by are required' });
     }
 
-    // Validate corrected_questions structure
     if (!Array.isArray(corrected_questions) || corrected_questions.length === 0) {
       console.error('Invalid corrected_questions:', corrected_questions);
       return res.status(400).json({ error: 'corrected_questions must be a non-empty array' });
     }
 
-    // Validate each question has required fields
     for (const question of corrected_questions) {
       if (!question.question_number || !question.question_text) {
         console.error('Invalid question structure:', question);
@@ -695,7 +846,6 @@ exports.approveCorrectedQuestions = async (req, res) => {
     session.startTransaction();
 
     try {
-      // Save corrected questions
       console.log('Creating VerifierCorrectedQuestions record...');
       const correctedRecord = new VerifierCorrectedQuestions({
         subject_code,
@@ -718,7 +868,6 @@ exports.approveCorrectedQuestions = async (req, res) => {
       await correctedRecord.save({ session });
       console.log('Successfully saved VerifierCorrectedQuestions record');
 
-      // Update original questions with corrections
       console.log('Updating original QuestionPaper records...');
       for (const corrected of corrected_questions) {
         console.log(`Updating question ${corrected.question_number}...`);
@@ -746,7 +895,6 @@ exports.approveCorrectedQuestions = async (req, res) => {
       }
       console.log('Successfully updated all QuestionPaper records');
 
-      // Get paper details from the first question to get subject_name and department
       const firstQuestion = await QuestionPaper.findOne({ 
         subject_code, 
         semester: parseInt(semester) 
@@ -756,15 +904,7 @@ exports.approveCorrectedQuestions = async (req, res) => {
       const department = firstQuestion?.department || '';
 
       console.log('Paper details found:', { subject_name, department });
-      console.log('Corrected questions structure:', corrected_questions.map(q => ({
-        question_number: q.question_number,
-        has_question_text: !!q.question_text,
-        has_marks: !!q.marks,
-        has_co: !!q.co,
-        has_l: !!q.l
-      })));
 
-      // Create approved paper records for each question
       const approvedPapers = corrected_questions.map(question => {
         console.log('Creating ApprovedPaper for question:', question.question_number);
         return new ApprovedPaper({
@@ -848,7 +988,6 @@ exports.rejectPaper = async (req, res) => {
     session.startTransaction();
 
     try {
-      // Find all questions for this paper
       const questions = await QuestionPaper.find({ 
         subject_code, 
         semester: parseInt(semester) 
@@ -860,7 +999,6 @@ exports.rejectPaper = async (req, res) => {
         return res.status(404).json({ error: 'Paper not found' });
       }
 
-      // Create rejected paper records for each question
       const rejectedPapers = questions.map(question => {
         return new RejectedPaper({
           question_ref: question._id,
@@ -882,10 +1020,8 @@ exports.rejectPaper = async (req, res) => {
         });
       });
 
-      // Insert all rejected papers
       await RejectedPaper.insertMany(rejectedPapers, { session });
 
-      // Update original questions status to rejected
       await QuestionPaper.updateMany(
         { subject_code, semester: parseInt(semester) },
         { 
@@ -918,9 +1054,6 @@ exports.rejectPaper = async (req, res) => {
 };
 
 // Normalize all Verifier.department values to match active Department names exactly
-// - Case-insensitive matching against active department names
-// - Only updates when a canonical match is found and value differs by case/spacing
-// - Returns a summary of updates
 exports.normalizeDepartments = async (_req, res) => {
   try {
     const activeDepts = await Department.find({ isActive: true }).select('name').lean();
@@ -970,6 +1103,29 @@ exports.normalizeDepartments = async (_req, res) => {
     });
   } catch (err) {
     console.error('Verifier normalizeDepartments error:', err);
+    return res.status(500).json({ error: 'Server error' });
+  }
+};
+
+// Danger: delete all verifiers and associated verifier users
+exports.deleteAll = async (_req, res) => {
+  try {
+    const verifiers = await Verifier.find({}).select('verifierId').lean();
+    const userIds = verifiers.map(v => v.verifierId).filter(Boolean);
+
+    const delVerifiers = await Verifier.deleteMany({});
+    let delUsers = { deletedCount: 0 };
+    if (userIds.length > 0) {
+      delUsers = await User.deleteMany({ _id: { $in: userIds } });
+    }
+
+    return res.json({ 
+      success: true, 
+      verifiersDeleted: delVerifiers.deletedCount || 0, 
+      usersDeleted: delUsers.deletedCount || 0 
+    });
+  } catch (err) {
+    console.error('Verifier deleteAll error:', err);
     return res.status(500).json({ error: 'Server error' });
   }
 };

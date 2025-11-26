@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from "react";
 import "../../common/dashboard.css";
 
-const API_BASE = process.env.REACT_APP_API_BASE_URL || 'http://localhost:5000/api';
+const API_BASE = process.env.REACT_APP_API_BASE_URL || 'http://localhost:5001/api';
 
 function SubjectsPage() {
   const [subjects, setSubjects] = useState([]);
@@ -38,8 +38,14 @@ function SubjectsPage() {
 
   // Fetch subjects
   useEffect(() => {
-    fetch(`${API_BASE}/subjects`)
-      .then((res) => res.json())
+    const token = localStorage.getItem('token');
+    fetch(`${API_BASE}/subjects`, {
+      headers: { 'Authorization': `Bearer ${token}` }
+    })
+      .then((res) => {
+        if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
+        return res.json();
+      })
       .then((data) => setSubjects(data || []))
       .catch((err) => {
         console.error("Fetch error (subjects):", err);
@@ -49,7 +55,10 @@ function SubjectsPage() {
 
   // Fetch departments from DB
   useEffect(() => {
-    fetch(`${API_BASE}/departments/active`)
+    const token = localStorage.getItem('token');
+    fetch(`${API_BASE}/departments/active`, {
+      headers: { 'Authorization': `Bearer ${token}` }
+    })
       .then((res) => {
         if (!res.ok) {
           throw new Error(`HTTP error! status: ${res.status}`);
@@ -111,9 +120,13 @@ function SubjectsPage() {
     }
 
     try {
+      const token = localStorage.getItem('token');
       const res = await fetch(`${API_BASE}/subjects`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { 
+          "Content-Type": "application/json",
+          'Authorization': `Bearer ${token}`
+        },
         body: JSON.stringify(newSubject),
       });
       const data = await res.json();
@@ -129,8 +142,14 @@ function SubjectsPage() {
         setShowForm(false);
         
         // Refresh subjects data without page reload
-        fetch(`${API_BASE}/subjects`)
-          .then((res) => res.json())
+        const token = localStorage.getItem('token');
+        fetch(`${API_BASE}/subjects`, {
+          headers: { 'Authorization': `Bearer ${token}` }
+        })
+          .then((res) => {
+            if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
+            return res.json();
+          })
           .then((data) => setSubjects(data || []))
           .catch((err) => {
             console.error("Fetch error (subjects):", err);
@@ -148,11 +167,20 @@ function SubjectsPage() {
   // Delete subject
   const handleDelete = (id) => {
     if (window.confirm("Delete this subject?")) {
-      fetch(`${API_BASE}/subjects/${id}`, { method: "DELETE" })
+      const token = localStorage.getItem('token');
+      fetch(`${API_BASE}/subjects/${id}`, { 
+        method: "DELETE",
+        headers: { 'Authorization': `Bearer ${token}` }
+      })
         .then(() => {
           // Refresh subjects data without page reload
-          fetch(`${API_BASE}/subjects`)
-            .then((res) => res.json())
+          fetch(`${API_BASE}/subjects`, {
+            headers: { 'Authorization': `Bearer ${token}` }
+          })
+            .then((res) => {
+              if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
+              return res.json();
+            })
             .then((data) => setSubjects(data || []))
             .catch((err) => {
               console.error("Fetch error (subjects):", err);

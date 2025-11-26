@@ -55,8 +55,6 @@ exports.assignedSubjects = async (_req, res) => {
     const rows = await Assignment.aggregate([
       { $lookup: { from: 'users', localField: 'email', foreignField: 'email', as: 'user' } },
       { $unwind: '$user' },
-      { $lookup: { from: 'subjects', localField: 'subject_code', foreignField: 'subject_code', as: 'subject' } },
-      { $unwind: { path: '$subject', preserveNullAndEmptyArrays: true } },
       { $sort: { subject_code: 1, submit_date: -1 } },
     ]);
 
@@ -65,9 +63,6 @@ exports.assignedSubjects = async (_req, res) => {
       if (!grouped[row.subject_code]) {
         grouped[row.subject_code] = {
           subject_code: row.subject_code,
-          subject_name: row.subject?.subject_name || '',
-          department: row.subject?.department || '',
-          semester: row.subject?.semester || null,
           submit_date: row.submit_date,
           assigned_at: row.assigned_at,
           assignees: [],
@@ -242,6 +237,40 @@ exports.updateAssignmentStatus = async (req, res) => {
   } catch (err) {
     console.error('Error updating assignment status:', err);
     res.status(500).json({ error: 'Failed to update assignment status' });
+  }
+};
+
+// Get recent assignments for notifications
+exports.getRecentAssignments = async (req, res) => {
+  try {
+    const assignments = await Assignment.aggregate([
+      { $lookup: { from: 'users', localField: 'email', foreignField: 'email', as: 'user' } },
+      { $unwind: '$user' },
+      { $sort: { assigned_at: -1 } },
+      { $limit: 50 },
+      { $project: {
+        _id: 1,
+        subjectCode: '$subject_code',
+        submitDate: '$submit_date',
+        assignedDate: { $dateToString: { format: '%Y-%m-%d', date: '$assigned_at' } },
+        completedAt: { $cond: { if: { $eq: ['$status', 'submitted'] }, then: { $dateToString: { format: '%Y-%m-%d', date: '$submitted_at' } }, else: null } },
+        status: {
+          $cond: {
+            if: { $eq: ['$status', 'submitted'] },
+            then: 'Completed',
+            else: 'Pending'
+          }
+        },
+        facultyNames: ['$user.name'],
+        department: '$user.deptName',
+        deadline: { $dateToString: { format: '%Y-%m-%d', date: '$submit_date' } }
+      } }
+    ]);
+
+    res.json(assignments);
+  } catch (err) {
+    console.error('Error fetching recent assignments:', err);
+    res.status(500).json({ error: 'Failed to fetch recent assignments' });
   }
 };
 
