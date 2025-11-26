@@ -4,6 +4,7 @@ import "../../common/dashboard.css";
 import { Link } from 'react-router-dom';
 import axios from 'axios';
 
+const API_BASE = process.env.REACT_APP_API_BASE_URL || 'http://localhost:5001/api';
 
 function FacultyDashboard() {
   const navigate = useNavigate();
@@ -60,6 +61,12 @@ function FacultyDashboard() {
     if (!email) return;
     try {
       setAssignmentsLoading(true);
+      
+//commented due to Conflicts 
+//       console.log(`📥 Fetching assignments for: ${email}`);
+//       const response = await axios.get(`${API_BASE}/faculty/assignments/${email}`);
+//       console.log('✅ Assignments fetched:', response.data);
+
       const token = localStorage.getItem("token");
       if (!token) {
         throw new Error("Missing authentication token");
@@ -74,9 +81,10 @@ function FacultyDashboard() {
           },
         }
       );
+
       setAssignments(response.data.assignments || []);
     } catch (error) {
-      console.error('Error fetching assignments:', error);
+      console.error('❌ Error fetching assignments:', error.response?.data || error.message);
       setAssignments([]);
     } finally {
       setAssignmentsLoading(false);
@@ -150,7 +158,7 @@ function FacultyDashboard() {
     }
 
     try {
-      const res = await fetch("http://localhost:5000/api/faculty/reset-password", {
+      const res = await fetch(`${API_BASE}/faculty/reset-password`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({

@@ -15,6 +15,7 @@ router.use('/api/verifier', require('./verifier'));
 router.use('/api/mbafaculty', require('./mbafaculty'));
 router.use('/api/mbaverifier', require('./mbaverifier'));
 router.use('/api', require('./papers')); // Question Paper Approval System routes
+
 router.post('/api/assignQPSetter', verifyToken, isSuperAdmin, require('../controllers/assignmentController').assignQPSetter);
 router.get('/api/assignedSubjects', verifyToken, isSuperAdmin, require('../controllers/assignmentController').assignedSubjects);
 router.get('/api/assignments/:subjectCode', verifyToken, isSuperAdmin, require('../controllers/assignmentController').assignmentsBySubject);
@@ -30,6 +31,7 @@ router.get('/api/mbafaculty/assignments/:email', verifyToken, authorize('SuperAd
 router.get('/api/mbafaculty/subject-codes/:email', verifyToken, authorize('SuperAdmin', 'Faculty', 'MBAFaculty'), require('../controllers/mbaAssignmentController').getFacultySubjectCodes);
 router.post('/api/mbaassignment/update-status', verifyToken, authorize('SuperAdmin', 'Faculty', 'MBAFaculty'), require('../controllers/mbaAssignmentController').updateAssignmentStatus);
 router.get('/api/mbarecent-assignments', verifyToken, isSuperAdmin, require('../controllers/mbaAssignmentController').getRecentAssignments);
+
 // Compatibility alias for legacy frontend route
 router.get('/api/subject-codes', verifyToken, authorize('SuperAdmin', 'Faculty', 'Verifier'), require('../controllers/subjectController').subjectCodes);
 // Test DB endpoint

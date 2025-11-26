@@ -493,7 +493,7 @@ exports.getPapers = async (req, res) => {
         approved: paper.approved,
         remarks: paper.remarks,
         verified_at: paper.verified_at,
-        file_url: paper.file_name ? `/api/question-bank/file/${paper._id}` : null,
+        file_url: paper.file_name ? `/question-bank/file/${paper._id}` : null,
         file_name: paper.file_name
       });
 
