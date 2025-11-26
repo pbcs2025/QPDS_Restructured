@@ -22,12 +22,34 @@ function FacultyDashboard() {
   const [showOld, setShowOld] = useState(false);
   const [showNew, setShowNew] = useState(false);
   
+  const API_BASE = process.env.REACT_APP_API_BASE_URL || 'http://localhost:5001/api';
 
   const handleLogoutClick = () => setShowConfirm(true);
-  const confirmLogout = () => {
+  const confirmLogout = async () => {
     setShowConfirm(false);
+    
+    // Call logout API endpoint
+    try {
+      const token = localStorage.getItem("token");
+      
+      if (token) {
+        await fetch(`${API_BASE}/faculty/logout`, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          }
+        });
+      }
+    } catch (error) {
+      console.error('Logout API error:', error);
+      // Continue with logout even if API call fails
+    }
+    
+    // Clear local storage
     localStorage.removeItem("faculty_username");
     localStorage.removeItem("faculty_data");
+    localStorage.removeItem("token");
     navigate("/");
   };
   const cancelLogout = () => setShowConfirm(false);

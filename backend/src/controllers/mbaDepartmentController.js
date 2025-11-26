@@ -1,102 +1,82 @@
-const MbaDepartment = require('../models/MbaDepartment');
+//controllers/mbaDepartmentController.js
+const MBADepartment = require('../models/mbaDepartment');
 
-// Get all active MBA departments
-exports.getActiveMbaDepartments = async (req, res) => {
+//GET all MBA departments
+exports.list = async (_req, res) => {
   try {
-    const departments = await MbaDepartment.find({ isActive: true })
-      .select('name code')
-      .sort({ name: 1 })
-      .lean();
-    
-    res.json(departments);
-  } catch (error) {
-    console.error('Error fetching MBA departments:', error);
-    res.status(500).json({ error: 'Failed to fetch MBA departments' });
+    const rows = await MBADepartment.find({}).sort({ name: 1 }).lean();
+    const result = rows.map(r => ({
+      id: r._id.toString(),
+      name: r.name,
+      isActive: r.isActive,
+      color: r.color,
+      createdAt: r.createdAt,
+    }));
+    console.log('LIST: Mapped result:', result.length);
+    res.json(result);
+  } catch (err) {
+    console.error('Error fetching MBA departments:', err);
+    res.status(500).json({ error: 'Failed to fetch MBA departments', details: err.message });
   }
 };
 
-// Get all MBA departments (including inactive)
-exports.getAllMbaDepartments = async (req, res) => {
+// GET active MBA departments
+exports.active = async (_req, res) => {
   try {
-    const departments = await MbaDepartment.find({})
-      .sort({ name: 1 })
-      .lean();
-    
-    res.json(departments);
-  } catch (error) {
-    console.error('Error fetching all MBA departments:', error);
-    res.status(500).json({ error: 'Failed to fetch MBA departments' });
+    const rows = await MBADepartment.find({ isActive: true }).sort({ name: 1 }).lean();
+    res.json(rows.map(r => ({ id: r._id, name: r.name, color: r.color, createdAt: r.createdAt})));
+  } catch (err) {
+    console.error('Error fetching active MBA departments:', err);
+    res.status(500).json({ error: 'Failed to fetch active MBA departments' });
   }
 };
 
-// Create a new MBA department
-exports.createMbaDepartment = async (req, res) => {
+// POST add new MBA department
+exports.create = async (req, res) => {
+  const { name, isActive, color } = req.body;
+  if (!name) return res.status(400).json({ error: 'Department name is required' });
   try {
-    const { name, code, isActive } = req.body;
-    
-    if (!name) {
-      return res.status(400).json({ error: 'Department name is required' });
-    }
-    
-    const department = await MbaDepartment.create({
-      name,
-      code: code || '',
-      isActive: isActive !== undefined ? isActive : true
+    await MBADepartment.create({ 
+      name, 
+      isActive: isActive !== undefined ? isActive : true,
+      color: color || '#6c757d' // Default gray color if not provided
     });
-    
-    res.status(201).json({ 
-      message: 'MBA department created successfully', 
-      department 
-    });
-  } catch (error) {
-    if (error.code === 11000) {
-      return res.status(409).json({ error: 'Department with this name already exists' });
+    res.status(201).json({ message: 'MBA Department added successfully' });
+  } catch (err) {
+    console.error('Error adding MBA department:', err);
+    if (err.code === 11000) {
+      return res.status(409).json({ error: 'A department with this name already exists' });
     }
-    console.error('Error creating MBA department:', error);
-    res.status(500).json({ error: 'Failed to create MBA department' });
+    res.status(500).json({ error: 'Failed to add MBA department' });
   }
 };
 
-// Update an MBA department
-exports.updateMbaDepartment = async (req, res) => {
+// PUT update MBA department
+exports.update = async (req, res) => {
+  const { id } = req.params;
+  const { newDepartment, isActive, color } = req.body;
+  if (!newDepartment && isActive === undefined && !color) return res.status(400).json({ error: 'Nothing to update' });
   try {
-    const { id } = req.params;
-    const { name, code, isActive } = req.body;
-    
-    const department = await MbaDepartment.findByIdAndUpdate(
-      id,
-      { name, code, isActive },
-      { new: true, runValidators: true }
-    );
-    
-    if (!department) {
-      return res.status(404).json({ error: 'MBA department not found' });
-    }
-    
-    res.json({ 
-      message: 'MBA department updated successfully', 
-      department 
-    });
-  } catch (error) {
-    console.error('Error updating MBA department:', error);
+    const update = {};
+    if (newDepartment) update.name = newDepartment;
+    if (isActive !== undefined) update.isActive = isActive;
+    if (color) update.color = color;
+    await MBADepartment.findByIdAndUpdate(id, update);
+    res.json({ message: 'MBA Department updated successfully' });
+  } catch (err) {
+    console.error('Error updating MBA department:', err);
     res.status(500).json({ error: 'Failed to update MBA department' });
   }
 };
 
-// Delete an MBA department
-exports.deleteMbaDepartment = async (req, res) => {
+// DELETE MBA department
+exports.remove = async (req, res) => {
+  const { id } = req.params;
   try {
-    const { id } = req.params;
-    
-    const department = await MbaDepartment.findByIdAndDelete(id);
-    
-    if (!department) {
-      return res.status(404).json({ error: 'MBA department not found' });
-    }
-    
-    res.json({ message: 'MBA department deleted successfully' });
-  } catch (error) {
-    console.error('Error deleting MBA department:', error);
+    await MBADepartment.findByIdAndDelete(id);
+    res.json({ message: 'MBA Department deleted successfully' });
+  } catch (err) {
+    console.error('Error deleting MBA department:', err);
     res.status(500).json({ error: 'Failed to delete MBA department' });
   }
 };

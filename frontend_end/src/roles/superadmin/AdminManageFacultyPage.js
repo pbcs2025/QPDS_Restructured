@@ -28,10 +28,14 @@ function AdminManageFacultyPage() {
     setMessage("");
     setUploadResult(null);
     try {
+      const token = localStorage.getItem('token');
       const formData = new FormData();
       formData.append('file', selectedFile);
       const res = await fetch(`${API_BASE}/faculty/bulk-upload`, {
         method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`
+        },
         body: formData
       });
       const contentType = res.headers.get('content-type') || '';
