@@ -18,6 +18,10 @@ async function generateUniqueUsername(baseName) {
   }
 }
 
+function escapeRegex(str = '') {
+  return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
 /**
  * Register a new user (Faculty or External)
  * POST /register
@@ -269,6 +273,64 @@ exports.verify = async (req, res) => {
     res.status(500).json({ 
       success: false, 
       message: 'Server error. Please try again.' 
+    });
+  }
+};
+
+/**
+ * Resolve identifier (username/email) to stored role so frontend can pick correct auth flow.
+ * POST /resolve-role
+ */
+exports.resolveRole = async (req, res) => {
+  try {
+    const identifier = req.body?.identifier;
+    if (!identifier || !identifier.trim()) {
+      return res.status(400).json({
+        success: false,
+        message: 'Identifier (username or email) is required',
+      });
+    }
+
+    const trimmed = identifier.trim();
+    const looksLikeEmail = trimmed.includes('@');
+
+    let user =
+      (await User.findOne({ username: trimmed }).lean()) ||
+      (await User.findOne({
+        username: { $regex: `^${escapeRegex(trimmed)}$`, $options: 'i' },
+      }).lean());
+
+    if (!user && looksLikeEmail) {
+      user = await User.findOne({ email: trimmed.toLowerCase() }).lean();
+    }
+
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: 'Account not found with the provided identifier.',
+      });
+    }
+
+    const role = user.role || 'Faculty';
+    const requiresOtp = role === 'Faculty' || role === 'MBAFaculty';
+
+    return res.json({
+      success: true,
+      role,
+      username: user.username,
+      email: user.email,
+      usertype: user.usertype,
+      name: user.name,
+      department: user.deptName,
+      clgName: user.clgName,
+      requiresOtp,
+      isMBA: /^MBA/.test(role),
+    });
+  } catch (err) {
+    console.error('resolveRole error:', err);
+    return res.status(500).json({
+      success: false,
+      message: 'Failed to resolve role. Please try again later.',
     });
   }
 };

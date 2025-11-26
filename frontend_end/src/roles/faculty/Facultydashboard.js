@@ -49,16 +49,31 @@ function FacultyDashboard() {
     // Clear local storage
     localStorage.removeItem("faculty_username");
     localStorage.removeItem("faculty_data");
+    localStorage.removeItem("faculty_role");
     localStorage.removeItem("token");
     navigate("/");
   };
   const cancelLogout = () => setShowConfirm(false);
 
   // Fetch faculty assignments
-  const fetchAssignments = async (email) => {
+  const fetchAssignments = async (email, role = 'Faculty') => {
+    if (!email) return;
     try {
       setAssignmentsLoading(true);
-      const response = await axios.get(`http://localhost:5000/api/faculty/assignments/${email}`);
+      const token = localStorage.getItem("token");
+      if (!token) {
+        throw new Error("Missing authentication token");
+      }
+
+      const routePrefix = role === 'MBAFaculty' ? 'mbafaculty' : 'faculty';
+      const response = await axios.get(
+        `${API_BASE}/${routePrefix}/assignments/${encodeURIComponent(email)}`,
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        }
+      );
       setAssignments(response.data.assignments || []);
     } catch (error) {
       console.error('Error fetching assignments:', error);
@@ -72,11 +87,13 @@ function FacultyDashboard() {
   useEffect(() => {
     const storedFacultyData = localStorage.getItem("faculty_data");
     if (storedFacultyData) {
-      const data = JSON.parse(storedFacultyData);
-      setFacultyData(data);
+      const parsed = JSON.parse(storedFacultyData);
+      const storedRole = parsed.role || localStorage.getItem("faculty_role") || 'Faculty';
+      const normalizedData = { ...parsed, role: storedRole };
+      setFacultyData(normalizedData);
       // Fetch assignments for this faculty member
-      if (data.email) {
-        fetchAssignments(data.email);
+      if (normalizedData.email) {
+        fetchAssignments(normalizedData.email, storedRole);
       }
     } else {
       // If no stored data, redirect to login

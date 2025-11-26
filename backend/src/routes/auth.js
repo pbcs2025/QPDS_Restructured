@@ -29,6 +29,12 @@ router.post('/register', ctrl.register);
 router.post('/login', ctrl.login);
 
 /**
+ * Resolve identifier to user role for dynamic login flows
+ * Access: Public
+ */
+router.post('/resolve-role', ctrl.resolveRole);
+
+/**
  * Super Admin Login - direct authentication
  * Access: Public
  */

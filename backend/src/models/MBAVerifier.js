@@ -16,5 +16,5 @@ const MBAVerifierSchema = new mongoose.Schema(
 
 // Allow multiple verifiers per department; keep username unique
 
-module.exports = mongoose.models.MBAVerifier || mongoose.model('MBAVerifier', MBAVerifierSchema);
+module.exports = mongoose.models.MBAVerifier || mongoose.model('mbaverifiers', MBAVerifierSchema);
 
