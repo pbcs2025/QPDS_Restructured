@@ -16,6 +16,8 @@ const QuestionPapers = () => {
   const [showApprovedPapers, setShowApprovedPapers] = useState(false);
   const [approvedPapers, setApprovedPapers] = useState([]);
   const [verifierRemarks, setVerifierRemarks] = useState('');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [filtersActive, setFiltersActive] = useState(false);
 
   // Initialize department from logged-in verifier
   useEffect(() => {
@@ -34,8 +36,7 @@ const QuestionPapers = () => {
     try {
       setLoading(true);
       
-      console.log('🔄 FETCHING ALL PAPERS - NO FILTERING');
-      console.log('⚠️  FILTERING DISABLED - SHOWING ALL PAPERS');
+      console.log('🔄 FETCHING PAPERS (client-side will filter by department)');
       
       // NO FILTERING - GET ALL PAPERS
       const response = await fetch(`${API_BASE}/verifier/papers`, {
@@ -479,6 +480,12 @@ const QuestionPapers = () => {
                         🖼️ Diagram/Image Attachment
                       </div>
                       <img
+                        src={question.file_url}
+                        alt={question.file_name || 'attachment'}
+                        style={{ maxWidth: '100%', maxHeight: '400px', borderRadius: '8px', border: '1px solid #e9edf3', objectFit: 'contain' }}
+                        onError={(e) => {
+                          console.error('Image load error:', question.file_name);
+                          e.target.style.display = 'none';
                         src={`${API_BASE}${question.file_url}`}
                         alt={question.file_name || 'diagram attachment'}
                         style={{ 
@@ -858,6 +865,22 @@ const QuestionPapers = () => {
   return (
     <div style={{ padding: '20px', position: 'relative' }}>
       <h1>Question Papers</h1>
+      <div style={{ marginTop: '10px', marginBottom: '20px' }}>
+        <input
+          type="text"
+          placeholder="Search by subject code or name..."
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+          style={{
+            width: '100%',
+            minWidth: '60%',
+            padding: '10px',
+            border: '1px solid #ced4da',
+            borderRadius: '6px',
+            fontSize: '14px'
+          }}
+        />
+      </div>
       
       {/* Department (from verifier) and optional Semester filter */}
       <div style={{ 
@@ -902,9 +925,13 @@ const QuestionPapers = () => {
             </select>
           </div>
           
-          <div>
+          <div style={{ display: 'flex', gap: '10px' }}>
             <button
-              onClick={fetchPapers}
+              onClick={() => {
+                // Optionally refresh papers then apply filters
+                fetchPapers();
+                setFiltersActive(true);
+              }}
               disabled={!selectedDepartment}
               style={{
                 padding: '8px 20px',
@@ -917,6 +944,24 @@ const QuestionPapers = () => {
               }}
             >
               Search Papers
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setFiltersActive(false);
+                setSelectedSemester('');
+              }}
+              style={{
+                padding: '8px 14px',
+                backgroundColor: '#6c757d',
+                color: 'white',
+                border: 'none',
+                borderRadius: '4px',
+                cursor: 'pointer',
+                fontSize: '14px'
+              }}
+            >
+              Clear Filters
             </button>
           </div>
         </div>
@@ -931,14 +976,37 @@ const QuestionPapers = () => {
         <>
           <div style={{ marginBottom: '15px' }}>
             <h3 style={{ color: '#495057', margin: '0' }}>
-              📋 ALL QUESTION PAPERS (NO FILTERING)
+              {filtersActive ? '🔎 FILTERED QUESTION PAPERS' : '📋 QUESTION PAPERS'}
             </h3>
             <p style={{ color: '#666', fontSize: '14px' }}>
-              Showing all submitted papers from all departments and semesters
+              {`Showing papers for department: ${selectedDepartment || '—'}${filtersActive && selectedSemester ? `, Semester ${selectedSemester}` : ''}`}
             </p>
           </div>
           
-        <table style={{ width: '100%', borderCollapse: 'separate', borderSpacing: 0, border: '1px solid #e1e7ef', borderRadius: '10px', overflow: 'hidden' }}>
+        {(() => {
+          const q = (searchQuery || '').toLowerCase();
+          const normalize = (s) => String(s || '').trim().toLowerCase();
+          const targetDept = normalize(selectedDepartment);
+          const filteredPapers = (papers || [])
+            .filter((paper) => {
+              // Always filter by logged-in verifier's department when available
+              const paperDept = normalize(paper.department || paper.deptName || paper.department_name);
+              if (!targetDept) return true; // if department not set, show all
+              return paperDept === targetDept;
+            })
+            .filter((paper) => {
+              // Apply semester filter only when activated
+              if (!filtersActive) return true;
+              if (!selectedSemester) return true;
+              return String(paper.semester) === String(selectedSemester);
+            })
+            .filter((paper) => {
+              const code = (paper.subject_code || paper.subjectCode || '').toLowerCase();
+              const name = (paper.subject_name || paper.subjectName || '').toLowerCase();
+              return code.includes(q) || name.includes(q);
+            });
+          return (
+            <table style={{ width: '100%', borderCollapse: 'separate', borderSpacing: 0, border: '1px solid #e1e7ef', borderRadius: '10px', overflow: 'hidden' }}>
           <thead>
             <tr style={{ backgroundColor: '#eef2f7' }}>
               <th style={{ padding: '14px 12px', textAlign: 'left', color: '#5b6777', fontWeight: 700, letterSpacing: '0.3px', borderRight: '1px solid #e1e7ef' }}>Subject</th>
@@ -950,7 +1018,7 @@ const QuestionPapers = () => {
             </tr>
           </thead>
           <tbody>
-            {(papers || []).map((paper, index) => (
+            {filteredPapers.map((paper, index) => (
               <tr key={paper._id || index} style={{ backgroundColor: '#5f6f81', color: '#ffffff' }}>
                 <td style={{ padding: '14px 12px', borderTop: '1px solid #e1e7ef', borderRight: '1px solid #e1e7ef', fontWeight: 600 }}>
                   {paper.subject_name}
@@ -998,6 +1066,8 @@ const QuestionPapers = () => {
             ))}
           </tbody>
         </table>
+          );
+        })()}
         </>
       )}
       

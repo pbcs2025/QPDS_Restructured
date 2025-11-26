@@ -109,7 +109,7 @@ exports.create = async (req, res) => {
       question_text,
       co: co || '',
       level: level || '',
-      marks: typeof marks === 'number' ? marks : 0,
+      marks: typeof marks === 'number' ? marks : (parseInt(marks, 10) || 0),
       department: derivedDept || '',
       file_name: file ? file.originalname : null,
       file_type: file ? file.mimetype : null,
@@ -227,6 +227,9 @@ exports.list = async (_req, res) => {
 
     const withUrls = results.map(q => ({
       ...q,
+      // Use a relative path (no /api prefix) because the frontend
+      // constructs the absolute URL as `${API_BASE}${file_url}` and
+      // `API_BASE` already includes `/api`.
       file_url: q.file_name ? `/question-bank/file/${q._id}` : null,
     }));
 
