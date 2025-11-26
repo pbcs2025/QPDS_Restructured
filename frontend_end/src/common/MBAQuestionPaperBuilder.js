@@ -31,6 +31,7 @@ function MBAQuestionPaperBuilder({
   return (
     <div className="mba-builder">
       <div className="mba-instructions-banner">
+        <p>Note:Answer any Four full question from Q.N0.1 to 7 and Q.No.8 is compulsory</p>
         
       </div>
 

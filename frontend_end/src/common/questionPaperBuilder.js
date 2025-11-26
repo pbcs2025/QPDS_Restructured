@@ -44,7 +44,7 @@ function QuestionPaperBuilder() {
   const [mbaQuestions, setMbaQuestions] = useState(() =>
     createInitialMBAQuestions()
   );
-  
+
   // Quill Editor state
   const [editorOpen, setEditorOpen] = useState(false);
   const [editorContent, setEditorContent] = useState("");
@@ -89,11 +89,11 @@ function QuestionPaperBuilder() {
       reader.readAsDataURL(file);
       reader.onload = () =>
         resolve({
-          data: reader.result,
-          name: file.name,
-          type: file.type,
+        data: reader.result,
+        name: file.name,
+        type: file.type,
           size: file.size,
-        });
+      });
       reader.onerror = (error) => reject(error);
     });
 
@@ -156,13 +156,13 @@ function QuestionPaperBuilder() {
             setSemester(draftData.semester || "");
             setInstructions(draftData.instructions || "");
             setCOs(draftData.cos || ["CO1"]);
-
+            
             const modulesWithFiles = await Promise.all(
               (draftData.modules || []).map(async (mod) => ({
-                ...mod,
+              ...mod,
                 questions: await Promise.all(
                   (mod.questions || []).map(async (q) => ({
-                    ...q,
+                ...q,
                     image:
                       q.image && typeof q.image === "object" && q.image.data
                         ? base64ToFile(q.image)
@@ -170,7 +170,7 @@ function QuestionPaperBuilder() {
                     subQuestions: q.subQuestions
                       ? await Promise.all(
                           (q.subQuestions || []).map(async (sub) => ({
-                            ...sub,
+                  ...sub,
                             image:
                               sub.image &&
                               typeof sub.image === "object" &&
@@ -213,7 +213,7 @@ function QuestionPaperBuilder() {
                   }))
                 )
               : createInitialMBAQuestions();
-
+            
             setModules(modulesWithFiles);
             setMbaQuestions(
               mbaQuestionsWithFiles.length === 8
@@ -315,10 +315,10 @@ function QuestionPaperBuilder() {
   // Create a question with NO sub-questions initially (Option B behavior)
   const createBEQuestionEmpty = (labelNumber) => ({
     label: `${labelNumber}`,
-    text: "",
-    co: "",
-    level: "",
-    image: null,
+      text: "",
+      co: "",
+      level: "",
+      image: null,
     marks: 20, // main marks default when no subquestions
     subQuestions: [], // start empty
   });
@@ -332,7 +332,7 @@ function QuestionPaperBuilder() {
     }
     const baseQuestionNumber = modules.length * 2 + 1;
     const newModule = {
-      title: `Module ${modules.length + 1}`,
+        title: `Module ${modules.length + 1}`,
       questions: [
         createBEQuestionEmpty(baseQuestionNumber),
         createBEQuestionEmpty(baseQuestionNumber + 1),
@@ -360,7 +360,7 @@ function QuestionPaperBuilder() {
       image: null,
     });
     // disable main marks/text while sub-questions exist
-    question.marks = "";
+      question.marks = "";
     question.text = "";
     setModules(updatedModules);
   };
@@ -380,7 +380,7 @@ function QuestionPaperBuilder() {
     if (isSubmitted) return;
     const updatedModules = [...modules];
     const question = updatedModules[modIndex].questions[qIndex];
-
+    
     // if updating marks, ensure numbers
     if (key === "marks") {
       const newMarks = value === "" ? "" : parseInt(value, 10);
@@ -518,17 +518,17 @@ function QuestionPaperBuilder() {
   const saveDraftToLocalStorage = async () => {
     try {
       const draftKey = `questionPaper_draft_${facultyEmail}`;
-
+      
       const modulesForStorage = await Promise.all(
         modules.map(async (mod) => ({
-          ...mod,
+        ...mod,
           questions: await Promise.all(
             (mod.questions || []).map(async (q) => ({
-              ...q,
-              image: q.image instanceof File ? await fileToBase64(q.image) : q.image,
+          ...q,
+          image: q.image instanceof File ? await fileToBase64(q.image) : q.image,
               subQuestions: q.subQuestions
                 ? await Promise.all((q.subQuestions || []).map(async (sub) => ({
-                    ...sub,
+            ...sub,
                     image: sub.image instanceof File ? await fileToBase64(sub.image) : sub.image,
                   })))
                 : [],
@@ -542,12 +542,12 @@ function QuestionPaperBuilder() {
           ...question,
           image: question.image instanceof File ? await fileToBase64(question.image) : question.image,
           subQuestions: await Promise.all((question.subQuestions || []).map(async (sub) => ({
-            ...sub,
+              ...sub,
             image: sub.image instanceof File ? await fileToBase64(sub.image) : sub.image,
           }))),
         }))
       );
-
+      
       const draftData = {
         subject,
         subjectCode,
@@ -561,7 +561,7 @@ function QuestionPaperBuilder() {
         isSubmitted,
         lastSavedAt: new Date().toISOString(),
       };
-
+      
       localStorage.setItem(draftKey, JSON.stringify(draftData));
       setLastSavedAt(new Date().toISOString());
       console.log("Draft saved to localStorage");
@@ -580,6 +580,75 @@ function QuestionPaperBuilder() {
         return;
       }
 
+      // Helper to convert any image format to File
+      const convertImageToFile = (image) => {
+        if (!image) return null;
+        
+        // Already a File - return as is
+        if (image instanceof File) {
+          return image;
+        }
+        
+        // Base64 object from localStorage (has data, name, type properties)
+        if (typeof image === "object" && image !== null && !Array.isArray(image)) {
+          if (image.data && typeof image.data === "string") {
+            try {
+              const base64Data = image.data;
+              const matches = base64Data.match(/^data:([^;]+);base64,(.+)$/);
+              if (matches) {
+                const mimeType = matches[1];
+                const base64String = matches[2];
+                const byteCharacters = atob(base64String);
+                const byteNumbers = new Array(byteCharacters.length);
+                for (let i = 0; i < byteCharacters.length; i++) {
+                  byteNumbers[i] = byteCharacters.charCodeAt(i);
+                }
+                const byteArray = new Uint8Array(byteNumbers);
+                const fileName = image.name || `image_${Date.now()}.${mimeType.split('/')[1] || 'png'}`;
+                return new File([byteArray], fileName, { type: mimeType });
+              }
+            } catch (err) {
+              console.error("Error converting base64 object to File:", err);
+              return null;
+            }
+          } else {
+            // Try using base64ToFile function if it exists
+            try {
+              const file = base64ToFile(image);
+              if (file instanceof File) {
+                return file;
+              }
+            } catch (err) {
+              console.error("base64ToFile failed:", err);
+            }
+          }
+        }
+        
+        // Base64 string directly
+        if (typeof image === "string" && image.startsWith("data:")) {
+          try {
+            const matches = image.match(/^data:([^;]+);base64,(.+)$/);
+            if (matches) {
+              const mimeType = matches[1];
+              const base64String = matches[2];
+              const byteCharacters = atob(base64String);
+              const byteNumbers = new Array(byteCharacters.length);
+              for (let i = 0; i < byteCharacters.length; i++) {
+                byteNumbers[i] = byteCharacters.charCodeAt(i);
+              }
+              const byteArray = new Uint8Array(byteNumbers);
+              const fileName = `image_${Date.now()}.${mimeType.split('/')[1] || 'png'}`;
+              return new File([byteArray], fileName, { type: mimeType });
+            }
+          } catch (err) {
+            console.error("Error converting base64 string to File:", err);
+            return null;
+          }
+        }
+        
+        return null;
+      };
+
       const submitQuestionToServer = async ({
         questionNumber,
         questionText,
@@ -588,8 +657,11 @@ function QuestionPaperBuilder() {
         marks,
         image,
       }) => {
-        if (!questionText || !questionText.trim()) return;
+        if (!questionText || !questionText.trim()) {
+          return { success: false, error: "Empty question text", questionNumber };
+        }
 
+        try {
         const formData = new FormData();
         formData.append("subject_code", subjectCode);
         formData.append("subject_name", subject);
@@ -602,19 +674,37 @@ function QuestionPaperBuilder() {
         formData.append("faculty_email", facultyEmail);
         formData.append("exam_type", examType);
 
-        if (image && image instanceof File) {
-          formData.append("file", image);
-        }
+          // Convert and append image if it exists
+          if (image) {
+            const imageFile = convertImageToFile(image);
+            if (imageFile) {
+              formData.append("file", imageFile);
+              console.log(`📷 Image attached for ${questionNumber}`);
+            }
+          }
 
-        try {
           const response = await axios.post(`${API_BASE}/question-bank`, formData, {
-            headers: { "Content-Type": "multipart/form-data" },
+              headers: { "Content-Type": "multipart/form-data" },
           });
-          console.log(`Saved: ${questionNumber}`, response.data);
+          console.log(`✅ Saved: ${questionNumber}`, response.data);
+          return { success: true, questionNumber, data: response.data };
         } catch (error) {
-          console.error(`Error saving ${questionNumber}:`, error.response?.data || error.message);
-          throw new Error(`Failed to save ${questionNumber}`);
+          const errorMessage = error.response?.data?.message || error.response?.data?.error || error.message || "Unknown error";
+          const errorDetails = error.response?.data || {};
+          console.error(`❌ Error saving ${questionNumber}:`, errorDetails);
+          return { 
+            success: false, 
+            questionNumber, 
+            error: errorMessage,
+            details: errorDetails
+          };
         }
+      };
+
+      // Track submission results
+      const results = {
+        success: [],
+        failed: []
       };
 
       if (examType === "BE/MTECH") {
@@ -624,26 +714,39 @@ function QuestionPaperBuilder() {
             if (q.subQuestions && q.subQuestions.length > 0) {
               for (let sub of q.subQuestions) {
                 if (sub.text && sub.text.trim() !== "") {
-                  await submitQuestionToServer({
-                    questionNumber: `${q.label}${sub.label}`,
+                  const questionNumber = `${q.label}${sub.label}`;
+                  console.log(`Submitting ${questionNumber}...`);
+                  const result = await submitQuestionToServer({
+                    questionNumber,
                     questionText: sub.text,
                     co: q.co || "",
                     level: q.level || "",
                     marks: parseInt(sub.marks, 10) || 0,
                     image: sub.image,
                   });
+                  if (result.success) {
+                    results.success.push(questionNumber);
+                  } else {
+                    results.failed.push({ questionNumber, error: result.error });
+                  }
                 }
               }
             } else {
               if (q.text && q.text.trim() !== "") {
-                await submitQuestionToServer({
-                  questionNumber: q.label,
-                  questionText: q.text,
+                const questionNumber = q.label;
+                const result = await submitQuestionToServer({
+                  questionNumber,
+                questionText: q.text,
                   co: q.co || "",
                   level: q.level || "",
-                  marks: q.marks || 20,
-                  image: q.image,
-                });
+                marks: q.marks || 20,
+                image: q.image,
+              });
+                if (result.success) {
+                  results.success.push(questionNumber);
+                } else {
+                  results.failed.push({ questionNumber, error: result.error });
+                }
               }
             }
           }
@@ -651,24 +754,41 @@ function QuestionPaperBuilder() {
       } else if (examType === "MBA") {
         for (let question of mbaQuestions) {
           if (question.subQuestions.length === 0) {
-            await submitQuestionToServer({
-              questionNumber: `Q${question.number}`,
+            if (question.text && question.text.trim() !== "") {
+              const questionNumber = `Q${question.number}`;
+              const result = await submitQuestionToServer({
+                questionNumber,
               questionText: question.text,
               co: question.co,
               level: question.level,
               marks: 20,
               image: question.image,
             });
+              if (result.success) {
+                results.success.push(questionNumber);
+              } else {
+                results.failed.push({ questionNumber, error: result.error });
+              }
+            }
           } else {
             for (let sub of question.subQuestions) {
-              await submitQuestionToServer({
-                questionNumber: `Q${question.number}${sub.label}`,
+              if (sub.text && sub.text.trim() !== "") {
+                const questionNumber = `Q${question.number}${sub.label}`;
+                console.log(`Submitting ${questionNumber}...`);
+                const result = await submitQuestionToServer({
+                  questionNumber,
                 questionText: sub.text,
                 co: sub.co,
                 level: sub.level,
                 marks: parseInt(sub.marks, 10) || 0,
                 image: sub.image,
               });
+                if (result.success) {
+                  results.success.push(questionNumber);
+                } else {
+                  results.failed.push({ questionNumber, error: result.error });
+                }
+              }
             }
           }
         }
@@ -676,24 +796,44 @@ function QuestionPaperBuilder() {
         throw new Error(`Unsupported exam type: ${examType}`);
       }
 
+      // Show submission summary
+      const totalQuestions = results.success.length + results.failed.length;
+      let summaryMessage = `\n📊 Submission Summary:\n`;
+      summaryMessage += `✅ Successfully saved: ${results.success.length} question(s)\n`;
+      
+      if (results.failed.length > 0) {
+        summaryMessage += `❌ Failed: ${results.failed.length} question(s)\n\n`;
+        summaryMessage += `Failed questions:\n`;
+        results.failed.forEach(({ questionNumber, error }) => {
+          summaryMessage += `  • ${questionNumber}: ${error}\n`;
+        });
+        summaryMessage += `\n⚠️ Please check the errors above and try submitting again.`;
+      } else {
+        summaryMessage += `\n🎉 All questions saved successfully!`;
       setIsSubmitted(true);
       const draftKey = `questionPaper_draft_${facultyEmail}`;
       localStorage.removeItem(draftKey);
+      }
 
-      // Update assignment status (best-effort)
+      // Log detailed results
+      console.log("📊 Submission Results:", results);
+      
+      // Update assignment status (best-effort) only if all succeeded
+      if (results.failed.length === 0) {
       try {
         await axios.post(`${API_BASE}/assignments/update-status`, {
           email: facultyEmail,
-          subjectCode: subjectCode,
+            subjectCode: subjectCode,
         });
         const response = await fetch(`${API_BASE}/faculty/subject-codes/${facultyEmail}`);
         const updatedSubjects = await response.json();
         setAssignedSubjects(updatedSubjects);
-      } catch (err) {
-        console.error("Error updating assignment status:", err);
+        } catch (err) {
+          console.error("Error updating assignment status:", err);
+        }
       }
-
-      alert("All questions submitted successfully!");
+      
+      alert(summaryMessage);
     } catch (error) {
       console.error("Error saving question bank:", error);
       alert(`Failed to save questions: ${error.message || error}`);
@@ -709,20 +849,20 @@ function QuestionPaperBuilder() {
 
   const clearDraft = () => {
     if (!window.confirm("Clear saved draft? This cannot be undone.")) return;
-    const draftKey = `questionPaper_draft_${facultyEmail}`;
-    localStorage.removeItem(draftKey);
-    setSubject("");
-    setSubjectCode("");
-    setSemester("");
-    setInstructions("");
-    setCOs(["CO1"]);
-    setModules([]);
-    setNextGroupNumber(1);
-    setExamType("BE/MTECH");
-    setMbaQuestions(createInitialMBAQuestions());
-    setIsSubmitted(false);
-    setDraftLoaded(false);
-    setLastSavedAt(null);
+      const draftKey = `questionPaper_draft_${facultyEmail}`;
+      localStorage.removeItem(draftKey);
+      setSubject("");
+      setSubjectCode("");
+      setSemester("");
+      setInstructions("");
+      setCOs(["CO1"]);
+      setModules([]);
+      setNextGroupNumber(1);
+      setExamType("BE/MTECH");
+      setMbaQuestions(createInitialMBAQuestions());
+      setIsSubmitted(false);
+      setDraftLoaded(false);
+      setLastSavedAt(null);
     alert("Draft cleared successfully!");
   };
 
@@ -823,9 +963,9 @@ function QuestionPaperBuilder() {
 
           <label>Semester:</label>
           <select value={semester} onChange={(e) => setSemester(e.target.value)} disabled={isSubmitted}>
-            <option value="">Select Semester</option>
+              <option value="">Select Semester</option>
             {[1,2,3,4,5,6,7,8].map((sem) => <option key={sem} value={sem}>{sem}</option>)}
-          </select>
+            </select>
         </div>
 
         <label>Student Instructions:</label>
@@ -866,7 +1006,7 @@ function QuestionPaperBuilder() {
             {mod.questions.map((q, qIndex) => {
               const hasSubs = q.subQuestions && q.subQuestions.length > 0;
               const totalSubMarks = hasSubs ? q.subQuestions.reduce((s, sub) => s + (parseInt(sub.marks,10)||0), 0) : 0;
-
+              
               return (
                 <div key={qIndex} style={{ padding: '12px', backgroundColor: '#f9f9f9', borderRadius: '6px', marginBottom: '12px' }}>
                   <div style={{ display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap' }}>
@@ -922,7 +1062,7 @@ function QuestionPaperBuilder() {
                       setModules(updated);
                     }} disabled={isSubmitted} style={{ fontSize: '12px' }} />
                   </div>
-
+                  
                   {q.image && (
                     <img src={q.image instanceof File ? URL.createObjectURL(q.image) : (q.image && typeof q.image === 'object' && q.image.data ? q.image.data : q.image)} alt="question" style={{ maxWidth: '150px', display: 'block', marginTop: '8px' }} />
                   )}
@@ -936,15 +1076,24 @@ function QuestionPaperBuilder() {
                       </div>
 
                       {q.subQuestions.map((sub, subIndex) => (
-                        <div key={subIndex} style={{ marginBottom: '8px', display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
-                          <div style={{ width: "30px", fontWeight: 'bold' }}>{q.label}{sub.label})</div>
-                          <input value={sub.text} onChange={(e) => updateBESubQuestion(modIndex, qIndex, subIndex, "text", e.target.value)} placeholder="Sub-question text" disabled={isSubmitted} style={{ flex: 1, minWidth: '220px', padding: '6px' }} />
-                          <input type="number" value={sub.marks} onChange={(e) => updateBESubQuestion(modIndex, qIndex, subIndex, "marks", e.target.value)} placeholder="Marks" disabled={isSubmitted} style={{ width: '80px' }} />
-                          <input type="file" accept="image/*" onChange={(e) => {
-                            const updated = [...modules];
-                            updated[modIndex].questions[qIndex].subQuestions[subIndex].image = e.target.files[0] || null;
-                            setModules(updated);
-                          }} disabled={isSubmitted} style={{ fontSize: '12px' }} />
+                        <div key={subIndex} style={{ marginBottom: '12px' }}>
+                          <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
+                            <div style={{ width: "30px", fontWeight: 'bold' }}>{q.label}{sub.label})</div>
+                            <input value={sub.text} onChange={(e) => updateBESubQuestion(modIndex, qIndex, subIndex, "text", e.target.value)} placeholder="Sub-question text" disabled={isSubmitted} style={{ flex: 1, minWidth: '220px', padding: '6px' }} />
+                            <input type="number" value={sub.marks} onChange={(e) => updateBESubQuestion(modIndex, qIndex, subIndex, "marks", e.target.value)} placeholder="Marks" disabled={isSubmitted} style={{ width: '80px' }} />
+                            <input type="file" accept="image/*" onChange={(e) => {
+                              const updated = [...modules];
+                              updated[modIndex].questions[qIndex].subQuestions[subIndex].image = e.target.files[0] || null;
+                              setModules(updated);
+                            }} disabled={isSubmitted} style={{ fontSize: '12px' }} />
+                          </div>
+                          {sub.image && (
+                            <img
+                              src={sub.image instanceof File ? URL.createObjectURL(sub.image) : (sub.image && typeof sub.image === 'object' && sub.image.data ? sub.image.data : sub.image)} 
+                              alt="sub-question"
+                              style={{ maxWidth: '150px', display: 'block', marginTop: '8px', marginLeft: '38px' }} 
+                            />
+                          )}
                         </div>
                       ))}
 
@@ -987,20 +1136,29 @@ function QuestionPaperBuilder() {
               {mod.questions.map((q, qIdx) => {
                 const hasSubs = q.subQuestions && q.subQuestions.length > 0;
                 const totalSubMarks = hasSubs ? q.subQuestions.reduce((s, sub) => s + (parseInt(sub.marks,10)||0), 0) : 0;
-
-                return (
+                  
+                  return (
                   <div key={qIdx} style={{ marginBottom: '10px' }}>
                     <div style={{ fontWeight: 'bold' }}>
                       {q.label}.
-                    </div>
+                          </div>
 
                     {hasSubs ? (
                       <div style={{ marginLeft: '18px', marginTop: '6px' }}>
                         {q.subQuestions.map((sub, si) => (
-                          <div key={si} style={{ marginBottom: '6px', display: 'flex', alignItems: 'baseline', gap: '8px' }}>
-                            <div style={{ minWidth: '40px', fontWeight: 'bold' }}>{q.label}{sub.label})</div>
-                            <div style={{ flex: 1 }}>{sub.text || "__________"}</div>
-                            <div style={{ minWidth: '120px', textAlign: 'right', fontWeight: 'bold' }}>{formatMarksOptionB(sub.marks)}</div>
+                          <div key={si} style={{ marginBottom: '10px' }}>
+                            <div style={{ display: 'flex', alignItems: 'baseline', gap: '8px' }}>
+                              <div style={{ minWidth: '40px', fontWeight: 'bold' }}>{q.label}{sub.label})</div>
+                              <div style={{ flex: 1 }}>{sub.text || "__________"}</div>
+                              <div style={{ minWidth: '120px', textAlign: 'right', fontWeight: 'bold' }}>{formatMarksOptionB(sub.marks)}</div>
+                            </div>
+                                {sub.image && (
+                                  <img
+                                src={sub.image instanceof File ? URL.createObjectURL(sub.image) : (sub.image && typeof sub.image === 'object' && sub.image.data ? sub.image.data : sub.image)} 
+                                alt="sub-question" 
+                                style={{ maxWidth: '300px', display: 'block', marginTop: '8px', marginLeft: '40px', border: '1px solid #ddd', borderRadius: '4px' }} 
+                              />
+                            )}
                           </div>
                         ))}
 
@@ -1013,14 +1171,21 @@ function QuestionPaperBuilder() {
                     ) : (
                       <div style={{ marginLeft: '18px', marginTop: '6px' }}>
                         <div>{q.text || "__________"}</div>
+                          {q.image && (
+                            <img
+                            src={q.image instanceof File ? URL.createObjectURL(q.image) : (q.image && typeof q.image === 'object' && q.image.data ? q.image.data : q.image)} 
+                            alt="question" 
+                            style={{ maxWidth: '300px', display: 'block', marginTop: '8px', border: '1px solid #ddd', borderRadius: '4px' }} 
+                          />
+                        )}
                         <div style={{ marginTop: '6px', fontWeight: 'bold' }}>Marks: {q.marks || 20}</div>
                         <div style={{ marginTop: '6px' }}><strong>CO:</strong> {q.co || "N/A"} &nbsp; <strong>Level:</strong> {q.level || "N/A"}</div>
                       </div>
                     )}
 
                     {qIdx === 0 && <div style={{ marginTop: '8px', marginBottom: '8px', textAlign: 'center', fontWeight: 'bold' }}>OR</div>}
-                  </div>
-                );
+                    </div>
+                  );
               })}
             </div>
           ))}
@@ -1028,30 +1193,30 @@ function QuestionPaperBuilder() {
           {/* MBA preview */}
           {examType === "MBA" && mbaQuestions.map((question) => (
             <div key={question.number} className="mba-preview-card" style={{ marginTop: '10px' }}>
-              <p>
-                <strong>Q{question.number}.</strong>{" "}
-                {!question.subQuestions.length && question.text}
-                <strong>
-                  [
-                  {question.subQuestions.length > 0
-                    ? "20 marks (split)"
-                    : "20 marks"}
-                  ]
-                </strong>
-                <em> CO: {question.co || "N/A"}</em>
-                <em> | L: {question.level || "N/A"}</em>
-              </p>
-              {question.subQuestions.length > 0 && (
-                <ul>
-                  {question.subQuestions.map((sub) => (
-                    <li key={`${question.number}-${sub.label}`}>
+                <p>
+                  <strong>Q{question.number}.</strong>{" "}
+                  {!question.subQuestions.length && question.text}
+                  <strong>
+                    [
+                    {question.subQuestions.length > 0
+                      ? "20 marks (split)"
+                      : "20 marks"}
+                    ]
+                  </strong>
+                  <em> CO: {question.co || "N/A"}</em>
+                  <em> | L: {question.level || "N/A"}</em>
+                </p>
+                {question.subQuestions.length > 0 && (
+                  <ul>
+                    {question.subQuestions.map((sub) => (
+                      <li key={`${question.number}-${sub.label}`}>
                       {sub.label}) {sub.text} <strong>[{sub.marks || 0} marks]</strong>
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </div>
-          ))}
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            ))}
         </div>
 
         <div className="action-buttons" style={{ marginTop: '14px' }}>
@@ -1084,9 +1249,9 @@ function QuestionPaperBuilder() {
             <button className="clear-btn" onClick={clearDraft}>🗑️ Clear Draft</button>
           )}
         </div>
-
+         
         {isSubmitted && <p className="submitted-text">✅ Paper submitted. Editing is locked.</p>}
-      </div>
+        </div>
 
       {/* React-Quill Editor Popup */}
       {editorOpen && (
@@ -1129,7 +1294,7 @@ function QuestionPaperBuilder() {
                 <p style={{ margin: '5px 0 0 0', fontSize: '13px', color: '#666' }}>
                   Write your question with rich formatting • Auto-closes in 2 minutes
                 </p>
-              </div>
+      </div>
               <button 
                 onClick={closeEditor}
                 style={{

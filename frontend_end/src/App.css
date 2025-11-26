@@ -7,7 +7,7 @@
 
 .sidebar {
   width: 250px;
-  background-color: #003366;
+  background-color: skyblue;
   color: white;
   padding: 20px;
 }
@@ -227,7 +227,6 @@
 
 .question-header h4 {
   margin: 0;
-  color: #003366;
   border-bottom: 2px solid #003366;
   padding-bottom: 8px;
 }
