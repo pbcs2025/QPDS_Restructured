@@ -45,6 +45,14 @@ const updateAssignmentStatus = async (subject_code, facultyEmail) => {
 exports.create = async (req, res) => {
   const { subject_code, subject_name, semester, question_number, question_text, set_name, co, level, marks, faculty_email, department } = req.body;
   const file = req.file;
+  
+  console.log('📝 Question submission received:');
+  console.log(`   Subject: ${subject_code} - ${subject_name}`);
+  console.log(`   Question: ${question_number}`);
+  console.log(`   File received: ${file ? '✅' : '❌'}`);
+  if (file) {
+    console.log(`   File details: ${file.originalname}, ${file.mimetype}, ${file.size} bytes`);
+  }
 
   if (!subject_code || !subject_name || !semester || !question_number || !question_text) {
     return res.status(400).json({ 
@@ -108,6 +116,12 @@ exports.create = async (req, res) => {
       question_file: file ? file.buffer : null,
       status: 'pending' // Set status to pending for verifier review
     });
+    
+    console.log(`💾 Question saved to database:`);
+    console.log(`   ID: ${doc._id}`);
+    console.log(`   File name: ${doc.file_name || 'None'}`);
+    console.log(`   File type: ${doc.file_type || 'None'}`);
+    console.log(`   File data size: ${doc.question_file ? doc.question_file.length : 0} bytes`);
 
     // Update assignment status if faculty email is provided
     if (faculty_email) {
@@ -232,8 +246,17 @@ exports.fileById = async (req, res) => {
     const file = await QuestionPaper.findById(req.params.id, { file_name: 1, file_type: 1, question_file: 1 }).lean();
     if (!file) return res.status(404).json({ error: 'File not found' });
 
+    // Set proper headers for image display
     res.setHeader('Content-Type', file.file_type);
     res.setHeader('Content-Disposition', `inline; filename=${file.file_name}`);
+    res.setHeader('Cache-Control', 'public, max-age=3600'); // Cache for 1 hour
+    res.setHeader('Access-Control-Allow-Origin', '*'); // Allow CORS for image display
+    
+    // For images, set proper content type
+    if (file.file_type && file.file_type.startsWith('image/')) {
+      res.setHeader('Content-Type', file.file_type);
+    }
+    
     res.send(file.question_file);
 
   } catch (err) {

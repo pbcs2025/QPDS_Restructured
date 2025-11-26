@@ -36,6 +36,10 @@ const ROLE_RULES = [
       return username !== "admin" &&
              username !== "superadmin" &&
              username !== "super-admin";
+      const normalized = username.trim().toLowerCase();
+      return normalized.startsWith("verifier") || 
+             normalized.includes("adminid") ||  // MBA verifier format
+             normalized.includes("admin");      // Add this to catch "AdminA12"
     },
     type: "verifier",
     destination: "/verifier-dashboard",
@@ -49,6 +53,47 @@ const ROLE_RULES = [
     destination: "/faculty-dashboard",
   },
 ];
+
+const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+const API_ROLE_MAP = {
+  SuperAdmin: {
+    key: "super-admin-api",
+    label: "Super Admin",
+    type: "super-admin",
+    destination: "/super-admin-dashboard",
+  },
+  Verifier: {
+    key: "verifier-api",
+    label: "Verifier",
+    type: "verifier",
+    destination: "/verifier-dashboard",
+  },
+  MBAVerifier: {
+    key: "mba-verifier-api",
+    label: "MBA Verifier",
+    type: "verifier",
+    destination: "/verifier-dashboard",
+  },
+  Faculty: {
+    key: "faculty-api",
+    label: "Faculty",
+    type: "faculty",
+    destination: "/faculty-dashboard",
+  },
+  MBAFaculty: {
+    key: "mba-faculty-api",
+    label: "MBA Faculty",
+    type: "faculty",
+    destination: "/faculty-dashboard",
+  },
+};
+
+const mapRoleFromServer = (role) => {
+  if (!role) return null;
+  const template = API_ROLE_MAP[role];
+  return template ? { ...template } : null;
+};
 
 function RoleSelection() {
   const navigate = useNavigate();
@@ -79,6 +124,27 @@ function RoleSelection() {
     }
   };
 
+  const isEmail = (value) => EMAIL_REGEX.test(value.trim().toLowerCase());
+
+  const fetchResolvedRole = async (identifier) => {
+    if (!identifier) return null;
+    try {
+      const response = await fetch(`${API_BASE}/resolve-role`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ identifier }),
+      });
+      const data = await response.json();
+      if (response.ok && data.success && data.role) {
+        return data;
+      }
+      return null;
+    } catch (error) {
+      console.error("Role resolution failed:", error);
+      return null;
+    }
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     setLoginMessage("");
@@ -104,20 +170,69 @@ function RoleSelection() {
       }
     } finally {
       setIsSubmitting(false);
+    const trimmedUsername = formValues.username.trim();
+    let role = resolveRole(normalizedUsername);
+    let resolvedUser = await fetchResolvedRole(trimmedUsername);
+    if (resolvedUser?.role) {
+      const mappedRole = mapRoleFromServer(resolvedUser.role);
+      if (mappedRole) {
+        role = mappedRole;
+      }
+    }
+    const emailLike = isEmail(trimmedUsername);
+
+    setIsSubmitting(true);
+
+    let handled = false;
+
+    try {
+      if (role) {
+        if (role.type === "static") {
+          handled = handleStaticRole(role);
+        } else if (role.type === "super-admin") {
+          handled = await handleSuperAdminLogin(role);
+        } else if (role.type === "verifier") {
+          handled = await handleVerifierLogin(role, {
+            usernameOverride: resolvedUser?.username,
+          });
+        } else if (role.type === "faculty") {
+          if (resolvedUser?.role === "MBAFaculty") {
+            setIsMBAFaculty(true);
+          }
+          handled = await handleFacultyLogin();
+        }
+      } else if (emailLike) {
+        handled = await handleFacultyLogin();
+      } else {
+        handled = await handleVerifierLogin(null, { silentOnFail: true });
+      }
+    } finally {
+      setIsSubmitting(false);
+    }
+
+    if (!handled) {
+      setLoginMessage((prev) =>
+        prev ||
+        "❌ We couldn't determine your role from the username. Please verify your credentials and try again."
+      );
     }
   };
 
   const handleStaticRole = (role) => {
     if (formValues.password === role.password) {
       navigate(role.destination);
-    } else {
-      setLoginMessage(`❌ Incorrect password for ${role.label}.`);
+      return true;
     }
+    setLoginMessage(`❌ Incorrect password for ${role.label}.`);
+    return false;
   };
 
   const handleVerifierLogin = async (role) => {
     try {
       const response = await fetch(`${API_BASE}/verifier/login`, {
+  const handleSuperAdminLogin = async (role) => {
+    try {
+      const response = await fetch(`${API_BASE}/superadmin/login`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(formValues),
@@ -138,7 +253,92 @@ function RoleSelection() {
     } catch (error) {
       console.error("Verifier login failed:", error);
       setLoginMessage("❌ Unable to reach verifier service. Please try again.");
+      if (response.ok && data.success) {
+        if (data.token) {
+          localStorage.setItem("token", data.token);
+        }
+        if (data.user) {
+          localStorage.setItem("superAdmin", JSON.stringify(data.user));
+        }
+        navigate(role.destination);
+        return true;
+      } else {
+        setLoginMessage(`❌ ${data.message || "Invalid Super Admin credentials."}`);
+      }
+    } catch (error) {
+      console.error("Super Admin login failed:", error);
+      setLoginMessage("❌ Unable to reach authentication service. Please try again.");
     }
+    return false;
+  };
+
+  const handleVerifierLogin = async (role, options = {}) => {
+    const destination = role?.destination || "/verifier-dashboard";
+    const usernameToUse = (options.usernameOverride || formValues.username || "").trim();
+    if (!usernameToUse) {
+      if (!options.silentOnFail) {
+        setLoginMessage("❌ Username is required for verifier login.");
+      }
+      return false;
+    }
+
+    const credentials = {
+      username: usernameToUse,
+      password: formValues.password,
+    };
+
+    const persistSession = (payload) => {
+      if (payload?.token) {
+        localStorage.setItem("token", payload.token);
+      }
+      const verifierPayload = payload?.verifierData || payload?.verifier;
+      if (verifierPayload) {
+        localStorage.setItem("verifier", JSON.stringify(verifierPayload));
+      }
+    };
+
+    const attemptLogin = async (endpoint) => {
+      try {
+        const response = await fetch(endpoint, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(credentials),
+        });
+        const data = await response.json();
+        if (response.ok && data.success) {
+          return { success: true, data };
+        }
+        return { success: false, message: data.message || data.error };
+      } catch (error) {
+        console.error(`Verifier login error (${endpoint}):`, error);
+        return { success: false, message: error.message };
+      }
+    };
+
+    const regularResult = await attemptLogin(`${API_BASE}/verifier/login`);
+    if (regularResult.success) {
+      persistSession(regularResult.data);
+      navigate(destination);
+      return true;
+    }
+
+    const mbaResult = await attemptLogin(`${API_BASE}/mbaverifier/login`);
+    if (mbaResult.success) {
+      persistSession(mbaResult.data);
+      navigate(destination);
+      return true;
+    }
+
+    if (!options.silentOnFail) {
+      setLoginMessage(
+        `❌ ${
+          mbaResult.message ||
+          regularResult.message ||
+          "Invalid verifier credentials. Please try again."
+        }`
+      );
+    }
+    return false;
   };
 
   const handleFacultyLogin = async () => {
@@ -158,7 +358,45 @@ function RoleSelection() {
     } catch (error) {
       console.error("Faculty login failed:", error);
       setLoginMessage("❌ Unable to reach faculty service. Please try again.");
+    const attempt = async (endpoint, mba = false) => {
+      try {
+        const response = await fetch(endpoint, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(formValues),
+        });
+        const data = await response.json();
+        if (response.ok && data.success) {
+          setIsMBAFaculty(mba);
+          setLoginMessage("✔ Verification code sent to your email.");
+          setAuthStep("faculty-verification");
+          return { success: true };
+        }
+        return { success: false, message: data.message };
+      } catch (error) {
+        console.error(`Faculty login error (${endpoint}):`, error);
+        return { success: false, message: error.message };
+      }
+    };
+
+    const mbaAttempt = await attempt(`${API_BASE}/mbafaculty/login`, true);
+    if (mbaAttempt.success) {
+      return true;
     }
+
+    const regularAttempt = await attempt(`${API_BASE}/faculty/login`, false);
+    if (regularAttempt.success) {
+      return true;
+    }
+
+    setLoginMessage(
+      `❌ ${
+        regularAttempt.message ||
+        mbaAttempt.message ||
+        "Invalid faculty credentials."
+      }`
+    );
+    return false;
   };
 
   const handleFacultyVerification = async (e) => {
@@ -190,15 +428,20 @@ function RoleSelection() {
     }
   };
 
-  const persistFacultySession = (facultyData) => {
-    localStorage.setItem("faculty_username", facultyData.email || formValues.username);
+  const persistFacultySession = (facultyData = {}) => {
+    const resolvedEmail = facultyData.email || formValues.username;
+    const role = isMBAFaculty ? "MBAFaculty" : "Faculty";
+    localStorage.setItem("faculty_username", resolvedEmail);
+    localStorage.setItem("faculty_role", role);
     localStorage.setItem(
       "faculty_data",
       JSON.stringify({
-        name: facultyData.name || facultyData.email || formValues.username,
+        name: facultyData.name || resolvedEmail,
         department: facultyData.department || "Department not set",
         clgName: facultyData.clgName || "College not set",
-        email: facultyData.email || formValues.username,
+        email: resolvedEmail,
+        role,
+        type: facultyData.type || (isMBAFaculty ? "mba" : "regular"),
       })
     );
   };

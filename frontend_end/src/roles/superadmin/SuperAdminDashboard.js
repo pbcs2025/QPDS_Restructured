@@ -716,6 +716,169 @@ function SuperAdminDashboard() {
                   fontSize: '14px'
                 }}
               />
+
+            <h1>Submitted Papers</h1>
+            {openedPaper && (
+              <div style={{ marginBottom: '20px', padding: '16px', border: '1px solid #e1e7ef', borderRadius: '10px', background: '#fff' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <h3 style={{ margin: 0 }}>Paper: {openedPaper.subject_name} ({openedPaper.subject_code}) - Sem {openedPaper.semester}</h3>
+                  <div style={{ display: 'flex', gap: '10px' }}>
+                    <button
+                      onClick={async () => {
+                        try {
+                          // Download DOCX file
+                          const response = await fetch(`${API_BASE}/verifier/papers/${encodeURIComponent(openedPaper.subject_code)}/${encodeURIComponent(openedPaper.semester)}/docx`);
+                          if (!response.ok) {
+                            throw new Error(`HTTP error! status: ${response.status}`);
+                          }
+                          
+                          const blob = await response.blob();
+                          const url = window.URL.createObjectURL(blob);
+                          const a = document.createElement('a');
+                          a.href = url;
+                          a.download = `${openedPaper.subject_code}_${openedPaper.semester}.docx`;
+                          document.body.appendChild(a);
+                          a.click();
+                          window.URL.revokeObjectURL(url);
+                          document.body.removeChild(a);
+                          
+                          alert('Question paper downloaded successfully!');
+                        } catch (err) {
+                          console.error('Download error:', err);
+                          alert(`Failed to download paper: ${err.message}`);
+                        }
+                      }}
+                      style={{ padding: '6px 12px', backgroundColor: '#28a745', color: '#fff', border: 'none', borderRadius: '6px', cursor: 'pointer' }}
+                    >
+                      📄 Download DOCX
+                    </button>
+                    <button onClick={() => setOpenedPaper(null)} style={{ padding: '6px 12px', backgroundColor: '#6c757d', color: '#fff', border: 'none', borderRadius: '6px', cursor: 'pointer' }}>Close</button>
+                  </div>
+                </div>
+                <div style={{ marginTop: '12px' }}>
+                  {openedPaper.questions.map((q, idx) => (
+                    <div key={idx} style={{ border: '1px solid #e9edf3', borderRadius: '10px', marginBottom: '12px', overflow: 'hidden' }}>
+                      <div style={{ display: 'flex', gap: '12px', padding: '12px', background: '#f8f9fa' }}>
+                        <div style={{ color: '#ffffff', minWidth: '44px', fontWeight: 800, backgroundColor: '#0d6efd', borderRadius: '999px', textAlign: 'center', padding: '4px 0' }}>{q.question_number}</div>
+                        <div style={{ flex: 1 }}>
+                          <div style={{ fontWeight: 600 }}>{q.question_text}</div>
+                          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '12px', marginTop: '10px' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                              <span style={{ color: '#fff', fontWeight: 800, minWidth: '44px', textAlign: 'center', backgroundColor: '#6f42c1', borderRadius: '999px', padding: '4px 10px' }}>CO</span>
+                              <span>{q.co || ''}</span>
+                            </div>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                              <span style={{ color: '#fff', fontWeight: 800, minWidth: '44px', textAlign: 'center', backgroundColor: '#fd7e14', borderRadius: '999px', padding: '4px 10px' }}>L</span>
+                              <span>{q.l || ''}</span>
+                            </div>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                              <span style={{ color: '#084298', fontWeight: 800 }}>Marks</span>
+                              <span style={{ fontWeight: 800, color: '#0b5ed7' }}>{typeof q.marks === 'number' ? q.marks : 0}</span>
+                            </div>
+                          </div>
+                          {q.file_url && (
+                            <div style={{ 
+                              marginTop: '15px',
+                              padding: '15px',
+                              backgroundColor: '#f8f9fa',
+                              borderRadius: '12px',
+                              border: '2px solid #e9ecef'
+                            }}>
+                              <div style={{ 
+                                fontSize: '14px', 
+                                fontWeight: '600', 
+                                color: '#495057', 
+                                marginBottom: '10px',
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '8px'
+                              }}>
+                                🖼️ Diagram/Image Attachment
+                              </div>
+                              <img 
+                                src={`${API_BASE}${q.file_url}`} 
+                                alt={q.file_name || 'diagram attachment'} 
+                                style={{ 
+                                  maxWidth: '100%', 
+                                  height: 'auto',
+                                  borderRadius: '8px', 
+                                  border: '1px solid #dee2e6',
+                                  boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
+                                  cursor: 'pointer',
+                                  transition: 'transform 0.2s ease'
+                                }}
+                                onMouseOver={(e) => e.target.style.transform = 'scale(1.02)'}
+                                onMouseOut={(e) => e.target.style.transform = 'scale(1)'}
+                                onClick={() => {
+                                  window.open(`${API_BASE}${q.file_url}`, '_blank');
+                                }}
+                              />
+                              <div style={{ 
+                                fontSize: '11px', 
+                                color: '#6c757d', 
+                                marginTop: '8px',
+                                textAlign: 'center'
+                              }}>
+                                Click to view full size
+                              </div>
+                            </div>
+                          )}
+                          {/* Verifier Remarks Display */}
+                          {q.remarks && q.remarks.trim() && (
+                            <div style={{ 
+                              marginTop: '10px', 
+                              padding: '10px', 
+                              backgroundColor: '#fff3cd', 
+                              border: '1px solid #ffeaa7', 
+                              borderRadius: '6px',
+                              borderLeft: '4px solid #ffc107'
+                            }}>
+                              <div style={{ fontWeight: 600, color: '#856404', marginBottom: '5px' }}>📝 Verifier Remarks:</div>
+                              <div style={{ color: '#856404', fontStyle: 'italic' }}>{q.remarks}</div>
+                            </div>
+                          )}
+                          
+                          {/* Verifier General Remarks Display */}
+                          {openedPaper.verifier_remarks && openedPaper.verifier_remarks.trim() && (
+                            <div style={{ 
+                              marginTop: '10px', 
+                              padding: '10px', 
+                              backgroundColor: '#e7f3ff', 
+                              border: '1px solid #b3d9ff', 
+                              borderRadius: '6px',
+                              borderLeft: '4px solid #0d6efd'
+                            }}>
+                              <div style={{ fontWeight: 600, color: '#0b5ed7', marginBottom: '5px' }}>📋 Verifier General Remarks:</div>
+                              <div style={{ color: '#0b5ed7', fontStyle: 'italic' }}>{openedPaper.verifier_remarks}</div>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+            <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: '20px' }}>
+              <div>
+                <h1 style={{ margin: 0 }}>Submitted Papers</h1>
+                <p style={{ margin: '6px 0 0 0', color: '#64748b' }}>View and manage approved question papers</p>
+              </div>
+              <div style={{ display: 'flex', gap: '8px' }}>
+                <button
+                  onClick={() => setShowArchivedPapers(!showArchivedPapers)}
+                  style={{
+                    background: showArchivedPapers ? '#4f46e5' : '#eef2ff',
+                    color: showArchivedPapers ? 'white' : '#4f46e5',
+                    padding: '8px 16px',
+                    borderRadius: '8px',
+                    border: 'none',
+                    fontWeight: 600,
+                    cursor: 'pointer'
+                  }}
+                >
+                  {showArchivedPapers ? 'Show Active' : 'Show Archived'}
+                </button>
+              </div>
             </div>
             {openedPaper && (
               <div style={{ marginBottom: '20px', padding: '16px', border: '1px solid #e1e7ef', borderRadius: '10px', background: '#fff' }}>
@@ -962,6 +1125,249 @@ function SuperAdminDashboard() {
                                   <div style={{ textAlign: 'right' }}><strong>CO:</strong> {q.co || ''}</div>
                                   <div style={{ textAlign: 'right' }}><strong>L:</strong> {q.l || q.level || ''}</div>
                                 </div>
+<<<<<
+                              {q.file_url && (
+                                <div style={{ 
+                                  marginTop: '15px', 
+                                  marginLeft: '46px',
+                                  padding: '15px',
+                                  backgroundColor: '#f8f9fa',
+                                  borderRadius: '12px',
+                                  border: '2px solid #e9ecef'
+                                }}>
+                                  <div style={{ 
+                                    fontSize: '14px', 
+                                    fontWeight: '600', 
+                                    color: '#495057', 
+                                    marginBottom: '10px',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    gap: '8px'
+                                  }}>
+                                    🖼️ Diagram/Image Attachment
+                                  </div>
+                                  <img 
+                                    src={`${API_BASE}${q.file_url}`} 
+                                    alt={q.file_name || 'diagram attachment'} 
+                                    style={{ 
+                                      maxWidth: '100%', 
+                                      height: 'auto',
+                                      borderRadius: '8px', 
+                                      border: '1px solid #dee2e6',
+                                      boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
+                                      cursor: 'pointer',
+                                      transition: 'transform 0.2s ease'
+                                    }}
+                                    onMouseOver={(e) => e.target.style.transform = 'scale(1.02)'}
+                                    onMouseOut={(e) => e.target.style.transform = 'scale(1)'}
+                                    onClick={() => {
+                                      window.open(`${API_BASE}${q.file_url}`, '_blank');
+                                    }}
+                                  />
+                                  <div style={{ 
+                                    fontSize: '11px', 
+                                    color: '#6c757d', 
+                                    marginTop: '8px',
+                                    textAlign: 'center'
+                                  }}>
+                                    Click to view full size
+                                  </div>
+                                </div>
+                              )}
+
+                              <span style={{
+                                background: '#f3f4f6',
+                                color: '#6b7280',
+                                padding: '4px 12px',
+                                borderRadius: '6px',
+                                fontSize: '12px',
+                                fontWeight: 600
+                              }}>
+                                ARCHIVED
+                              </span>
+
+                            </div>
+                            {openedPaper?._id === paper._id && (
+                              <div style={{ marginTop: '16px', paddingTop: '16px', borderTop: '1px solid #e2e8f0' }}>
+                                <h4 style={{ marginBottom: '12px' }}>Questions ({paper.questions?.length || 0})</h4>
+                                {paper.questions?.map((q, idx) => (
+                                  <div key={idx} style={{ marginBottom: '12px', padding: '12px', background: '#f9fafb', borderRadius: '8px' }}>
+                                    <div style={{ fontWeight: 600, marginBottom: '4px' }}>
+                                      Q{q.question_number}: {q.question_text}
+                                    </div>
+                                    <div style={{ fontSize: '13px', color: '#64748b' }}>
+                                      Marks: {q.marks} | CO: {q.co} | Level: {q.level}
+                                      {q.remarks && <span> | Remarks: {q.remarks}</span>}
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+
+                              {q.file_url && (
+                                <div style={{ 
+                                  marginTop: '15px', 
+                                  marginLeft: '46px',
+                                  padding: '15px',
+                                  backgroundColor: '#f8f9fa',
+                                  borderRadius: '12px',
+                                  border: '2px solid #e9ecef'
+                                }}>
+                                  <div style={{ 
+                                    fontSize: '14px', 
+                                    fontWeight: '600', 
+                                    color: '#495057', 
+                                    marginBottom: '10px',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    gap: '8px'
+                                  }}>
+                                    🖼️ Diagram/Image Attachment
+                                  </div>
+                                  <img 
+                                    src={`${API_BASE}${q.file_url}`} 
+                                    alt={q.file_name || 'diagram attachment'} 
+                                    style={{ 
+                                      maxWidth: '100%', 
+                                      height: 'auto',
+                                      borderRadius: '8px', 
+                                      border: '1px solid #dee2e6',
+                                      boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
+                                      cursor: 'pointer',
+                                      transition: 'transform 0.2s ease'
+                                    }}
+                                    onMouseOver={(e) => e.target.style.transform = 'scale(1.02)'}
+                                    onMouseOut={(e) => e.target.style.transform = 'scale(1)'}
+                                    onClick={() => {
+                                      window.open(`${API_BASE}${q.file_url}`, '_blank');
+                                    }}
+                                  />
+                                  <div style={{ 
+                                    fontSize: '11px', 
+                                    color: '#6c757d', 
+                                    marginTop: '8px',
+                                    textAlign: 'center'
+                                  }}>
+                                    Click to view full size
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      );
+                    });
+                  })()}
+                </div>
+              </div>
+            )}
+            {submittedLoading && <p>Loading…</p>}
+            {submittedError && <p className="error-msg">{submittedError}</p>}
+            {!submittedLoading && !submittedError && (
+              <>
+                {/* Filter Section */}
+                <div style={{ marginBottom: '20px', padding: '15px', backgroundColor: '#f8f9fa', borderRadius: '8px', border: '1px solid #dee2e6' }}>
+                  <h3 style={{ marginBottom: '10px', color: '#495057' }}>Filter Papers</h3>
+                  <div style={{ display: 'flex', gap: '15px', alignItems: 'center', flexWrap: 'wrap' }}>
+                    <div>
+                      <label style={{ display: 'block', marginBottom: '5px', fontWeight: 'bold', color: '#495057' }}>
+                        Department:
+                      </label>
+                      <select
+                        value={selectedDepartment}
+                        onChange={(e) => setSelectedDepartment(e.target.value)}
+                        style={{
+                          padding: '8px 12px',
+                          border: '1px solid #ced4da',
+                          borderRadius: '4px',
+                          fontSize: '14px',
+                          minWidth: '150px'
+                        }}
+                      >
+                        <option value="">All Departments</option>
+                        {departments.map((dept) => (
+                          <option key={dept._id || dept.name} value={dept.name}>
+                            {dept.name}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    <div>
+                      <label style={{ display: 'block', marginBottom: '5px', fontWeight: 'bold', color: '#495057' }}>
+                        Semester:
+                      </label>
+                      <select
+                        value={selectedSemester}
+                        onChange={(e) => setSelectedSemester(e.target.value)}
+                        style={{
+                          padding: '8px 12px',
+                          border: '1px solid #ced4da',
+                          borderRadius: '4px',
+                          fontSize: '14px',
+                          minWidth: '150px'
+                        }}
+                      >
+                        <option value="">All Semesters</option>
+                        {[1, 2, 3, 4, 5, 6, 7, 8].map((sem) => (
+                          <option key={sem} value={sem}>
+                            {sem}th Semester
+                          </option>
+
+                            )}
+                          </div>
+
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <div>
+                    <h2 style={{ marginBottom: '16px' }}>Approved Papers</h2>
+                    {submittedPapers.length === 0 ? (
+                      <div style={{ 
+                        background: 'white', 
+                        border: '1px solid #e2e8f0', 
+                        borderRadius: '12px', 
+                        padding: '40px', 
+                        textAlign: 'center',
+                        color: '#64748b'
+                      }}>
+                        No approved papers found
+                      </div>
+                    ) : (
+                      <div style={{ display: 'grid', gap: '16px' }}>
+                        {submittedPapers.map((paper) => (
+                          <div
+                            key={paper._id}
+                            style={{
+                              background: 'white',
+                              border: '1px solid #e2e8f0',
+                              borderRadius: '12px',
+                              padding: '20px',
+                              cursor: 'pointer',
+                              transition: 'all 0.2s ease'
+                            }}
+                            onMouseEnter={(e) => {
+                              e.currentTarget.style.boxShadow = '0 4px 6px rgba(0,0,0,0.1)';
+                              e.currentTarget.style.transform = 'translateY(-2px)';
+                            }}
+                            onMouseLeave={(e) => {
+                              e.currentTarget.style.boxShadow = 'none';
+                              e.currentTarget.style.transform = 'none';
+                            }}
+                            onClick={() => setOpenedPaper(openedPaper?._id === paper._id ? null : paper)}
+                          >
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'start' }}>
+                              <div>
+                                <h3 style={{ margin: '0 0 8px 0', color: '#1e40af' }}>
+                                  {paper.subject_name} ({paper.subject_code})
+                                </h3>
+                                <p style={{ margin: '4px 0', color: '#64748b', fontSize: '14px' }}>
+                                  Department: {paper.department} | Semester: {paper.semester}
+                                </p>
+                                <p style={{ margin: '4px 0', color: '#64748b', fontSize: '12px' }}>
+                                  Approved: {paper.createdAt ? new Date(paper.createdAt).toLocaleString() : 'N/A'}
+                                  {paper.verified_by && <span> | Verified by: {paper.verified_by}</span>}
+                                </p>
                               </div>
                               {q.file_url && (
                                 <div style={{ marginTop: '8px', marginLeft: '46px' }}>
